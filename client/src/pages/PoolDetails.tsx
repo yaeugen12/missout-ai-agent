@@ -592,7 +592,7 @@ export default function PoolDetails() {
                     data-testid="button-join-pool"
                   >
                     {isJoining ? <Loader2 className="animate-spin" /> : (
-                      !isConnected ? "Connect Wallet to Join" : `Get Pulled In (${pool.entryAmount} ${pool.tokenSymbol})`
+                      !isConnected ? "Connect Wallet to Join" : `Get Pulled In (${pool.entryAmount})`
                     )}
                   </Button>
                 )
