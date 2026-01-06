@@ -249,9 +249,6 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   }, []);
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
-    // If user clicked inside the DonateModal (which is a child of Link in the DOM)
-    // we want to prevent navigation. However, Radix Dialog uses Portals, 
-    // so this is mostly for the button click itself.
     if (donateModalOpen) {
       e.preventDefault();
       e.stopPropagation();
@@ -304,6 +301,73 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
         <div className="relative z-10 pt-2">
           <div className="flex items-start gap-4 mb-4">
+            <TokenAvatar 
+              logoUrl={tokenMetadata?.logoUrl} 
+              symbol={pool.tokenSymbol} 
+              accentColor={accentColor}
+            />
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="text-xl font-display font-black text-white group-hover:text-primary transition-colors truncate">
+                  {pool.tokenSymbol}
+                </h3>
+                <span className={cn(
+                  "px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm tracking-tight shrink-0",
+                  currentStatus.className
+                )}>
+                  {currentStatus.label}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs truncate mb-1">
+                {pool.tokenName}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopyPoolAddress}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                  data-testid={`button-copy-pool-${pool.id}`}
+                >
+                  <span className="font-mono">
+                    {poolAddress ? shortenAddress(poolAddress) : `#${pool.id}`}
+                  </span>
+                  <AnimatePresence mode="wait">
+                    {copied ? (
+                      <motion.span
+                        key="check"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Check className="w-3 h-3 text-green-400" />
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="copy"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+                {solscanUrl && (
+                  <a
+                    href={solscanUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-muted-foreground/60 hover:text-primary transition-colors"
+                    data-testid={`link-solscan-${pool.id}`}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-white/5 rounded-md p-3">
