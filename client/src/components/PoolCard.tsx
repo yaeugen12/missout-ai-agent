@@ -169,11 +169,10 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
           
           {/* Pool Size Text Integrated in Core */}
           <div className="relative z-10 flex flex-col items-center justify-center text-center">
-            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] font-black leading-none mb-1">Pool Size</span>
-            <span className="text-sm font-mono font-black text-white leading-none">
+            <span className="text-sm font-mono font-black text-white leading-none mb-1">
               {(poolSize ?? 0).toLocaleString()}
             </span>
-            <span className="text-[9px] text-primary/60 font-black uppercase tracking-tighter mt-0.5">{symbol}</span>
+            <span className="text-[9px] text-primary/60 font-black uppercase tracking-tighter">{symbol}</span>
           </div>
 
           {/* Inner Singularity Point (subtle backdrop) */}
