@@ -30,9 +30,9 @@ export function Navbar() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const navItems = [
-    { href: "/terminal", label: "Pool Terminal", icon: Atom },
-    { href: "/discovery", label: "Discovery", icon: Terminal },
     { href: "/initialize", label: "Initialize", icon: Plus },
+    { href: "/terminal", label: "Pool Terminal", icon: Atom },
+    { href: "/discovery", label: "Discovery (V2-soon)", icon: Terminal },
     { href: "/rewards", label: "Rewards", icon: Trophy },
   ];
 
