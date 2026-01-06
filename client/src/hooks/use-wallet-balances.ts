@@ -59,6 +59,11 @@ export function useWalletBalances(): WalletBalances {
 
       const tokenBalances: TokenBalance[] = [];
       
+      // Fetch devnet token metadata if on devnet
+      const isDevnet = import.meta.env.VITE_NETWORK === "devnet" || 
+                       window.location.hostname.includes("replit.dev") ||
+                       import.meta.env.VITE_SOLANA_CLUSTER === "devnet";
+
       for (const account of tokenAccounts.value) {
         const parsedInfo = account.account.data.parsed.info;
         const mintAddress = parsedInfo.mint;
@@ -70,9 +75,15 @@ export function useWalletBalances(): WalletBalances {
         let name = "Unknown Token";
         let logoUrl: string | undefined;
 
+        // On devnet, try a few hardcoded known mints or fallback to generic symbol for testing
+        if (isDevnet) {
+          // You can add common devnet mints here if needed
+          // For now, if we can't find it via Helius, we'll keep the sliced address
+        }
+
         try {
           const heliusRpcUrl = import.meta.env.VITE_HELIUS_RPC_URL;
-          if (heliusRpcUrl) {
+          if (heliusRpcUrl && !heliusRpcUrl.includes("api-key=YOUR_API_KEY")) {
             const response = await fetch(heliusRpcUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
