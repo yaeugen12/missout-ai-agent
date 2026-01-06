@@ -50,14 +50,13 @@ export function OrbitingAvatarSystem({
       SoundManager.fadeOut("orbit_whoosh", 1000);
       SoundManager.fadeIn("event_horizon_hum", 1500);
     } else if (phase === "randomness") {
+      SoundManager.fadeOut("orbit_whoosh", 500);
+      SoundManager.fadeOut("event_horizon_hum", 800);
       SoundManager.play("singularity_pulse");
+    } else if (phase === "attraction" || phase === "reveal") {
+      SoundManager.fadeOut("orbit_whoosh", 300);
+      SoundManager.fadeOut("event_horizon_hum", 500);
     }
-    
-    return () => {
-      if (phase === "reveal" || phase === "attraction") {
-        SoundManager.fadeOut("event_horizon_hum", 500);
-      }
-    };
   }, [phase, participants.length]);
   
   const avatarPositions = useMemo(() => {

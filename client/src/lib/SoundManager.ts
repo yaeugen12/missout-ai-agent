@@ -65,7 +65,7 @@ class SoundManagerClass {
         src: config.src,
         volume: config.volume,
         loop: config.loop,
-        preload: true,
+        preload: config.preload,
         onloaderror: (_id, error) => {
           console.warn(`[SoundManager] Failed to load ${key}:`, error);
         },

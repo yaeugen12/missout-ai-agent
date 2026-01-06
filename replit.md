@@ -73,11 +73,40 @@ The frontend SDK provides direct smart contract interactions:
 ### Black Hole Animation System (client/src/components/)
 Interactive animated experience for pool lifecycle with Framer Motion:
 - **BlackHoleExperience**: Main wrapper orchestrating all animation phases based on pool status
-- **OrbitingAvatarSystem**: Participant avatars orbit around the black hole; new joiners animate in with staggered positions
-- **CountdownDisplay**: Timer shown in black hole center when pool is locked (full)
+- **OrbitingAvatarSystem**: Participant avatars orbit around the black hole with:
+  - Motion blur effect that increases with orbit speed
+  - Dynamic glow aura that intensifies as pool fills
+  - Speed graduation: faster orbits as participants approach singularity
+  - Sound integration for orbit and event horizon phases
+- **CosmicParticles**: Background layer with 30-40 slow-drifting particles:
+  - Low opacity (5-12%) for subtle atmosphere
+  - Accelerated mode during countdown/randomness phases
+  - Golden color during winner reveal
+- **CountdownDisplay**: Timer shown in black hole center when pool is locked:
+  - Glowing bar animation (cyan → yellow → cyan)
+  - "Event Horizon Reached" pulse on initial lock
+  - Cosmic shake effect in final 3 seconds
+  - Countdown tick sounds for 3, 2, 1
 - **RandomnessLoader**: Pulsating animation during winner selection processing
-- **WinnerRevealCard**: Cosmic-themed winner announcement card with avatar, nickname, prize amount
-- **Phase States**: orbit (open) → countdown (locked) → randomness (processing) → reveal (winner selected)
+- **WinnerAttractionAnimation**: Two-phase animation before reveal:
+  - Hint phase: Winner avatar glow boost +20%, pulse effect
+  - Pull phase: Avatar spirals into singularity (0.5s ease-out) with blur
+- **WinnerRevealCard**: Cinematic winner announcement:
+  - Backdrop blur effect
+  - Cyan → white → cyan flash on reveal
+  - Golden particle effects
+  - Animated prize amount with glow
+- **Phase States**: orbit (open) → countdown (locked) → randomness (processing) → attraction → reveal (winner selected)
+
+### Sound System (client/src/lib/SoundManager.ts)
+Howler.js integration with lazy loading for atmospheric audio:
+- **sfx_orbit_soft_whoosh.mp3**: Subtle loop during orbit phase
+- **sfx_event_horizon_deep_hum.mp3**: Deep hum during countdown
+- **sfx_tick.mp3**: Countdown tick for 3, 2, 1
+- **sfx_singularity_pulse.mp3**: Pulse during randomness query
+- **sfx_reveal_burst.mp3**: Burst on winner reveal
+- Volume range: 0.15 - 0.35 for subtle atmosphere
+- Lazy loading: Sounds load on first play, not on page load
 
 ## External Dependencies
 
