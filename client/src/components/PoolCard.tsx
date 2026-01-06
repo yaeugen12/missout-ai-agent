@@ -190,8 +190,9 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   
   const percentFull = Math.min(100, (participantsCount / pool.maxParticipants) * 100);
   const isFull = percentFull >= 100;
-  const isActive = pool.status === "OPEN" || pool.status === "LOCKED";
-  const canDonate = pool.status !== "ENDED" && pool.status !== "CANCELLED";
+  const normalizedStatus = pool.status.toUpperCase();
+  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED";
+  const canDonate = normalizedStatus !== "ENDED" && normalizedStatus !== "CANCELLED";
   
   const lockEndTime = pool.lockTime 
     ? new Date(new Date(pool.lockTime).getTime() + pool.lockDuration * 60 * 1000)
@@ -284,11 +285,11 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
         <VortexRing percentFull={percentFull} accentColor={accentColor} />
 
-        {/* Lock Time Indicator - ABSOLUTELY PROMINENT AT THE TOP */}
-        {pool.status === "OPEN" && (
-          <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
-            <div className="flex justify-center -translate-y-1/2">
-              <div className="bg-black border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-bounce">
+        <div className="relative z-10 pt-2">
+          {/* Lock Time Indicator - ABSOLUTELY PROMINENT WITHIN CARD FLOW */}
+          {normalizedStatus === "OPEN" && (
+            <div className="flex justify-center mb-4">
+              <div className="bg-black/80 border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-pulse">
                 <Clock className="w-5 h-5 text-primary" />
                 <div className="flex flex-col items-center">
                   <span className="text-sm font-mono font-black text-white leading-none">{pool.lockDuration}m</span>
@@ -296,10 +297,8 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        <div className="relative z-10 pt-2">
+          )}
+          
           <div className="flex items-start gap-4 mb-4">
             <TokenAvatar 
               logoUrl={tokenMetadata?.logoUrl} 
@@ -428,7 +427,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {pool.status === "OPEN" && !isFull && (
+            {normalizedStatus === "OPEN" && !isFull && (
               <Button 
                 className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
                 size="sm"
