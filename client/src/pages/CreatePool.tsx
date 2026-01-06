@@ -227,9 +227,6 @@ export default function CreatePool() {
                 <Atom className="w-5 h-5 text-primary" />
               </div>
               <h1 className="text-3xl font-display font-bold text-white">INITIALIZE BLACK HOLE</h1>
-              <Badge variant="outline" className="text-xs font-mono opacity-60 ml-2" data-testid="badge-build-id">
-                {BUILD_ID}
-              </Badge>
             </div>
             <p className="text-muted-foreground">Configure parameters for a new MissOut betting pool.</p>
           </div>
