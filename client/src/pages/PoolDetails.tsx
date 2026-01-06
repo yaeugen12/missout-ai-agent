@@ -13,9 +13,9 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, Trophy, Clock, Users, Coins, AlertTriangle, Ban, RefreshCw, Zap, Gift, XCircle, Heart } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQueries } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { api } from "@shared/routes";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,40 @@ import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
 import { DevnetReadiness } from "@/components/DevnetReadiness";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
+function ParticipantRow({ walletAddress }: { walletAddress: string }) {
+  const { data: profile, isLoading } = useQueries({
+    queries: [{
+      queryKey: [api.profiles.get.path.replace(":wallet", walletAddress)],
+      queryFn: () => fetch(api.profiles.get.path.replace(":wallet", walletAddress)).then(res => res.json()),
+      staleTime: 60000,
+    }]
+  })[0];
+
+  const displayName = profile?.nickname || `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`;
+  const avatarUrl = profile?.avatarUrl || profile?.displayAvatar;
+
+  return (
+    <div className="flex items-center gap-3 p-2 rounded-md bg-white/5 border border-white/5 hover:border-primary/30 transition-all group">
+      <Avatar className="h-8 w-8 border border-primary/20 group-hover:border-primary/50 transition-colors">
+        <AvatarImage src={avatarUrl} className="object-cover" />
+        <AvatarFallback className="bg-primary/10 text-[10px] text-primary">
+          {walletAddress.slice(0, 2).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm font-medium truncate text-white group-hover:text-primary transition-colors">
+          {displayName}
+        </span>
+        <span className="text-[10px] text-muted-foreground truncate font-mono">
+          {walletAddress}
+        </span>
+      </div>
+      {isLoading && <Loader2 className="w-3 h-3 animate-spin ml-auto text-primary/50" />}
+    </div>
+  );
+}
 
 export default function PoolDetails() {
   const { id } = useParams();
@@ -677,9 +711,15 @@ export default function PoolDetails() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-              <div className="text-center text-muted-foreground py-10 text-sm">
-                Participants list loading...
-              </div>
+              {pool.participants && pool.participants.length > 0 ? (
+                pool.participants.map((p: any) => (
+                  <ParticipantRow key={p.walletAddress} walletAddress={p.walletAddress} />
+                ))
+              ) : (
+                <div className="text-center text-muted-foreground py-10 text-sm">
+                  No entities pulled yet...
+                </div>
+              )}
             </div>
           </div>
 
