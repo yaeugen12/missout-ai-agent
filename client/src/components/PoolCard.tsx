@@ -287,75 +287,23 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
         <VortexRing percentFull={percentFull} accentColor={accentColor} />
 
-        <div className="relative z-10">
-          <div className="flex items-start gap-4 mb-4">
-            <TokenAvatar 
-              logoUrl={tokenMetadata?.logoUrl} 
-              symbol={pool.tokenSymbol} 
-              accentColor={accentColor}
-            />
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h3 className="text-xl font-display font-black text-white group-hover:text-primary transition-colors truncate">
-                  {pool.tokenSymbol}
-                </h3>
-                <span className={cn(
-                  "px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm tracking-tight shrink-0",
-                  currentStatus.className
-                )}>
-                  {currentStatus.label}
-                </span>
-              </div>
-              <p className="text-muted-foreground text-xs truncate mb-1">
-                {pool.tokenName}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCopyPoolAddress}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                  data-testid={`button-copy-pool-${pool.id}`}
-                >
-                  <span className="font-mono">
-                    {poolAddress ? shortenAddress(poolAddress) : `#${pool.id}`}
-                  </span>
-                  <AnimatePresence mode="wait">
-                    {copied ? (
-                      <motion.span
-                        key="check"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
-                      >
-                        <Check className="w-3 h-3 text-green-400" />
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="copy"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </button>
-                {solscanUrl && (
-                  <a
-                    href={solscanUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-muted-foreground/60 hover:text-primary transition-colors"
-                    data-testid={`link-solscan-${pool.id}`}
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
+        {/* Lock Time Indicator - ABSOLUTELY PROMINENT AT THE TOP */}
+        {pool.status === "OPEN" && (
+          <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+            <div className="flex justify-center -translate-y-1/2">
+              <div className="bg-black border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-bounce">
+                <Clock className="w-5 h-5 text-primary" />
+                <div className="flex flex-col items-center">
+                  <span className="text-sm font-mono font-black text-white leading-none">{pool.lockDuration}m</span>
+                  <span className="text-[8px] text-primary font-black uppercase tracking-widest leading-none mt-1">LOCK DURATION</span>
+                </div>
               </div>
             </div>
           </div>
+        )}
+
+        <div className="relative z-10 pt-2">
+          <div className="flex items-start gap-4 mb-4">
 
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-white/5 rounded-md p-3">
@@ -381,30 +329,6 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             </div>
             
             <div className="flex items-center gap-4">
-              {pool.status === "OPEN" && (
-                <div 
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-md border-2 border-primary bg-primary/20 shadow-[0_0_15px_rgba(0,243,255,0.4)] relative overflow-hidden"
-                  style={{ transform: 'scale(1.1)' }}
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-primary/20"
-                    animate={{
-                      opacity: [0.1, 0.4, 0.1],
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut"
-                    }}
-                  />
-                  <Clock className="w-4 h-4 text-primary relative z-10" />
-                  <div className="flex flex-col relative z-10">
-                    <span className="text-xs font-mono font-black text-white leading-none tracking-tighter">{pool.lockDuration}m</span>
-                    <span className="text-[7px] text-white font-black uppercase tracking-widest leading-none mt-1">LOCK TIME</span>
-                  </div>
-                </div>
-              )}
-              
               <CountdownRing 
                 endTime={lockEndTime}
                 lockDuration={pool.lockDuration}
