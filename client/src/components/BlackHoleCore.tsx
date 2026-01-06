@@ -27,10 +27,10 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
     <div className="relative w-full aspect-square flex items-center justify-center">
       {/* Glow Field */}
       <motion.div 
-        className="absolute inset-0 bg-primary/20 blur-[100px] rounded-full"
+        className="absolute inset-[10%] bg-primary/20 blur-[60px] rounded-full"
         animate={{
-          scale: [1, 1.2, 1],
-          opacity: [0.3, 0.6, 0.3],
+          scale: [1, 1.15, 1],
+          opacity: [0.3, 0.5, 0.3],
         }}
         transition={{
           duration: 4,
