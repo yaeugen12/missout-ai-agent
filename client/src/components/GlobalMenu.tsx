@@ -117,7 +117,7 @@ export function GlobalMenu() {
             <MenuItem 
               href="/discovery" 
               icon={Terminal} 
-              label="Token Discovery"
+              label="Token Discovery (V2-soon)"
               description="Find new tokens to play"
               onClose={handleClose}
             />
