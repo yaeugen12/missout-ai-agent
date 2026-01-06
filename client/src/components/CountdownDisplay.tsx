@@ -1,5 +1,6 @@
 import { motion, useAnimation } from "framer-motion";
 import { useEffect, useState, useRef } from "react";
+import { SoundManager } from "@/lib/SoundManager";
 
 interface CountdownDisplayProps {
   targetTime: Date | null;
@@ -30,6 +31,7 @@ export function CountdownDisplay({ targetTime, onComplete }: CountdownDisplayPro
       
       if (remaining <= 3 && remaining > 0 && remaining !== lastTickRef.current) {
         lastTickRef.current = remaining;
+        SoundManager.play("countdown_tick");
       }
       
       if (remaining <= 0) {

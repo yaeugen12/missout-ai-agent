@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { generateDicebearUrl, shortenWallet } from "@/hooks/use-profile";
+import { SoundManager } from "@/lib/SoundManager";
 
 interface Participant {
   id: number;
@@ -42,6 +43,21 @@ export function OrbitingAvatarSystem({
     ? 0.5 + intensity * 0.3 
     : 0.3 + intensity * 0.2;
 
+  useEffect(() => {
+    if (phase === "orbit" && participants.length > 0) {
+      SoundManager.fadeIn("orbit_whoosh", 2000);
+    } else if (phase === "countdown") {
+      SoundManager.fadeOut("orbit_whoosh", 1000);
+      SoundManager.fadeIn("event_horizon_hum", 1500);
+    } else if (phase === "randomness") {
+      SoundManager.fadeOut("orbit_whoosh", 500);
+      SoundManager.fadeOut("event_horizon_hum", 800);
+      SoundManager.play("singularity_pulse");
+    } else if (phase === "attraction" || phase === "reveal") {
+      SoundManager.fadeOut("orbit_whoosh", 300);
+      SoundManager.fadeOut("event_horizon_hum", 500);
+    }
+  }, [phase, participants.length]);
   
   const avatarPositions = useMemo(() => {
     return participants.map((p, index) => {
