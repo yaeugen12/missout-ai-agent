@@ -411,7 +411,7 @@ export default function PoolDetails() {
         
         {/* Black Hole Visual - Fully visible and clean */}
         <div className="relative z-10 w-full flex-1 flex items-center justify-center">
-          <div className="scale-[0.8] md:scale-[0.9] transform transition-transform duration-700">
+          <div className="w-[400px] h-[400px] md:w-[500px] md:h-[500px]">
             <BlackHoleCore 
               intensity={(pool.participantsCount ?? 0) / pool.maxParticipants} 
               status={pool.status} 
