@@ -68,14 +68,6 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
   
   return (
     <div className="absolute -right-10 top-1/2 -translate-y-1/2 w-48 h-48 pointer-events-none overflow-visible">
-      {/* Deep Space Background for the Vortex */}
-      <div 
-        className="absolute inset-4 rounded-full bg-black shadow-[0_0_60px_rgba(0,0,0,1)] z-0"
-        style={{ 
-          boxShadow: `0 0 40px ${accentColor.replace("0.8", "0.05")}, inset 0 0 20px ${accentColor.replace("0.8", "0.1")}` 
-        }}
-      />
-      
       <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
         <defs>
           <filter id="vortexGlow">
