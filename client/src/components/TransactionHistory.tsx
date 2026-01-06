@@ -90,20 +90,18 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
               </div>
             </div>
 
-            <div className="text-right">
-              <div className={`font-mono font-bold mb-1 ${tx.type === 'PAYOUT' ? 'text-yellow-400' : 'text-white'}`}>
+            <div className="flex flex-col items-end gap-1">
+              <div className={`font-mono font-bold ${tx.type === 'PAYOUT' ? 'text-yellow-400' : 'text-white'}`}>
                 {tx.type === 'PAYOUT' ? '+' : ''}{tx.amount.toFixed(2)}
               </div>
-              {tx.txHash && (
-                <a 
-                  href={getSolscanTxUrl(tx.txHash)} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors uppercase font-tech"
-                >
-                  Solscan <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+              <a 
+                href={tx.txHash ? getSolscanTxUrl(tx.txHash) : `https://solscan.io/account/${tx.walletAddress}?cluster=devnet`} 
+                target="_blank" 
+                rel="noreferrer"
+                className="flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors uppercase font-tech bg-primary/5 px-2 py-0.5 rounded border border-primary/20 hover:border-primary/50"
+              >
+                Solscan <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             </div>
           </div>
         );
