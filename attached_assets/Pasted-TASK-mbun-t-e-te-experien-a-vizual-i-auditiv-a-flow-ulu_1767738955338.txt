@@ -1,0 +1,110 @@
+TASK: Îmbunătățește experiența vizuală și auditivă a flow-ului cosmic exact după cerințele de mai jos.
+🔹 1. Orbit Animation Upgrade
+
+Adaugă motion blur subtil pe entitățile din orbită (GSAP sau CSS).
+
+Creează un glow aura dinamic care crește ușor odată cu accelerarea orbitei.
+
+Adaugă speed graduation: cu cât se apropie de singularity, cu atât viteza și blurul cresc.
+
+🔹 2. Background Cosmic Particles
+
+Creează un layer separat cu particule (20–40) în mișcare lentă.
+
+Opacitate mică (5–12%).
+
+Mișcare foarte lentă, drift cosmic.
+
+Să fie complet decuplate de orbit animation (layer de background).
+
+🔹 3. Sound FX Integration (subtle, atmospheric)
+
+Adaugă un sound system simplu (Howler.js preferat) cu:
+
+sfx_orbit_soft_whoosh.mp3 – loop foarte subtil în timpul orbitării
+
+sfx_event_horizon_deep_hum.mp3 – începe la lock
+
+sfx_tick.mp3 – la countdown 3,2,1
+
+sfx_singularity_pulse.mp3 – la „Querying Singularity”
+
+sfx_reveal_burst.mp3 – la afișarea winner-ului
+
+IMPORTANT:
+Să fie volum mic (0.15 – 0.35).
+Să NU suprascrie logica existentă.
+
+🔹 4. Event Horizon UI Enhancement
+
+Când Event Horizon este atins:
+
+bara devine glowing (cyan → yellow → cyan)
+
+un mic shake cosmic, extrem de subtil
+
+textul “Event Horizon Reached” pulsează o singură dată
+
+particulele accelerează puțin (opțional)
+
+🔹 5. Pre-Reveal "Winner Hint" Animation
+
+Cu 0.8 secunde înainte de reveal, după ce se primește VRF result (dar înainte de card):
+
+avatarul câștigător își mărește glow-ul cu +20%
+
+face 1 pulse luminos
+
+orbita încetinește ușor
+
+apoi avatarul câștigător e tras în singularity (0.4s ease-out)
+
+🔹 6. Cinematic Winner Reveal
+
+În locul cardului simplu actual:
+
+ecranul se blurează subtil
+
+singularity face 1 flash cyan → white → cyan
+
+cardul de winner apare cu un slide din centru + slight zoom
+
+particulele devin aurii pentru 1 secundă
+
+Elemente card:
+
+avatar mare
+
+nickname / wallet shortform
+
+amount won
+
+token icon
+
+“You Won The Singularity” text
+
+Durată totală animație: 0.8 – 1.3s.
+
+🔹 7. Pool Reset Animation
+
+Când poolul se resetează:
+
+orbita se dizolvă într-un fade-to-dark cosmic
+
+background particles se resetează lent
+
+singularity pulsează de 2 ori
+
+UI-ul se resetează smooth, nu instant
+
+🔹 8. Performance Requirements
+
+Nu afecta logică backend
+
+Fără glitch în rerender
+
+Folosește requestAnimationFrame pentru orbită
+
+Folosește GSAP/Framer Motion pentru animații UI
+
+Lazy load pentru assets audio

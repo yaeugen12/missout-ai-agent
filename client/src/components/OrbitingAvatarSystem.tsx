@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { generateDicebearUrl, shortenWallet } from "@/hooks/use-profile";
+import { SoundManager } from "@/lib/SoundManager";
 
 interface Participant {
   id: number;
@@ -15,7 +16,7 @@ interface OrbitingAvatarSystemProps {
   participants: Participant[];
   maxParticipants: number;
   winnerWallet?: string | null;
-  phase: "orbit" | "countdown" | "randomness" | "reveal";
+  phase: "orbit" | "countdown" | "randomness" | "reveal" | "attraction";
   orbitRadius?: number;
 }
 
@@ -26,7 +27,38 @@ export function OrbitingAvatarSystem({
   phase,
   orbitRadius = 200,
 }: OrbitingAvatarSystemProps) {
-  const orbitSpeed = phase === "randomness" ? 3 : 15;
+  const intensity = participants.length / maxParticipants;
+  const baseSpeed = phase === "randomness" ? 2 : 12;
+  const orbitSpeed = baseSpeed * (1 - intensity * 0.4);
+  
+  const motionBlurAmount = phase === "randomness" 
+    ? 4 
+    : phase === "countdown" 
+    ? 2 + intensity * 2 
+    : 1 + intensity;
+  
+  const glowIntensity = phase === "randomness" 
+    ? 0.9 
+    : phase === "countdown" 
+    ? 0.5 + intensity * 0.3 
+    : 0.3 + intensity * 0.2;
+
+  useEffect(() => {
+    if (phase === "orbit" && participants.length > 0) {
+      SoundManager.fadeIn("orbit_whoosh", 2000);
+    } else if (phase === "countdown") {
+      SoundManager.fadeOut("orbit_whoosh", 1000);
+      SoundManager.fadeIn("event_horizon_hum", 1500);
+    } else if (phase === "randomness") {
+      SoundManager.play("singularity_pulse");
+    }
+    
+    return () => {
+      if (phase === "reveal" || phase === "attraction") {
+        SoundManager.fadeOut("event_horizon_hum", 500);
+      }
+    };
+  }, [phase, participants.length]);
   
   const avatarPositions = useMemo(() => {
     return participants.map((p, index) => {
@@ -42,7 +74,7 @@ export function OrbitingAvatarSystem({
   return (
     <div className="absolute inset-0 pointer-events-none">
       <AnimatePresence>
-        {avatarPositions.map((participant, index) => {
+        {avatarPositions.map((participant) => {
           const isWinner = participant.isWinner && phase === "reveal";
           const shouldFadeOut = phase === "reveal" && !participant.isWinner;
           
@@ -55,6 +87,9 @@ export function OrbitingAvatarSystem({
                 top: "50%",
                 marginLeft: -20,
                 marginTop: -20,
+                filter: phase === "randomness" 
+                  ? `blur(${motionBlurAmount * 0.5}px)` 
+                  : "none",
               }}
               initial={{ 
                 opacity: 0, 
@@ -136,6 +171,8 @@ export function OrbitingAvatarSystem({
                     displayName={participant.displayName}
                     isWinner={isWinner}
                     phase={phase}
+                    glowIntensity={glowIntensity}
+                    motionBlur={motionBlurAmount}
                   />
                 </motion.div>
               </motion.div>
@@ -153,11 +190,24 @@ interface OrbitingAvatarProps {
   displayName?: string;
   isWinner: boolean;
   phase: string;
+  glowIntensity: number;
+  motionBlur: number;
 }
 
-function OrbitingAvatar({ walletAddress, avatar, displayName, isWinner, phase }: OrbitingAvatarProps) {
+function OrbitingAvatar({ 
+  walletAddress, 
+  avatar, 
+  displayName, 
+  isWinner, 
+  phase,
+  glowIntensity,
+  motionBlur 
+}: OrbitingAvatarProps) {
   const avatarUrl = avatar || generateDicebearUrl(walletAddress);
   const name = displayName || shortenWallet(walletAddress);
+  
+  const glowSize = 10 + glowIntensity * 15;
+  const glowOpacity = 0.5 + glowIntensity * 0.3;
   
   return (
     <motion.div
@@ -166,17 +216,46 @@ function OrbitingAvatar({ walletAddress, avatar, displayName, isWinner, phase }:
         rotate: phase !== "reveal" ? -360 : 0,
       }}
       transition={{
-        duration: phase === "randomness" ? 3 : 15,
+        duration: phase === "randomness" ? 2 : 12,
         repeat: phase !== "reveal" ? Infinity : 0,
         ease: "linear",
       }}
+      style={{
+        filter: phase === "randomness" 
+          ? `drop-shadow(${motionBlur}px 0 ${motionBlur * 2}px rgba(0, 240, 255, 0.4))`
+          : "none",
+      }}
     >
+      <motion.div
+        className="absolute -inset-1 rounded-full"
+        style={{
+          background: isWinner 
+            ? `radial-gradient(circle, rgba(250,204,21,${glowOpacity}) 0%, transparent 70%)`
+            : `radial-gradient(circle, rgba(0,240,255,${glowOpacity * 0.6}) 0%, transparent 70%)`,
+          filter: `blur(${glowSize * 0.5}px)`,
+        }}
+        animate={{
+          scale: [1, 1.2, 1],
+          opacity: [glowOpacity, glowOpacity * 1.3, glowOpacity],
+        }}
+        transition={{
+          duration: 2,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+      
       <div
         className={`
-          w-10 h-10 rounded-full overflow-hidden
-          border-2 ${isWinner ? "border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.8)]" : "border-primary/50 shadow-[0_0_10px_rgba(0,240,255,0.5)]"}
+          w-10 h-10 rounded-full overflow-hidden relative z-10
+          border-2 ${isWinner ? "border-yellow-400" : "border-primary/50"}
           bg-black
         `}
+        style={{
+          boxShadow: isWinner 
+            ? `0 0 ${glowSize}px rgba(250,204,21,${glowOpacity})`
+            : `0 0 ${glowSize}px rgba(0,240,255,${glowOpacity * 0.5})`,
+        }}
       >
         <Avatar className="w-full h-full">
           <AvatarImage src={avatarUrl} alt={name} />
