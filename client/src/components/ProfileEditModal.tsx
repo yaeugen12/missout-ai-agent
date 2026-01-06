@@ -78,7 +78,7 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
         <DialogHeader>
           <DialogTitle className="text-lg font-tech text-primary">Edit Profile</DialogTitle>
           <DialogDescription className="text-muted-foreground text-sm">
-            Customize how you appear to other players. All changes require wallet signature.
+            Customize how you appear to other players. Changes are saved instantly to your profile.
           </DialogDescription>
         </DialogHeader>
         
@@ -166,7 +166,7 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
             {updateProfile.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Signing...
+                Updating...
               </>
             ) : (
               "Save Changes"

@@ -93,8 +93,6 @@ export const updateProfileSchema = z.object({
   nickname: z.string().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores allowed").optional(),
   avatarUrl: z.string().url().optional(),
   avatarStyle: z.enum(["bottts", "identicon", "shapes", "thumbs", "pixel-art"]).optional(),
-  signature: z.string(),
-  nonce: z.string(),
 });
 
 // Types

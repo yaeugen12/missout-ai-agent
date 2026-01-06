@@ -349,29 +349,10 @@ export async function registerRoutes(
       const input = updateProfileSchema.parse(req.body);
       
       const profile = await storage.getProfile(wallet);
-      if (!profile || profile.nonce !== input.nonce) {
-        return res.status(401).json({ message: "Invalid or expired nonce. Please request a new one." });
-      }
-      
-      const expectedMessage = `MissOut Profile Update\n\nNonce: ${input.nonce}\nWallet: ${wallet}\n\nSign this message to verify your identity.`;
-      const messageBytes = new TextEncoder().encode(expectedMessage);
-      
-      let isValid = false;
-      try {
-        const signatureBytes = bs58.decode(input.signature);
-        const publicKeyBytes = bs58.decode(wallet);
-        isValid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
-      } catch (e) {
-        console.error("[Profile] Signature verification error:", e);
-      }
-      
-      if (!isValid) {
-        return res.status(401).json({ message: "Invalid signature" });
-      }
       
       if (input.nickname) {
         const cooldown = await storage.checkNicknameCooldown(wallet);
-        if (!cooldown.canChange && profile.nickname !== input.nickname) {
+        if (!cooldown.canChange && profile?.nickname !== input.nickname) {
           return res.status(429).json({ 
             message: "Nickname can only be changed once per week",
             cooldownEnds: cooldown.cooldownEnds?.toISOString()

@@ -62,34 +62,22 @@ export function useProfileNonce() {
 }
 
 export function useUpdateProfile() {
-  const { publicKey, signMessage } = useWallet();
+  const { publicKey } = useWallet();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
   return useMutation({
     mutationFn: async (data: { nickname?: string; avatarStyle?: AvatarStyle }) => {
-      if (!publicKey || !signMessage) {
-        throw new Error("Wallet not connected or does not support signing");
+      if (!publicKey) {
+        throw new Error("Wallet not connected");
       }
       
       const wallet = publicKey.toBase58();
       
-      const nonceRes = await fetch(`/api/profile/${wallet}/nonce`);
-      if (!nonceRes.ok) throw new Error("Failed to get nonce");
-      const { nonce, message } = await nonceRes.json();
-      
-      const messageBytes = new TextEncoder().encode(message);
-      const signatureBytes = await signMessage(messageBytes);
-      const signature = bs58.encode(signatureBytes);
-      
       const res = await fetch(`/api/profile/${wallet}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          nonce,
-          signature,
-        }),
+        body: JSON.stringify(data),
       });
       
       if (!res.ok) {
