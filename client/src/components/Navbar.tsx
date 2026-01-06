@@ -125,7 +125,20 @@ export function Navbar() {
                       <AvatarFallback className="bg-primary/10">MO</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-medium truncate">{profile?.displayName || "Anonymous User"}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">{profile?.displayName || "Anonymous User"}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-5 w-5 text-muted-foreground hover:text-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyAddress();
+                          }}
+                        >
+                          {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                        </Button>
+                      </div>
                       <span className="text-[10px] text-muted-foreground truncate">{address}</span>
                     </div>
                   </div>
