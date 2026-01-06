@@ -298,6 +298,19 @@ export class PoolMonitor {
       await payoutWinnerOnChain(pool.poolAddress!);
       log(`Pool ${pool.id} ✅ payoutWinner() succeeded, winner=${winnerPubkey.slice(0, 16)}`);
 
+      // Record PAYOUT transaction in database
+      try {
+        await db.insert(transactions).values({
+          poolId: pool.id,
+          walletAddress: winnerPubkey,
+          type: 'PAYOUT',
+          amount: (pool.totalPot || 0) * 0.90, // 90% payout as defined in IDL/UI
+          txHash: null, // We don't have the payout txHash easily here
+        });
+      } catch (txErr) {
+        log(`Pool ${pool.id} ⚠️ Failed to record payout transaction:`, txErr);
+      }
+
       // Sync DB state
       await db.update(pools)
         .set({

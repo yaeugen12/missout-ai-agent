@@ -125,11 +125,11 @@ export async function registerRoutes(
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${input.creatorWallet}`
       });
 
-      // Add transaction record for creator
+      // Add transaction record for creator (CREATE)
       await storage.addTransaction({
         poolId: pool.id,
         walletAddress: input.creatorWallet,
-        type: 'JOIN',
+        type: 'CREATE',
         amount: pool.entryAmount,
         txHash: input.txHash
       });
