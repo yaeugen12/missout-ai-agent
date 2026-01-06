@@ -34,8 +34,17 @@ Preferred communication style: Simple, everyday language.
 
 ### Data Storage
 - **Primary Database**: PostgreSQL (required via DATABASE_URL environment variable)
-- **Schema Location**: shared/schema.ts defines pools, participants, and transactions tables
+- **Schema Location**: shared/schema.ts defines pools, participants, transactions, and profiles tables
 - **Migrations**: Drizzle Kit with migrations output to ./migrations directory
+
+### User Profile System
+- **Purpose**: Optional off-chain user profiles for cosmetic personalization (nicknames, avatars)
+- **Security**: Nonce + wallet signature verification using TweetNaCl
+- **Database Table**: profiles table with wallet, nickname, avatar style/seed, nonce, and lastNicknameChange
+- **Nickname Rules**: 3-20 characters, alphanumeric + underscore only, 7-day cooldown between changes
+- **Avatar System**: Dicebear API with 5 preset styles (bottts, identicon, shapes, thumbs, pixel-art) seeded by wallet address
+- **Fallback Behavior**: When no profile exists, displayName falls back to truncated wallet address and avatar uses default Dicebear style
+- **Components**: ProfileDisplay (read-only display), ProfileEditModal (edit with validation), integrated into Navbar wallet dropdown
 
 ### Blockchain Integration
 - **Network**: Solana mainnet
