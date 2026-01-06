@@ -1,10 +1,12 @@
 import { db } from "./db";
 import {
   pools, participants, transactions, profiles,
+  referralRelations, referralRewards, referralRewardEvents, referralClaims,
   type Pool, type InsertPool, type Participant, type InsertParticipant,
-  type Transaction, type InsertTransaction, type Profile
+  type Transaction, type InsertTransaction, type Profile,
+  type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim
 } from "@shared/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {
@@ -272,6 +274,163 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { canChange: false, cooldownEnds };
+  }
+
+  // ============================================
+  // REFERRAL SYSTEM METHODS
+  // ============================================
+
+  async getReferralRelation(referredWallet: string): Promise<ReferralRelation | undefined> {
+    const [relation] = await db.select().from(referralRelations).where(eq(referralRelations.referredWallet, referredWallet));
+    return relation;
+  }
+
+  async createReferralRelation(referredWallet: string, referrerWallet: string, source: string = 'link'): Promise<ReferralRelation | null> {
+    if (referredWallet === referrerWallet) {
+      console.log("[Referral] Rejected self-referral:", referredWallet);
+      return null;
+    }
+
+    const existing = await this.getReferralRelation(referredWallet);
+    if (existing) {
+      console.log("[Referral] Wallet already has referrer:", referredWallet);
+      return null;
+    }
+
+    try {
+      const [relation] = await db.insert(referralRelations).values({
+        referredWallet,
+        referrerWallet,
+        source
+      }).returning();
+      console.log("[Referral] Created relation:", referredWallet, "->", referrerWallet);
+      return relation;
+    } catch (err) {
+      console.error("[Referral] Failed to create relation:", err);
+      return null;
+    }
+  }
+
+  async getReferralStats(referrerWallet: string): Promise<{
+    totalInvited: number;
+    totalEarned: string;
+    totalClaimed: string;
+  }> {
+    const invited = await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, referrerWallet));
+
+    const rewards = await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, referrerWallet));
+
+    const totalEarned = rewards.reduce((sum, r) => sum + BigInt(r.amountPending || "0") + BigInt(r.amountClaimed || "0"), BigInt(0));
+    const totalClaimed = rewards.reduce((sum, r) => sum + BigInt(r.amountClaimed || "0"), BigInt(0));
+
+    return {
+      totalInvited: invited.length,
+      totalEarned: totalEarned.toString(),
+      totalClaimed: totalClaimed.toString()
+    };
+  }
+
+  async getReferralRewards(referrerWallet: string): Promise<ReferralReward[]> {
+    return await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, referrerWallet));
+  }
+
+  async getInvitedUsers(referrerWallet: string): Promise<ReferralRelation[]> {
+    return await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, referrerWallet)).orderBy(desc(referralRelations.createdAt));
+  }
+
+  async allocateReferralRewards(poolId: number, tokenMint: string, totalFeeAmount: string): Promise<void> {
+    const existingEvents = await db.select().from(referralRewardEvents)
+      .where(and(eq(referralRewardEvents.poolId, poolId), eq(referralRewardEvents.tokenMint, tokenMint)));
+    
+    if (existingEvents.length > 0) {
+      console.log("[Referral] Rewards already allocated for pool:", poolId);
+      return;
+    }
+
+    const poolParticipants = await this.getParticipants(poolId);
+    
+    const referrerSet = new Set<string>();
+    for (const p of poolParticipants) {
+      const relation = await this.getReferralRelation(p.walletAddress);
+      if (relation) {
+        referrerSet.add(relation.referrerWallet);
+      }
+    }
+
+    const referrers = Array.from(referrerSet);
+    if (referrers.length === 0) {
+      console.log("[Referral] No referrers for pool:", poolId, "- fee stays in treasury");
+      return;
+    }
+
+    const totalFee = BigInt(totalFeeAmount);
+    const sharePerReferrer = totalFee / BigInt(referrers.length);
+
+    console.log("[Referral] Allocating", totalFeeAmount, "to", referrers.length, "referrers (", sharePerReferrer.toString(), "each)");
+
+    for (const referrerWallet of referrers) {
+      await db.insert(referralRewardEvents).values({
+        poolId,
+        tokenMint,
+        referrerWallet,
+        amount: sharePerReferrer.toString()
+      });
+
+      const [existingReward] = await db.select().from(referralRewards)
+        .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+
+      if (existingReward) {
+        const newPending = BigInt(existingReward.amountPending || "0") + sharePerReferrer;
+        await db.update(referralRewards)
+          .set({ amountPending: newPending.toString(), lastUpdated: new Date() })
+          .where(eq(referralRewards.id, existingReward.id));
+      } else {
+        await db.insert(referralRewards).values({
+          referrerWallet,
+          tokenMint,
+          amountPending: sharePerReferrer.toString(),
+          amountClaimed: "0"
+        });
+      }
+    }
+  }
+
+  async claimReferralReward(referrerWallet: string, tokenMint: string): Promise<{ success: boolean; amount: string; error?: string }> {
+    const [reward] = await db.select().from(referralRewards)
+      .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+
+    if (!reward || BigInt(reward.amountPending || "0") <= BigInt(0)) {
+      return { success: false, amount: "0", error: "No pending rewards to claim" };
+    }
+
+    const amountToClaim = reward.amountPending || "0";
+
+    await db.insert(referralClaims).values({
+      referrerWallet,
+      tokenMint,
+      amount: amountToClaim,
+      status: "pending"
+    });
+
+    await db.update(referralRewards)
+      .set({
+        amountPending: "0",
+        amountClaimed: (BigInt(reward.amountClaimed || "0") + BigInt(amountToClaim)).toString(),
+        lastUpdated: new Date()
+      })
+      .where(eq(referralRewards.id, reward.id));
+
+    return { success: true, amount: amountToClaim };
+  }
+
+  async updateClaimStatus(claimId: number, status: string, txSignature?: string): Promise<void> {
+    await db.update(referralClaims)
+      .set({ status, txSignature })
+      .where(eq(referralClaims.id, claimId));
+  }
+
+  async getPendingClaims(): Promise<ReferralClaim[]> {
+    return await db.select().from(referralClaims).where(eq(referralClaims.status, "pending"));
   }
 }
 

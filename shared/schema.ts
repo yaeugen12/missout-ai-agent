@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, bigint, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -112,3 +112,58 @@ export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type CreatePoolRequest = InsertPool;
 export type JoinPoolRequest = { walletAddress: string; avatar?: string };
 export type DonateRequest = { walletAddress: string; amount: number };
+
+// ============================================
+// REFERRAL SYSTEM TABLES
+// ============================================
+
+export const referralRelations = pgTable("referral_relations", {
+  id: serial("id").primaryKey(),
+  referredWallet: text("referred_wallet").notNull().unique(),
+  referrerWallet: text("referrer_wallet").notNull(),
+  source: text("source").default("link"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const referralRewards = pgTable("referral_rewards", {
+  id: serial("id").primaryKey(),
+  referrerWallet: text("referrer_wallet").notNull(),
+  tokenMint: text("token_mint").notNull(),
+  amountPending: text("amount_pending").default("0"),
+  amountClaimed: text("amount_claimed").default("0"),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+}, (table) => ({
+  uniqueReferrerMint: unique().on(table.referrerWallet, table.tokenMint),
+}));
+
+export const referralRewardEvents = pgTable("referral_reward_events", {
+  id: serial("id").primaryKey(),
+  poolId: integer("pool_id").notNull(),
+  tokenMint: text("token_mint").notNull(),
+  referrerWallet: text("referrer_wallet").notNull(),
+  amount: text("amount").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const referralClaims = pgTable("referral_claims", {
+  id: serial("id").primaryKey(),
+  referrerWallet: text("referrer_wallet").notNull(),
+  tokenMint: text("token_mint").notNull(),
+  amount: text("amount").notNull(),
+  txSignature: text("tx_signature"),
+  status: text("status").default("pending"),
+  claimedAt: timestamp("claimed_at").defaultNow(),
+});
+
+// Referral Schemas
+export const insertReferralRelationSchema = createInsertSchema(referralRelations).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Referral Types
+export type ReferralRelation = typeof referralRelations.$inferSelect;
+export type InsertReferralRelation = z.infer<typeof insertReferralRelationSchema>;
+export type ReferralReward = typeof referralRewards.$inferSelect;
+export type ReferralRewardEvent = typeof referralRewardEvents.$inferSelect;
+export type ReferralClaim = typeof referralClaims.$inferSelect;
