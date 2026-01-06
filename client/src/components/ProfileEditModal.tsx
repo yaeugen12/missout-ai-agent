@@ -100,11 +100,12 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
     try {
       await updateProfile.mutateAsync({
         nickname: nickname || undefined,
-        avatarStyle: customAvatarUrl ? undefined : selectedStyle,
+        avatarStyle: selectedStyle,
         avatarUrl: customAvatarUrl || null,
       });
       onOpenChange(false);
     } catch (e) {
+      console.error("Update profile failed:", e);
     }
   };
   
