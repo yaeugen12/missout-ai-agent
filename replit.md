@@ -1,0 +1,87 @@
+# MissOut - Solana Lottery Protocol
+
+## Overview
+
+MissOut is a dark neon gaming web application for a Solana-based lottery protocol with a cosmic black hole theme. Users can create and join "Black Holes" (betting pools) where participants stake SPL tokens and a random winner takes all. The app features a distinctive cyberpunk aesthetic with glassmorphism cards, neon glows, and animated vortex effects.
+
+Key terminology:
+- Pool = "Black Hole"
+- Join = "Get Pulled In"
+- Donate = "Feed the Void"
+- Winner = "Escapes the Void"
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+- **Framework**: React 18 with TypeScript
+- **Routing**: Wouter (lightweight React router)
+- **State Management**: TanStack React Query for server state, Zustand for client state (wallet)
+- **Styling**: TailwindCSS with custom CSS variables for theming
+- **UI Components**: shadcn/ui component library (Radix UI primitives)
+- **Animations**: Framer Motion for complex animations (winner reveal roulette, black hole effects)
+- **Build Tool**: Vite with path aliases (@/, @shared/, @assets/)
+
+### Backend Architecture
+- **Runtime**: Node.js with Express
+- **Language**: TypeScript (ESM modules)
+- **API Style**: REST endpoints defined in shared/routes.ts with Zod validation
+- **Database ORM**: Drizzle ORM with PostgreSQL
+- **Session Storage**: connect-pg-simple for PostgreSQL session storage
+
+### Data Storage
+- **Primary Database**: PostgreSQL (required via DATABASE_URL environment variable)
+- **Schema Location**: shared/schema.ts defines pools, participants, and transactions tables
+- **Migrations**: Drizzle Kit with migrations output to ./migrations directory
+
+### Blockchain Integration
+- **Network**: Solana mainnet
+- **RPC Provider**: Helius (configured via VITE_HELIUS_RPC_URL environment variable)
+- **Libraries**: @solana/web3.js, @solana/spl-token, @coral-xyz/anchor for blockchain interactions
+- **Token Metadata**: Fetches SPL token info including Metaplex metadata for pump.fun tokens
+- **Price API**: Jupiter API for USD price lookups with fallback handling
+- **Randomness**: Switchboard V4 via @switchboard-xyz/on-demand for verifiable randomness
+
+### Solana SDK (client/src/lib/solana-sdk/)
+The frontend SDK provides direct smart contract interactions:
+- **Program ID**: 53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw
+- **client.ts**: MissoutClient class with wallet adapter integration
+- **services/pool-service.ts**: Pool operations (createPool, joinPool, donateToPool, cancelPool, claimRefund)
+- **pda/derive.ts**: PDA derivation functions for pools and participants
+- **utils/token.ts**: TokenAmount utility for safe bigint token conversions
+- **idl.ts**: Program IDL definition
+- **useMissoutSDK hook**: React hook for SDK integration with wallet connection
+
+### Key Design Patterns
+- **Protocol Adapter**: client/src/lib/protocolAdapter.ts provides an abstraction layer for Solana interactions (token info fetching, price lookups)
+- **SDK Pattern**: MissoutClient singleton manages Anchor program and connection, updated when wallet connects
+- **Shared Types**: Types and schemas in shared/ directory are used by both frontend and backend
+- **API Contract**: shared/routes.ts defines the complete API contract with Zod schemas for validation
+
+## External Dependencies
+
+### Database
+- PostgreSQL database (required)
+- Connection via DATABASE_URL environment variable
+- Schema managed by Drizzle ORM
+
+### Blockchain Services
+- **Helius RPC**: Primary Solana RPC endpoint for token data and blockchain queries
+  - Environment variable: VITE_HELIUS_RPC_URL
+- **Jupiter Price API**: Token USD price lookups for minimum entry validation
+
+### Third-Party UI Libraries
+- Radix UI primitives (dialogs, menus, forms, etc.)
+- Framer Motion for animations
+- react-day-picker for calendar components
+- embla-carousel-react for carousels
+- vaul for drawer components
+- recharts for charts
+
+### Build & Development
+- Vite development server with HMR
+- esbuild for production server bundling
+- Replit-specific plugins for development (cartographer, dev-banner, runtime-error-modal)

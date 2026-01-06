@@ -1,0 +1,11 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: neonhub-db
+    environment:
+      POSTGRES_USER: neon
+      POSTGRES_PASSWORD: neon
+      POSTGRES_DB: neonhub
+    ports:
+      - "5433:5432"
+

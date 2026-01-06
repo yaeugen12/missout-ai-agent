@@ -1,0 +1,2165 @@
+{
+  "address": "53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw",
+  "metadata": {
+    "name": "ml",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "instructions": [
+    {
+      "name": "admin_close_pool",
+      "discriminator": [
+        83,
+        105,
+        178,
+        188,
+        61,
+        125,
+        117,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "creator_wallet",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "cancel_pool",
+      "discriminator": [
+        211,
+        11,
+        27,
+        100,
+        252,
+        115,
+        57,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_refund",
+      "discriminator": [
+        15,
+        16,
+        30,
+        161,
+        255,
+        228,
+        97,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "treasury_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_rent",
+      "discriminator": [
+        57,
+        233,
+        51,
+        137,
+        102,
+        101,
+        26,
+        101
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "close_target",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_pool",
+      "discriminator": [
+        233,
+        146,
+        209,
+        142,
+        207,
+        104,
+        64,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              },
+              {
+                "kind": "arg",
+                "path": "salt"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "max_participants",
+          "type": "u8"
+        },
+        {
+          "name": "lock_duration",
+          "type": "i64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "dev_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "dev_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "burn_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "treasury_wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "treasury_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "allow_mock",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "donate",
+      "discriminator": [
+        121,
+        186,
+        218,
+        211,
+        73,
+        70,
+        196,
+        180
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "finalize_forfeited_pool",
+      "discriminator": [
+        193,
+        214,
+        137,
+        120,
+        249,
+        9,
+        59,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "treasury_token",
+          "docs": [
+            "Treasury destination"
+          ],
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "force_expire",
+      "discriminator": [
+        181,
+        233,
+        225,
+        150,
+        213,
+        57,
+        145,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "join_pool",
+      "discriminator": [
+        14,
+        65,
+        62,
+        16,
+        116,
+        17,
+        195,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "pause_pool",
+      "discriminator": [
+        160,
+        15,
+        12,
+        189,
+        160,
+        0,
+        243,
+        245
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "payout_winner",
+      "discriminator": [
+        192,
+        241,
+        157,
+        158,
+        130,
+        150,
+        10,
+        8
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "winner_token",
+          "writable": true
+        },
+        {
+          "name": "dev_token",
+          "writable": true
+        },
+        {
+          "name": "treasury_token",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "winner_pubkey"
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "request_randomness",
+      "discriminator": [
+        213,
+        5,
+        173,
+        166,
+        37,
+        236,
+        31,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "randomness"
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "select_winner",
+      "discriminator": [
+        119,
+        66,
+        44,
+        236,
+        79,
+        158,
+        82,
+        51
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "randomness"
+        },
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_lock_duration",
+      "discriminator": [
+        197,
+        198,
+        131,
+        75,
+        25,
+        116,
+        20,
+        111
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_lock_duration",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "sweep_expired_pool",
+      "discriminator": [
+        182,
+        4,
+        161,
+        221,
+        98,
+        188,
+        73,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "pool_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unlock_pool",
+      "discriminator": [
+        51,
+        19,
+        234,
+        156,
+        255,
+        183,
+        89,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unpause_pool",
+      "discriminator": [
+        241,
+        148,
+        129,
+        243,
+        222,
+        125,
+        125,
+        160
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "participants",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  114,
+                  116,
+                  105,
+                  99,
+                  105,
+                  112,
+                  97,
+                  110,
+                  116,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Participants",
+      "discriminator": [
+        174,
+        28,
+        107,
+        228,
+        164,
+        250,
+        83,
+        170
+      ]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ForfeitedToTreasury",
+      "discriminator": [
+        39,
+        110,
+        130,
+        240,
+        19,
+        62,
+        31,
+        116
+      ]
+    },
+    {
+      "name": "PoolActivityEvent",
+      "discriminator": [
+        116,
+        221,
+        203,
+        110,
+        114,
+        139,
+        97,
+        124
+      ]
+    },
+    {
+      "name": "PoolStateEvent",
+      "discriminator": [
+        72,
+        169,
+        77,
+        67,
+        172,
+        217,
+        3,
+        115
+      ]
+    },
+    {
+      "name": "RefundBurned",
+      "discriminator": [
+        54,
+        180,
+        75,
+        149,
+        111,
+        26,
+        28,
+        217
+      ]
+    },
+    {
+      "name": "RefundClaimedEvent",
+      "discriminator": [
+        77,
+        83,
+        172,
+        123,
+        235,
+        58,
+        154,
+        233
+      ]
+    },
+    {
+      "name": "RentClaimed",
+      "discriminator": [
+        33,
+        17,
+        4,
+        121,
+        228,
+        7,
+        100,
+        136
+      ]
+    },
+    {
+      "name": "UIHint",
+      "discriminator": [
+        229,
+        2,
+        70,
+        121,
+        217,
+        26,
+        231,
+        151
+      ]
+    },
+    {
+      "name": "WinnerSelectedEvent",
+      "discriminator": [
+        88,
+        68,
+        76,
+        70,
+        235,
+        254,
+        7,
+        92
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "PoolExpired",
+      "msg": "Pool has expired"
+    },
+    {
+      "code": 6001,
+      "name": "PoolNotExpired",
+      "msg": "Pool not expired"
+    },
+    {
+      "code": 6002,
+      "name": "PoolNotEmpty",
+      "msg": "Pool not empty"
+    },
+    {
+      "code": 6003,
+      "name": "NotCreator",
+      "msg": "Not creator"
+    },
+    {
+      "code": 6004,
+      "name": "NotDeveloper",
+      "msg": "Not developer"
+    },
+    {
+      "code": 6005,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6006,
+      "name": "AlreadyParticipated",
+      "msg": "Already participated"
+    },
+    {
+      "code": 6007,
+      "name": "MaxParticipantsReached",
+      "msg": "Maximum participants reached"
+    },
+    {
+      "code": 6008,
+      "name": "PoolClosed",
+      "msg": "Pool is closed"
+    },
+    {
+      "code": 6009,
+      "name": "Overflow",
+      "msg": "Overflow"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidWinnerAccount",
+      "msg": "Invalid winner account"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidParticipantToken",
+      "msg": "Invalid participant token"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidMint",
+      "msg": "Invalid mint"
+    },
+    {
+      "code": 6013,
+      "name": "MintHasMintAuthority",
+      "msg": "Mint has mint authority"
+    },
+    {
+      "code": 6014,
+      "name": "MintHasFreezeAuthority",
+      "msg": "Mint has freeze authority"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidDecimals",
+      "msg": "Invalid decimals"
+    },
+    {
+      "code": 6016,
+      "name": "ExcessiveFees",
+      "msg": "Excessive fees"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidParticipantCount",
+      "msg": "Invalid participant count"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidRandomnessAccount",
+      "msg": "Invalid randomness account"
+    },
+    {
+      "code": 6019,
+      "name": "RandomnessNotResolved",
+      "msg": "Randomness not resolved"
+    },
+    {
+      "code": 6020,
+      "name": "NoParticipants",
+      "msg": "No participants"
+    },
+    {
+      "code": 6021,
+      "name": "InvalidPoolStatus",
+      "msg": "Invalid pool status"
+    },
+    {
+      "code": 6022,
+      "name": "RandomnessAlreadySet",
+      "msg": "Randomness already set"
+    },
+    {
+      "code": 6023,
+      "name": "CannotDecreaseLockDuration",
+      "msg": "Cannot decrease lock duration"
+    },
+    {
+      "code": 6024,
+      "name": "RandomnessNotCommitted",
+      "msg": "Randomness not committed"
+    },
+    {
+      "code": 6025,
+      "name": "RandomnessNotRevealed",
+      "msg": "Randomness not revealed"
+    },
+    {
+      "code": 6026,
+      "name": "InvalidRandomness",
+      "msg": "Invalid randomness"
+    },
+    {
+      "code": 6027,
+      "name": "TooManyParticipants",
+      "msg": "Too many participants"
+    },
+    {
+      "code": 6028,
+      "name": "InvalidParticipantRange",
+      "msg": "Invalid participant range"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6030,
+      "name": "InvalidLockDuration",
+      "msg": "Invalid lock duration"
+    },
+    {
+      "code": 6031,
+      "name": "PoolStillLocked",
+      "msg": "Pool is still locked"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidParticipantsPda",
+      "msg": "Invalid participants PDA"
+    },
+    {
+      "code": 6033,
+      "name": "InsufficientFundsForBurn",
+      "msg": "Insufficient funds for burn"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidTokenProgram",
+      "msg": "Invalid token program"
+    },
+    {
+      "code": 6035,
+      "name": "ZeroSupply",
+      "msg": "Zero supply"
+    },
+    {
+      "code": 6036,
+      "name": "SpoofedDonation",
+      "msg": "Spoofed donation"
+    },
+    {
+      "code": 6037,
+      "name": "InvalidWinnerPubkey",
+      "msg": "Invalid winner pubkey"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidWinnerTokenOwner",
+      "msg": "Invalid winner token owner"
+    },
+    {
+      "code": 6039,
+      "name": "ForbiddenExtension",
+      "msg": "Mint has unsupported extensions"
+    },
+    {
+      "code": 6040,
+      "name": "HasDelegate",
+      "msg": "ATA has delegate"
+    },
+    {
+      "code": 6041,
+      "name": "HasCloseAuthority",
+      "msg": "ATA has close authority"
+    },
+    {
+      "code": 6042,
+      "name": "Paused",
+      "msg": "Pool is paused"
+    },
+    {
+      "code": 6043,
+      "name": "ConfigMismatch",
+      "msg": "Config mismatch"
+    },
+    {
+      "code": 6044,
+      "name": "FrozenAccount",
+      "msg": "Account is frozen"
+    },
+    {
+      "code": 6045,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds"
+    },
+    {
+      "code": 6046,
+      "name": "UninitializedAccount",
+      "msg": "Uninitialized account"
+    },
+    {
+      "code": 6047,
+      "name": "RandomnessExpired",
+      "msg": "Randomness expired"
+    },
+    {
+      "code": 6048,
+      "name": "AlreadyInitialized",
+      "msg": "Account already initialized"
+    },
+    {
+      "code": 6049,
+      "name": "PoolUnavailableForJoin",
+      "msg": "Pool unavailable for join"
+    },
+    {
+      "code": 6050,
+      "name": "PoolLockedForJoin",
+      "msg": "Cannot join because lock has started"
+    },
+    {
+      "code": 6051,
+      "name": "DustNotAllowed",
+      "msg": "Dust not allowed"
+    },
+    {
+      "code": 6052,
+      "name": "JoinClosedAfterUnlock",
+      "msg": "Pool has already unlocked - joining closed"
+    },
+    {
+      "code": 6053,
+      "name": "DonateClosedAfterUnlock",
+      "msg": "Donations are closed after unlocking"
+    },
+    {
+      "code": 6054,
+      "name": "TooEarlyForEmergency",
+      "msg": "Too early for emergency finalize"
+    },
+    {
+      "code": 6055,
+      "name": "NotParticipant",
+      "msg": "Not participant"
+    },
+    {
+      "code": 6056,
+      "name": "AlreadyEnded",
+      "msg": "Pool already ended"
+    },
+    {
+      "code": 6057,
+      "name": "CannotChangeAfterJoins",
+      "msg": "Cannot change lock duration after participants joined"
+    },
+    {
+      "code": 6058,
+      "name": "NoWinnerSelected",
+      "msg": "No winner selected"
+    }
+  ],
+  "types": [
+    {
+      "name": "ActionType",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Created"
+          },
+          {
+            "name": "Joined"
+          },
+          {
+            "name": "Donated"
+          },
+          {
+            "name": "Closed"
+          },
+          {
+            "name": "Ended"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "RandomnessCommitted"
+          },
+          {
+            "name": "RandomnessMockCommitted"
+          },
+          {
+            "name": "ReachedMax"
+          },
+          {
+            "name": "Unlocked"
+          },
+          {
+            "name": "AdminClosed"
+          },
+          {
+            "name": "EmergencyReveal"
+          },
+          {
+            "name": "Expired"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ForfeitedToTreasury",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HintType",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "ReachedMax"
+          },
+          {
+            "name": "NearExpire"
+          },
+          {
+            "name": "Unlocked"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Participants",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "list",
+            "type": {
+              "array": [
+                "pubkey",
+                20
+              ]
+            }
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "salt",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "start_time",
+            "type": "i64"
+          },
+          {
+            "name": "duration",
+            "type": "i64"
+          },
+          {
+            "name": "expire_time",
+            "type": "i64"
+          },
+          {
+            "name": "end_time",
+            "type": "i64"
+          },
+          {
+            "name": "unlock_time",
+            "type": "i64"
+          },
+          {
+            "name": "close_time",
+            "type": "i64"
+          },
+          {
+            "name": "max_participants",
+            "type": "u8"
+          },
+          {
+            "name": "lock_duration",
+            "type": "i64"
+          },
+          {
+            "name": "lock_start_time",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_volume",
+            "type": "u64"
+          },
+          {
+            "name": "total_joins",
+            "type": "u32"
+          },
+          {
+            "name": "total_donations",
+            "type": "u32"
+          },
+          {
+            "name": "dev_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "dev_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "burn_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "treasury_wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "randomness",
+            "type": "u128"
+          },
+          {
+            "name": "randomness_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "randomness_deadline_slot",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "PoolStatus"
+              }
+            }
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "schema",
+            "type": "u8"
+          },
+          {
+            "name": "config_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "allow_mock",
+            "type": "bool"
+          },
+          {
+            "name": "randomness_commit_slot",
+            "type": "u64"
+          },
+          {
+            "name": "initialized",
+            "type": "bool"
+          },
+          {
+            "name": "last_join_time",
+            "type": "i64"
+          },
+          {
+            "name": "status_reason",
+            "type": "u8"
+          },
+          {
+            "name": "participants_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "winner",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolActivityEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "numerical_pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "action",
+            "type": {
+              "defined": {
+                "name": "ActionType"
+              }
+            }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "participant_rank",
+            "type": "u8"
+          },
+          {
+            "name": "dev_fee_percent",
+            "type": "u16"
+          },
+          {
+            "name": "burn_fee_percent",
+            "type": "u16"
+          },
+          {
+            "name": "treasury_fee_percent",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolStateEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "numerical_pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "PoolStatus"
+              }
+            }
+          },
+          {
+            "name": "participant_count",
+            "type": "u8"
+          },
+          {
+            "name": "total_amount",
+            "type": "u64"
+          },
+          {
+            "name": "status_reason",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolStatus",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Open"
+          },
+          {
+            "name": "Locked"
+          },
+          {
+            "name": "Unlocked"
+          },
+          {
+            "name": "RandomnessCommitted"
+          },
+          {
+            "name": "RandomnessRevealed"
+          },
+          {
+            "name": "WinnerSelected"
+          },
+          {
+            "name": "Ended"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "Closed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RefundBurned",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reason",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RefundClaimedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "burn_amount",
+            "type": "u64"
+          },
+          {
+            "name": "reason",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RentClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "caller",
+            "type": "pubkey"
+          },
+          {
+            "name": "sent_to",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UIHint",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "hint",
+            "type": {
+              "defined": {
+                "name": "HintType"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "WinnerSelectedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "numerical_pool_id",
+            "type": "u64"
+          },
+          {
+            "name": "winner",
+            "type": "pubkey"
+          },
+          {
+            "name": "winner_amount",
+            "type": "u64"
+          },
+          {
+            "name": "dev_amount",
+            "type": "u64"
+          },
+          {
+            "name": "burn_amount",
+            "type": "u64"
+          },
+          {
+            "name": "treasury_amount",
+            "type": "u64"
+          },
+          {
+            "name": "randomness",
+            "type": "u128"
+          }
+        ]
+      }
+    }
+  ]
+}

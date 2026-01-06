@@ -1,0 +1,590 @@
+// BUILD_ID: v7-20260103-2050 - SDK Integration
+const BUILD_ID = "v7-20260103-2050";
+console.log("=== CREATEPOOL PAGE LOADED ===", BUILD_ID);
+
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useLocation } from "wouter";
+import { Navbar } from "@/components/Navbar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useWallet } from "@/hooks/use-wallet";
+import { useCreatePool } from "@/hooks/use-pools";
+import { useMissoutSDK } from "@/hooks/useMissoutSDK";
+import { protocolAdapter, TokenInfo } from "@/lib/protocolAdapter";
+import { cn } from "@/lib/utils";
+import { PublicKey } from "@solana/web3.js";
+
+// Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
+const DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
+import { 
+  Loader2, 
+  ArrowLeft, 
+  ArrowRight, 
+  Atom, 
+  Search, 
+  AlertCircle,
+  Check,
+  Coins,
+  Users,
+  Clock,
+  Zap,
+  CheckCircle2
+} from "lucide-react";
+import { Link } from "wouter";
+
+type Step = 1 | 2 | 3 | 4;
+
+export default function CreatePool() {
+  const [step, setStep] = useState<Step>(1);
+  const [mintAddress, setMintAddress] = useState("");
+  const [isFetching, setIsFetching] = useState(false);
+  const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
+  const [priceUsd, setPriceUsd] = useState<number | null>(null);
+  
+  const [participants, setParticipants] = useState(10);
+  const [entryAmount, setEntryAmount] = useState<string>("");
+  const [lockDuration, setLockDuration] = useState(60);
+  const [customDuration, setCustomDuration] = useState("");
+  const [isPriceMissingAccepted, setIsPriceMissingAccepted] = useState(false);
+
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const { isConnected, address, connect } = useWallet();
+  const { mutate: createPoolBackend, isPending: isCreating } = useCreatePool();
+  const { createPool: createPoolOnChain, sdkReady, publicKey } = useMissoutSDK();
+
+  const currentPrice = priceUsd || 0;
+  const entryUsd = parseFloat(entryAmount) * currentPrice;
+  const isValidEntry = isPriceMissingAccepted || (priceUsd !== null && entryUsd >= 5);
+  const suggestedAmount = priceUsd ? protocolAdapter.suggestMinEntryAmount(priceUsd) : 0;
+
+  const handleFetchToken = async () => {
+    if (!protocolAdapter.isValidSolanaAddress(mintAddress)) {
+      toast({ variant: "destructive", title: "Invalid Address", description: "Please enter a valid Solana SPL mint address." });
+      return;
+    }
+
+    setIsFetching(true);
+    try {
+      console.log("[CreatePool] Calling fetchTokenInfo with mint:", mintAddress);
+      const info = await protocolAdapter.fetchTokenInfo(mintAddress);
+      console.log("[CreatePool] fetchTokenInfo returned:", info);
+      console.log("[CreatePool] tokenInfo.mint value:", info.mint);
+      const price = await protocolAdapter.fetchTokenPriceUsd(mintAddress);
+      setTokenInfo(info);
+      setPriceUsd(price);
+      setStep(2);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Fetch Failed", description: e.message });
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    console.log("==============================================");
+    console.log("=== CLICK: Initialize Black Hole ===", BUILD_ID);
+    console.log("WALLET_STATE:", { isConnected, address, sdkReady, pk: publicKey?.toBase58() });
+    
+    if (!isConnected || !address) {
+      console.log("ABORT: Wallet not connected - prompting connect");
+      connect();
+      return;
+    }
+
+    if (!tokenInfo) {
+      console.log("ABORT: No token info");
+      return;
+    }
+
+    if (!sdkReady || !publicKey) {
+      console.error("ABORT: SDK not ready or publicKey null");
+      toast({ variant: "destructive", title: "SDK Not Ready", description: "Wallet not fully connected. Please reconnect." });
+      return;
+    }
+
+    let signature: string | undefined;
+    let poolAddress: string | undefined;
+    
+    try {
+      const mintPubkey = new PublicKey(tokenInfo.mint);
+      const lockDurationSeconds = lockDuration * 60;
+
+      console.log("=== SDK_ENTER ===");
+      console.log("Params:", {
+        mint: mintPubkey.toBase58(),
+        amount: entryAmount,
+        maxParticipants: participants,
+        lockDurationSeconds,
+        devWallet: DEV_WALLET_PUBKEY,
+        creator: publicKey.toBase58(),
+      });
+
+      const sdkResult = await createPoolOnChain({
+        mint: mintPubkey,
+        amount: entryAmount,
+        maxParticipants: participants,
+        lockDurationSeconds,
+        devWallet: new PublicKey(DEV_WALLET_PUBKEY),
+        devFeeBps: 0,
+        burnFeeBps: 0,
+        treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
+        treasuryFeeBps: 0,
+        allowMock: false,
+      });
+
+      console.log("=== SDK_RETURNED ===");
+      console.log("SIGNATURE:", sdkResult?.tx);
+      console.log("POOL_PDA:", sdkResult?.poolId);
+
+      signature = sdkResult?.tx;
+      poolAddress = sdkResult?.poolId;
+
+    } catch (err: any) {
+      console.error("=== SDK_ERROR ===", err);
+      toast({ 
+        variant: "destructive", 
+        title: "Transaction Failed", 
+        description: err.message || "Could not create pool on-chain"
+      });
+      return;
+    }
+
+    if (!signature) {
+      console.error("=== GUARD_NO_SIGNATURE ===");
+      toast({ variant: "destructive", title: "No Signature", description: "Wallet did not return a transaction signature." });
+      return;
+    }
+
+    if (!poolAddress) {
+      console.error("=== GUARD_NO_POOL_PDA ===");
+      toast({ variant: "destructive", title: "No Pool Address", description: "Could not derive pool address." });
+      return;
+    }
+
+    console.log("=== GUARDS_PASSED ===");
+    console.log("SIGNATURE:", signature);
+    console.log("POOL_ADDRESS:", poolAddress);
+    console.log(`Explorer: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+
+    toast({ title: "On-Chain Success", description: `TX: ${signature.slice(0, 8)}...` });
+    
+    toast({ title: "Waiting for Anchor...", description: "Pool account initializing (10-15 seconds)..." });
+
+    console.log("[CreatePool] BEFORE createPoolBackend - tokenInfo:", tokenInfo);
+    console.log("[CreatePool] BEFORE createPoolBackend - tokenMint value:", tokenInfo.mint);
+
+    createPoolBackend({
+      tokenSymbol: tokenInfo.symbol,
+      tokenName: tokenInfo.name,
+      tokenMint: tokenInfo.mint,
+      poolAddress: poolAddress,
+      txHash: signature,
+      entryAmount: parseFloat(entryAmount),
+      minParticipants: 2,
+      maxParticipants: participants,
+      lockDuration: lockDuration,
+      creatorWallet: address,
+    }, {
+      onSuccess: (pool) => {
+        console.log("=== BACKEND_SUCCESS ===", pool.id);
+        toast({ title: "Black Hole Initialized", description: "The singularity has been created." });
+        setLocation(`/pool/${pool.id}`);
+      },
+      onError: (err) => {
+        console.error("=== BACKEND_ERROR ===", err);
+        toast({ variant: "destructive", title: "Backend Sync Failed", description: "Pool created on-chain but not saved to database." });
+      }
+    });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && step === 1 && mintAddress && !isFetching) {
+      e.preventDefault();
+      handleFetchToken();
+    }
+  };
+
+  const canProceedToStep3 = tokenInfo !== null;
+  const canProceedToStep4 = entryAmount && parseFloat(entryAmount) > 0 && isValidEntry;
+
+  return (
+    <div className="min-h-screen bg-black bg-grid-pattern">
+      <Navbar />
+      
+      <main className="container mx-auto px-4 py-12 max-w-2xl">
+        <Link href="/terminal" className="inline-flex items-center text-muted-foreground hover:text-primary mb-8 transition-colors">
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Pool Terminal
+        </Link>
+
+        <div className="bg-zinc-900/50 border border-white/10 p-8 rounded-lg backdrop-blur-md">
+          <div className="mb-8 border-b border-white/10 pb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                <Atom className="w-5 h-5 text-primary" />
+              </div>
+              <h1 className="text-3xl font-display font-bold text-white">INITIALIZE BLACK HOLE</h1>
+              <Badge variant="outline" className="text-xs font-mono opacity-60 ml-2" data-testid="badge-build-id">
+                {BUILD_ID}
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">Configure parameters for a new MissOut betting pool.</p>
+          </div>
+
+          <div className="flex justify-between mb-8">
+            {[
+              { num: 1, label: "Token", icon: Search },
+              { num: 2, label: "Verify", icon: Check },
+              { num: 3, label: "Configure", icon: Coins },
+              { num: 4, label: "Review", icon: CheckCircle2 },
+            ].map(({ num, label, icon: Icon }) => (
+              <div key={num} className="flex items-center gap-2">
+                <div className={cn(
+                  "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all",
+                  step >= num 
+                    ? "bg-primary text-black" 
+                    : "bg-white/10 text-white/50"
+                )}>
+                  {step > num ? <Check className="w-4 h-4" /> : num}
+                </div>
+                <span className={cn(
+                  "text-xs font-tech uppercase tracking-wider hidden sm:inline",
+                  step >= num ? "text-primary" : "text-white/50"
+                )}>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          <AnimatePresence mode="wait">
+            {step === 1 && (
+              <motion.div 
+                key="step1"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">
+                    SPL Token Mint Address
+                  </Label>
+                  <div className="relative">
+                    <Input 
+                      placeholder="Enter token mint address..."
+                      value={mintAddress}
+                      onChange={(e) => setMintAddress(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="bg-black/50 border-white/10 h-12 pr-12 font-mono text-sm focus:border-primary/50"
+                      data-testid="input-mint-address"
+                    />
+                    <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Supports any SPL token including pump.fun tokens. Fetches metadata via Helius.
+                  </p>
+                </div>
+
+                <Button 
+                  onClick={handleFetchToken}
+                  disabled={!mintAddress || isFetching}
+                  className="w-full h-12 bg-primary text-black hover:bg-white font-bold"
+                  data-testid="button-fetch-token"
+                >
+                  {isFetching ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Fetching Token Data...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-2" />
+                      Fetch Token Info
+                    </>
+                  )}
+                </Button>
+              </motion.div>
+            )}
+
+            {step === 2 && tokenInfo && (
+              <motion.div 
+                key="step2"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center gap-4 p-4 bg-black/30 rounded-lg border border-white/5">
+                  {tokenInfo.logoUrl ? (
+                    <img src={tokenInfo.logoUrl} alt={tokenInfo.symbol} className="w-16 h-16 rounded-full" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Coins className="w-8 h-8 text-primary" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold text-white">{tokenInfo.name}</h3>
+                    <p className="text-primary font-mono">${tokenInfo.symbol}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Decimals: {tokenInfo.decimals}</p>
+                  </div>
+                  <div className="text-right">
+                    {priceUsd ? (
+                      <div className="text-lg font-mono text-green-400">${priceUsd.toFixed(6)}</div>
+                    ) : (
+                      <div className="text-xs text-yellow-500">Price Unknown</div>
+                    )}
+                  </div>
+                </div>
+
+                {!tokenInfo.metadataFound && (
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <p className="text-[10px] text-yellow-400 font-tech uppercase tracking-tighter flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Token metadata not found. Using fallback values.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setStep(1);
+                      setTokenInfo(null);
+                      setPriceUsd(null);
+                    }}
+                    className="flex-1 h-12 border-white/10"
+                    data-testid="button-back-step1"
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" /> Back
+                  </Button>
+                  <Button 
+                    onClick={() => setStep(3)}
+                    disabled={!canProceedToStep3}
+                    className="flex-1 h-12 bg-primary text-black hover:bg-white font-bold"
+                    data-testid="button-proceed-step3"
+                  >
+                    Configure Pool <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 3 && tokenInfo && (
+              <motion.div 
+                key="step3"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <Users className="w-3 h-3" /> Max Participants (2-20)
+                      </Label>
+                      <span className="text-primary font-mono font-bold">{participants}</span>
+                    </div>
+                    <Slider 
+                      value={[participants]} 
+                      onValueChange={([v]) => setParticipants(v)}
+                      min={2} 
+                      max={20} 
+                      step={1}
+                      className="py-4"
+                      data-testid="slider-participants"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Coins className="w-3 h-3" /> Entry Amount ({tokenInfo.symbol})
+                    </Label>
+                    <div className="relative">
+                      <Input 
+                        type="number"
+                        placeholder="0.00"
+                        value={entryAmount}
+                        onChange={(e) => setEntryAmount(e.target.value)}
+                        className="bg-black/50 border-white/10 h-12 text-xl font-mono focus:border-primary/50"
+                        data-testid="input-entry-amount"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground">
+                        {priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
+                      </div>
+                    </div>
+                    
+                    {priceUsd && entryAmount && entryUsd < 5 && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg space-y-2">
+                        <p className="text-[10px] text-red-400 font-tech uppercase tracking-tighter flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Minimum entry is $5. Suggested: {suggestedAmount} {tokenInfo.symbol}
+                        </p>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full h-7 text-[9px] border-red-500/30 hover:bg-red-500/20 font-black uppercase tracking-widest text-red-400"
+                          onClick={() => setEntryAmount(suggestedAmount.toString())}
+                          data-testid="button-use-suggested"
+                        >
+                          Use Suggested Amount
+                        </Button>
+                      </div>
+                    )}
+
+                    {!priceUsd && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input 
+                          type="checkbox" 
+                          id="price-unknown"
+                          checked={isPriceMissingAccepted}
+                          onChange={(e) => setIsPriceMissingAccepted(e.target.checked)}
+                          className="w-3 h-3 rounded border-white/10 bg-black/50 accent-primary"
+                          data-testid="checkbox-accept-unknown-price"
+                        />
+                        <label htmlFor="price-unknown" className="text-[10px] text-muted-foreground uppercase cursor-pointer">
+                          I understand price is unknown and accept the risk
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                      <Clock className="w-3 h-3" /> Event Horizon (Lock Duration)
+                    </Label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1, 5, 15, 30, 60].map((m) => (
+                        <Button 
+                          key={m}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setLockDuration(m)}
+                          className={cn(
+                            "h-8 text-[10px] font-mono border-white/5", 
+                            lockDuration === m && "bg-primary/20 border-primary text-primary"
+                          )}
+                          data-testid={`button-duration-${m}`}
+                        >
+                          {m}m
+                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Input 
+                        type="number"
+                        placeholder="Custom (min)"
+                        value={customDuration}
+                        onChange={(e) => {
+                          setCustomDuration(e.target.value);
+                          const val = parseInt(e.target.value);
+                          if (val > 0) setLockDuration(val);
+                        }}
+                        className="bg-black/50 border-white/10 h-8 text-xs font-mono"
+                        data-testid="input-custom-duration"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setStep(2)}
+                    className="flex-1 h-12 border-white/10 hover:bg-white/5 uppercase font-black text-xs tracking-widest"
+                    data-testid="button-back-step2"
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    disabled={!canProceedToStep4}
+                    onClick={() => setStep(4)}
+                    className="flex-[2] h-12 bg-primary text-black font-black uppercase tracking-widest hover:bg-white transition-all disabled:opacity-50"
+                    data-testid="button-proceed-step4"
+                  >
+                    Review <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 4 && tokenInfo && (
+              <motion.div 
+                key="step4"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+                <div className="bg-black/40 border border-white/10 rounded-xl divide-y divide-white/5 overflow-hidden">
+                  <div className="p-4 flex justify-between items-center bg-primary/5">
+                    <div className="text-[10px] font-tech text-muted-foreground uppercase">Token</div>
+                    <div className="text-right font-display font-black text-sm uppercase italic">
+                      {tokenInfo.name} <span className="text-primary">({tokenInfo.symbol})</span>
+                    </div>
+                  </div>
+                  <div className="p-4 flex justify-between items-center">
+                    <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">Participants</div>
+                    <div className="font-mono text-sm font-bold">{participants} Max</div>
+                  </div>
+                  <div className="p-4 flex justify-between items-center">
+                    <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">Entry</div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm font-black">{entryAmount} {tokenInfo.symbol}</div>
+                      <div className="text-[10px] text-primary/70 font-mono">
+                        {priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 flex justify-between items-center">
+                    <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">Horizon</div>
+                    <div className="font-mono text-sm font-bold">{lockDuration} Minutes</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setStep(3)}
+                    className="flex-1 h-12 border-white/10 hover:bg-white/5 uppercase font-black text-xs tracking-widest"
+                    data-testid="button-back-step3"
+                  >
+                    Back
+                  </Button>
+                  {isConnected ? (
+                    <Button 
+                      onClick={handleCreate}
+                      disabled={isCreating}
+                      className="flex-[2] h-12 bg-primary text-black font-black uppercase tracking-widest hover:bg-white transition-all shadow-[0_0_20px_rgba(0,240,255,0.3)]"
+                      data-testid="button-create-pool"
+                    >
+                      {isCreating ? (
+                        <Loader2 className="animate-spin" />
+                      ) : (
+                        <>
+                          Initialize Black Hole
+                          <Zap className="ml-2 w-4 h-4 fill-current" />
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={connect}
+                      className="flex-[2] h-12 bg-white/10 text-white hover:bg-white/20 border border-white/10 font-bold"
+                      data-testid="button-connect-wallet"
+                    >
+                      Connect Wallet to Initialize
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
+    </div>
+  );
+}
