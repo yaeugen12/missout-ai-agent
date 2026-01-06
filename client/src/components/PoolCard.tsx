@@ -382,11 +382,25 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             
             <div className="flex items-center gap-4">
               {pool.status === "OPEN" && (
-                <div className="flex items-center gap-2 bg-primary/20 px-3 py-1.5 rounded-md border-2 border-primary shadow-[0_0_15px_rgba(0,243,255,0.3)] scale-110">
-                  <Clock className="w-4 h-4 text-primary animate-pulse" />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-mono font-black text-white leading-none">{pool.lockDuration}m</span>
-                    <span className="text-[8px] text-primary font-black uppercase tracking-widest leading-none mt-1">LOCK TIME</span>
+                <div 
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-md border-2 border-primary bg-primary/20 shadow-[0_0_15px_rgba(0,243,255,0.4)] relative overflow-hidden"
+                  style={{ transform: 'scale(1.1)' }}
+                >
+                  <motion.div
+                    className="absolute inset-0 bg-primary/20"
+                    animate={{
+                      opacity: [0.1, 0.4, 0.1],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut"
+                    }}
+                  />
+                  <Clock className="w-4 h-4 text-primary relative z-10" />
+                  <div className="flex flex-col relative z-10">
+                    <span className="text-xs font-mono font-black text-white leading-none tracking-tighter">{pool.lockDuration}m</span>
+                    <span className="text-[7px] text-white font-black uppercase tracking-widest leading-none mt-1">LOCK TIME</span>
                   </div>
                 </div>
               )}
