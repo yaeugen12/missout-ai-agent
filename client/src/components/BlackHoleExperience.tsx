@@ -6,6 +6,7 @@ import { CountdownDisplay } from "./CountdownDisplay";
 import { RandomnessLoader } from "./RandomnessLoader";
 import { WinnerRevealCard } from "./WinnerRevealCard";
 import { WinnerAttractionAnimation } from "./WinnerAttractionAnimation";
+import { CosmicParticles } from "./CosmicParticles";
 
 export type BlackHolePhase = "orbit" | "countdown" | "randomness" | "attraction" | "reveal";
 
@@ -83,9 +84,18 @@ export function BlackHoleExperience({
   const finalWinnerAvatar = winnerAvatar || defaultAvatar;
   const finalWinnerName = winnerDisplayName || (winnerWallet ? `${winnerWallet.slice(0, 4)}...${winnerWallet.slice(-4)}` : "Winner");
   
+  const particlesAccelerated = phase === "countdown" || phase === "randomness";
+  const particlesGolden = phase === "reveal";
+  
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <div className="relative w-[480px] h-[480px] md:w-[580px] md:h-[580px]">
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+      <CosmicParticles 
+        count={35} 
+        accelerated={particlesAccelerated}
+        golden={particlesGolden}
+      />
+      
+      <div className="relative w-[480px] h-[480px] md:w-[580px] md:h-[580px] z-10">
         <BlackHoleCore 
           intensity={phase === "attraction" ? 1.5 : intensity} 
           status={status} 
