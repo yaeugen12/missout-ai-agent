@@ -54,3 +54,4 @@ VITE_SOLANA_RPC_PRIMARY = "https://devnet.helius-rpc.com/?api-key=3c5e3da7-9230-
 
 [agent]
 expertMode = true
+integrations = ["javascript_object_storage:2.0.0"]

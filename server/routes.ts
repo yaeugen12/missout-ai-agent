@@ -9,11 +9,51 @@ import { db } from "./db";
 import { pools, updateProfileSchema } from "@shared/schema";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import multer from "multer";
+import path from "path";
+import fs from "fs/promises";
+
+// Setup upload directory
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+const storage_multer = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    try {
+      await fs.mkdir(UPLOAD_DIR, { recursive: true });
+      cb(null, UPLOAD_DIR);
+    } catch (err) {
+      cb(err as Error, UPLOAD_DIR);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage: storage_multer,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not an image!'));
+    }
+  }
+});
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Upload Endpoint
+  app.post("/api/upload", upload.single('file'), (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    const publicUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: publicUrl });
+  });
   // Pools
   app.get(api.pools.list.path, async (req, res) => {
     const pools = await storage.getPools();

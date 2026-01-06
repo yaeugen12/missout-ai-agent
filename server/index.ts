@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { initializeSolanaServices } from "./pool-monitor/solanaServices";
 import { poolMonitor } from "./pool-monitor/poolMonitor";
 import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
+import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 // Load .env file manually
@@ -31,6 +31,9 @@ try {
 
 const app = express();
 const httpServer = createServer(app);
+
+// Serve uploaded files
+app.use("/uploads", express.static(join(process.cwd(), "public", "uploads")));
 
 declare module "http" {
   interface IncomingMessage {
