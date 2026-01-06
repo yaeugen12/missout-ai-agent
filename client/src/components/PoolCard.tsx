@@ -380,12 +380,22 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">slots</span>
             </div>
             
-            <CountdownRing 
-              endTime={lockEndTime}
-              lockDuration={pool.lockDuration}
-              accentColor={accentColor}
-              status={pool.status}
-            />
+            {pool.status === "OPEN" ? (
+              <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-sm border border-white/5">
+                <Clock className="w-3.5 h-3.5 text-primary/70" />
+                <div className="text-right">
+                  <div className="text-[10px] font-mono font-bold text-white leading-none">{pool.lockDuration}m</div>
+                  <div className="text-[8px] text-muted-foreground uppercase tracking-tight leading-none">lock</div>
+                </div>
+              </div>
+            ) : (
+              <CountdownRing 
+                endTime={lockEndTime}
+                lockDuration={pool.lockDuration}
+                accentColor={accentColor}
+                status={pool.status}
+              />
+            )}
           </div>
 
           <div className="flex gap-1.5 mb-5">
