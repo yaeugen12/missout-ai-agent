@@ -3,10 +3,11 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useMyProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, RefreshCw, LogOut, Copy, Check, UserCircle } from "lucide-react";
+import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, RefreshCw, LogOut, Copy, Check, UserCircle, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
 import { ProfileEditModal } from "@/components/ProfileEditModal";
+import { TransactionHistory } from "@/components/TransactionHistory";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useState } from "react";
 
 export function Navbar() {
@@ -115,120 +117,147 @@ export function Navbar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent 
                 align="end" 
-                className="w-80 bg-black/95 border-white/10"
+                className="w-80 bg-black/95 border-white/10 p-0 overflow-hidden"
                 data-testid="dropdown-wallet-content"
               >
-                <div className="px-3 py-3 border-b border-white/5 mb-1">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 border border-primary/20">
-                      <AvatarImage src={profile?.avatarUrl || profile?.displayAvatar} className="object-cover" />
-                      <AvatarFallback className="bg-primary/10">MO</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">{profile?.displayName || "Anonymous User"}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-5 w-5 text-muted-foreground hover:text-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyAddress();
-                          }}
-                        >
-                          {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                        </Button>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground truncate">{address}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <DropdownMenuSeparator className="bg-white/10" />
-
-                <div className="p-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-mono text-muted-foreground uppercase">SOL Balance</span>
-                    <span className="text-lg font-mono font-bold text-white" data-testid="text-sol-balance">
-                      {solBalance !== null ? `${solBalance.toFixed(4)} SOL` : "—"}
-                    </span>
-                  </div>
-                </div>
-
-                <DropdownMenuSeparator className="bg-white/10" />
-
-                <DropdownMenuLabel className="text-xs font-mono text-muted-foreground uppercase flex items-center justify-between">
-                  <span>SPL Tokens ({tokens.length})</span>
-                  {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                </DropdownMenuLabel>
-
-                <ScrollArea className="h-48">
-                  {tokens.length === 0 ? (
-                    <div className="p-4 text-center text-muted-foreground text-sm">
-                      {isLoading ? "Loading tokens..." : "No SPL tokens found"}
-                    </div>
-                  ) : (
-                    <div className="p-2 space-y-1">
-                      {tokens.map((token) => (
-                        <div 
-                          key={token.mint}
-                          className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5"
-                          data-testid={`token-item-${token.mint}`}
-                        >
-                          {token.logoUrl ? (
-                            <img 
-                              src={token.logoUrl} 
-                              alt={token.symbol} 
-                              className="w-6 h-6 rounded-full"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                              <span className="text-[10px] font-bold text-primary">
-                                {token.symbol.slice(0, 2)}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-mono font-bold text-white truncate">
-                              {token.symbol}
-                            </div>
-                            <div className="text-[10px] font-mono text-muted-foreground truncate">
-                              {token.mint.slice(0, 4)}...{token.mint.slice(-4)}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-mono text-white">
-                              {formatBalance(token.balance)}
-                            </div>
-                          </div>
+                <Tabs defaultValue="wallet" className="w-full">
+                  <div className="px-3 py-3 border-b border-white/5 bg-white/5">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 border border-primary/20">
+                        <AvatarImage src={profile?.avatarUrl || profile?.displayAvatar} className="object-cover" />
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {address.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium truncate text-white">{profile?.displayName || "Anonymous User"}</span>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-5 w-5 text-muted-foreground hover:text-primary shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyAddress();
+                            }}
+                          >
+                            {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                          </Button>
                         </div>
-                      ))}
+                        <span className="text-[10px] text-muted-foreground truncate font-mono">{address}</span>
+                      </div>
                     </div>
-                  )}
-                </ScrollArea>
+                  </div>
 
-                <DropdownMenuSeparator className="bg-white/10" />
+                  <TabsList className="grid w-full grid-cols-2 bg-black/50 rounded-none h-10 border-b border-white/10 p-0">
+                    <TabsTrigger 
+                      value="wallet" 
+                      className="rounded-none data-[state=active]:bg-white/5 data-[state=active]:text-primary text-[10px] font-tech uppercase tracking-wider"
+                    >
+                      <Wallet className="w-3 h-3 mr-2" /> Wallet
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="history" 
+                      className="rounded-none data-[state=active]:bg-white/5 data-[state=active]:text-primary text-[10px] font-tech uppercase tracking-wider"
+                    >
+                      <History className="w-3 h-3 mr-2" /> Void History
+                    </TabsTrigger>
+                  </TabsList>
 
-                <DropdownMenuItem 
-                  onClick={() => setProfileModalOpen(true)}
-                  className="cursor-pointer"
-                  data-testid="button-edit-profile"
-                >
-                  <UserCircle className="w-4 h-4 mr-2" />
-                  Edit Profile
-                </DropdownMenuItem>
+                  <TabsContent value="wallet" className="mt-0 outline-none">
+                    <div className="p-3">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">SOL Balance</span>
+                        <span className="text-lg font-mono font-bold text-white" data-testid="text-sol-balance">
+                          {solBalance !== null ? `${solBalance.toFixed(4)} SOL` : "—"}
+                        </span>
+                      </div>
+                    </div>
 
-                <DropdownMenuItem 
-                  onClick={disconnect}
-                  className="text-destructive focus:text-destructive cursor-pointer"
-                  data-testid="button-disconnect"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Disconnect Wallet
-                </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-white/10 m-0" />
+
+                    <DropdownMenuLabel className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest px-3 py-2 flex items-center justify-between">
+                      <span>SPL Tokens ({tokens.length})</span>
+                      {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                    </DropdownMenuLabel>
+
+                    <ScrollArea className="h-48 border-t border-white/5">
+                      {tokens.length === 0 ? (
+                        <div className="p-4 text-center text-muted-foreground text-xs font-tech uppercase opacity-50">
+                          {isLoading ? "Scanning Void..." : "No tokens detected"}
+                        </div>
+                      ) : (
+                        <div className="p-2 space-y-1">
+                          {tokens.map((token) => (
+                            <div 
+                              key={token.mint}
+                              className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5 transition-colors group"
+                              data-testid={`token-item-${token.mint}`}
+                            >
+                              {token.logoUrl ? (
+                                <img 
+                                  src={token.logoUrl} 
+                                  alt={token.symbol} 
+                                  className="w-6 h-6 rounded-full border border-white/10"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                                  <span className="text-[10px] font-bold text-primary uppercase">
+                                    {token.symbol.slice(0, 2)}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-mono font-bold text-white truncate group-hover:text-primary transition-colors">
+                                  {token.symbol}
+                                </div>
+                                <div className="text-[10px] font-mono text-muted-foreground truncate">
+                                  {token.mint.slice(0, 4)}...{token.mint.slice(-4)}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm font-mono text-white">
+                                  {formatBalance(token.balance)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="history" className="mt-0 outline-none">
+                    <div className="p-2">
+                      <TransactionHistory walletAddress={address} />
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
+                <DropdownMenuSeparator className="bg-white/10 m-0" />
+
+                <div className="p-1">
+                  <DropdownMenuItem 
+                    onClick={() => setProfileModalOpen(true)}
+                    className="cursor-pointer hover:bg-primary/10 focus:bg-primary/10 focus:text-primary transition-colors py-2"
+                    data-testid="button-edit-profile"
+                  >
+                    <UserCircle className="w-4 h-4 mr-2" />
+                    <span className="font-tech uppercase text-[10px] tracking-widest">Edit Profile</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem 
+                    onClick={disconnect}
+                    className="text-red-400 focus:text-red-400 focus:bg-red-400/10 cursor-pointer py-2"
+                    data-testid="button-disconnect"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    <span className="font-tech uppercase text-[10px] tracking-widest">Disconnect Wallet</span>
+                  </DropdownMenuItem>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (

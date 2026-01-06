@@ -10,14 +10,22 @@ interface TransactionHistoryProps {
 }
 
 export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
-  const { data: transactions, isLoading } = useQuery({
+  const { data: transactions, isLoading, error } = useQuery({
     queryKey: [api.profiles.transactions.path.replace(":wallet", walletAddress)],
     queryFn: async () => {
+      console.log("[TransactionHistory] Fetching for:", walletAddress);
       const res = await fetch(api.profiles.transactions.path.replace(":wallet", walletAddress));
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      return res.json();
+      if (!res.ok) {
+        const errData = await res.json();
+        console.error("[TransactionHistory] Fetch failed:", errData);
+        throw new Error(errData.message || "Failed to fetch transactions");
+      }
+      const data = await res.json();
+      console.log("[TransactionHistory] Received:", data.length, "txs");
+      return data;
     },
     enabled: !!walletAddress,
+    refetchInterval: 10000,
   });
 
   if (isLoading) {
