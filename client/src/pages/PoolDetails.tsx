@@ -406,33 +406,41 @@ export default function PoolDetails() {
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
       {/* Hero Section with Black Hole */}
-      <div className="relative h-[60vh] flex items-center justify-center border-b border-white/10">
+      <div className="relative h-[70vh] flex flex-col items-center justify-center border-b border-white/10 pt-16">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_70%)]" />
         
-        <div className="z-10 w-full max-w-2xl px-4 text-center">
+        {/* Black Hole Visual - Moved up slightly */}
+        <div className="relative z-10 w-full max-w-2xl px-4 flex justify-center mb-8">
           <BlackHoleCore 
             intensity={(pool.participantsCount ?? 0) / pool.maxParticipants} 
             status={pool.status} 
           />
         </div>
 
-        {/* Overlay Stats */}
-        <div className="absolute bottom-8 left-0 right-0 container mx-auto px-4 flex justify-between items-end">
-          <div>
-            <h1 className="text-5xl font-display font-black mb-2 tracking-tighter">
-              {pool.tokenSymbol} <span className="text-primary">BLACK HOLE</span>
-            </h1>
-            <div className="flex items-center gap-4 text-sm font-tech text-muted-foreground uppercase">
-              <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {pool.lockDuration}m Event Horizon</span>
-              <span className="flex items-center gap-1"><Coins className="w-4 h-4" /> {pool.entryAmount} SOL Entry</span>
+        {/* Content Overlay - Positioned below the black hole */}
+        <div className="w-full container mx-auto px-4 z-20">
+          <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-6 text-center md:text-left">
+            <div className="space-y-2">
+              <h1 className="text-5xl md:text-6xl font-display font-black tracking-tighter uppercase">
+                {pool.tokenSymbol} <span className="text-primary">BLACK HOLE</span>
+              </h1>
+              <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-xs font-tech text-muted-foreground uppercase tracking-widest">
+                <span className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                  <Clock className="w-4 h-4 text-primary" /> {pool.lockDuration}m Event Horizon
+                </span>
+                <span className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+                  <Coins className="w-4 h-4 text-primary" /> {pool.entryAmount} {pool.tokenSymbol} Entry
+                </span>
+              </div>
             </div>
-          </div>
-          
-          <div className="text-right">
-            <div className="text-4xl font-mono font-bold text-neon-cyan">
-              {(pool.totalPot || 0).toFixed(2)} SOL
+            
+            <div className="flex flex-col items-center md:items-end bg-black/40 p-6 rounded-2xl border border-white/5 backdrop-blur-md">
+              <div className="text-sm font-tech text-muted-foreground uppercase tracking-[0.3em] mb-1">Total Pot</div>
+              <div className="text-5xl font-mono font-black text-neon-cyan drop-shadow-[0_0_15px_rgba(0,240,255,0.3)]">
+                {(pool.totalPot || 0).toFixed(2)}
+              </div>
+              <div className="text-xs font-mono font-bold text-primary mt-1 uppercase">{pool.tokenSymbol}</div>
             </div>
-            <div className="text-sm font-tech text-muted-foreground uppercase tracking-widest">Total Pot</div>
           </div>
         </div>
       </div>
