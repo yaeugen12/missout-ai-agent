@@ -42,9 +42,9 @@ function Router() {
 
 function App() {
   return (
-    <WalletProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <WalletProvider>
           <div className="min-h-screen bg-black text-white selection:bg-primary/30">
             <Navbar />
             <main className="container mx-auto px-4 py-8">
@@ -52,9 +52,9 @@ function App() {
             </main>
             <Toaster />
           </div>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </WalletProvider>
+        </WalletProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   ConnectionProvider,
@@ -19,7 +19,7 @@ interface WalletProviderProps {
   children: ReactNode;
 }
 
-export function WalletProvider({ children }: WalletProviderProps) {
+export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const endpoint = HELIUS_DEVNET_RPC;
 
   // Use a stable identity for wallets array
@@ -53,4 +53,4 @@ export function WalletProvider({ children }: WalletProviderProps) {
       </SolanaWalletProvider>
     </ConnectionProvider>
   );
-}
+};
