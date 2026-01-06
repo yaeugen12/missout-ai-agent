@@ -257,6 +257,10 @@ export function DevnetReadiness() {
     }
   ];
 
+  const isDebug = import.meta.env.VITE_DEBUG === "true";
+
+  if (!isDebug) return null;
+
   return (
     <Card className="bg-black/40 border-primary/20 backdrop-blur-md mb-8">
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
