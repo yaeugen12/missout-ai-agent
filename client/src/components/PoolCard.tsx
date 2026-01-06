@@ -248,8 +248,18 @@ function PoolCardComponent({ pool }: PoolCardProps) {
     setDonateModalOpen(true);
   }, []);
 
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    // If user clicked inside the DonateModal (which is a child of Link in the DOM)
+    // we want to prevent navigation. However, Radix Dialog uses Portals, 
+    // so this is mostly for the button click itself.
+    if (donateModalOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, [donateModalOpen]);
+
   return (
-    <Link href={`/pool/${pool.id}`} className="block group" data-testid={`card-pool-${pool.id}`}>
+    <Link href={`/pool/${pool.id}`} className="block group" data-testid={`card-pool-${pool.id}`} onClick={handleCardClick}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
