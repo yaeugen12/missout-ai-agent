@@ -426,10 +426,10 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {normalizedStatus === "OPEN" && !isFull && (
               <Button 
-                className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
+                className="flex-1 min-w-[120px] gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
                 size="sm"
                 data-testid={`button-join-pool-${pool.id}`}
               >
@@ -437,27 +437,29 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                 <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
               </Button>
             )}
-            {canDonate && (
-              <Button
-                variant="secondary"
+            <div className="flex gap-2 w-full sm:w-auto flex-1">
+              {canDonate && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleDonateClick}
+                  className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]"
+                  data-testid={`button-donate-pool-${pool.id}`}
+                >
+                  <Heart className="w-3.5 h-3.5" />
+                  Donate
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]"
                 size="sm"
-                onClick={handleDonateClick}
-                className="gap-1.5 font-bold uppercase tracking-wider text-[10px]"
-                data-testid={`button-donate-pool-${pool.id}`}
+                data-testid={`button-view-pool-${pool.id}`}
               >
-                <Heart className="w-3.5 h-3.5" />
-                Donate
+                <Eye className="w-3.5 h-3.5" />
+                Open
               </Button>
-            )}
-            <Button 
-              variant="outline" 
-              className="gap-1.5 font-bold uppercase tracking-wider text-[10px]"
-              size="sm"
-              data-testid={`button-view-pool-${pool.id}`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              Open
-            </Button>
+            </div>
           </div>
         </div>
 
