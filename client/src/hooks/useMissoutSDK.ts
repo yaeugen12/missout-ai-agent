@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useCallback, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction, Transaction } from "@solana/web3.js";
 
 import {
   getMissoutClient,
@@ -29,6 +29,7 @@ export interface UseMissoutSDKResult {
   connected: boolean;
   sdkReady: boolean;
   publicKey: PublicKey | null;
+  signTransaction: (<T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>) | undefined;
   createPool: (params: CreatePoolParams) => Promise<{ poolId: string; tx: string }>;
   joinPool: (params: JoinPoolParams) => Promise<{ tx: string }>;
   donateToPool: (params: DonateParams) => Promise<{ tx: string }>;
@@ -169,6 +170,7 @@ export function useMissoutSDK(): UseMissoutSDKResult {
     connected: wallet.connected,
     sdkReady,
     publicKey: wallet.publicKey,
+    signTransaction: wallet.signTransaction,
     createPool: wrappedCreatePool,
     joinPool: wrappedJoinPool,
     donateToPool: wrappedDonateToPool,

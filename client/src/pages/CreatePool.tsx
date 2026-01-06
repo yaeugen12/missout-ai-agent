@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { PublicKey } from "@solana/web3.js";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
-const DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
+const DEV_WALLET_PUBKEY = import.meta.env.VITE_DEV_WALLET_PUBKEY || "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
 import { 
   Loader2, 
   ArrowLeft, 
@@ -33,9 +33,14 @@ import {
   Users,
   Clock,
   Zap,
-  CheckCircle2
+  CheckCircle2,
+  ShoppingCart,
+  Settings2,
+  RefreshCw
 } from "lucide-react";
 import { Link } from "wouter";
+import { getJupiterQuote, executeJupiterSwap, formatTokenAmount, JupiterQuote } from "@/lib/jupiterSwap";
+import { useConnection } from "@solana/wallet-adapter-react";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -52,11 +57,19 @@ export default function CreatePool() {
   const [customDuration, setCustomDuration] = useState("");
   const [isPriceMissingAccepted, setIsPriceMissingAccepted] = useState(false);
 
+  const [solAmount, setSolAmount] = useState<string>("");
+  const [slippageBps, setSlippageBps] = useState<number>(100);
+  const [jupiterQuote, setJupiterQuote] = useState<JupiterQuote | null>(null);
+  const [isQuoting, setIsQuoting] = useState(false);
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [showSlippageSettings, setShowSlippageSettings] = useState(false);
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { isConnected, address, connect } = useWallet();
   const { mutate: createPoolBackend, isPending: isCreating } = useCreatePool();
-  const { createPool: createPoolOnChain, sdkReady, publicKey } = useMissoutSDK();
+  const { createPool: createPoolOnChain, sdkReady, publicKey, signTransaction } = useMissoutSDK();
+  const { connection } = useConnection();
 
   const currentPrice = priceUsd || 0;
   const entryUsd = parseFloat(entryAmount) * currentPrice;
@@ -210,6 +223,80 @@ export default function CreatePool() {
     }
   };
 
+  const handleGetQuote = async () => {
+    if (!tokenInfo || !solAmount || parseFloat(solAmount) <= 0) return;
+    
+    setIsQuoting(true);
+    setJupiterQuote(null);
+    
+    try {
+      const quote = await getJupiterQuote(tokenInfo.mint, parseFloat(solAmount), slippageBps);
+      if (quote) {
+        setJupiterQuote(quote);
+      } else {
+        toast({ variant: "destructive", title: "Quote Failed", description: "Could not get swap quote. Token may not have liquidity." });
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Quote Error", description: error.message });
+    } finally {
+      setIsQuoting(false);
+    }
+  };
+
+  const handleSwap = async () => {
+    if (!jupiterQuote || !publicKey || !signTransaction || !connection) {
+      toast({ variant: "destructive", title: "Wallet Required", description: "Please connect your wallet to swap." });
+      return;
+    }
+
+    setIsSwapping(true);
+    try {
+      const result = await executeJupiterSwap(
+        jupiterQuote,
+        publicKey.toBase58(),
+        DEV_WALLET_PUBKEY,
+        signTransaction,
+        connection
+      );
+      
+      toast({ 
+        title: "Swap Successful!", 
+        description: `Bought ${formatTokenAmount(result.outputAmount, tokenInfo?.decimals || 9)} ${tokenInfo?.symbol}` 
+      });
+      
+      setJupiterQuote(null);
+      setSolAmount("");
+    } catch (error: any) {
+      console.error("[Jupiter] Swap error:", error);
+      toast({ variant: "destructive", title: "Swap Failed", description: error.message });
+    } finally {
+      setIsSwapping(false);
+    }
+  };
+
+  useEffect(() => {
+    if (solAmount && parseFloat(solAmount) > 0 && tokenInfo?.mint) {
+      const fetchQuote = async () => {
+        setIsQuoting(true);
+        try {
+          const quote = await getJupiterQuote(tokenInfo.mint, parseFloat(solAmount), slippageBps);
+          if (quote) {
+            setJupiterQuote(quote);
+          }
+        } catch (error) {
+          console.error("[Jupiter] Quote error:", error);
+        } finally {
+          setIsQuoting(false);
+        }
+      };
+      
+      const debounce = setTimeout(fetchQuote, 500);
+      return () => clearTimeout(debounce);
+    } else {
+      setJupiterQuote(null);
+    }
+  }, [solAmount, slippageBps, tokenInfo?.mint]);
+
   const canProceedToStep3 = tokenInfo !== null;
   const canProceedToStep4 = entryAmount && parseFloat(entryAmount) > 0 && isValidEntry;
 
@@ -343,6 +430,125 @@ export default function CreatePool() {
                   </div>
                 )}
 
+                <div className="p-4 bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-purple-400" />
+                      <span className="text-sm font-tech font-bold text-white uppercase tracking-wide">Buy {tokenInfo.symbol} with SOL</span>
+                    </div>
+                    <button 
+                      onClick={() => setShowSlippageSettings(!showSlippageSettings)}
+                      className="p-1.5 hover:bg-white/10 rounded-md transition-colors"
+                    >
+                      <Settings2 className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+
+                  {showSlippageSettings && (
+                    <div className="p-3 bg-black/30 rounded-lg space-y-2">
+                      <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">
+                        Slippage Tolerance
+                      </Label>
+                      <div className="flex gap-2">
+                        {[50, 100, 200, 500].map((bps) => (
+                          <Button
+                            key={bps}
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSlippageBps(bps)}
+                            className={cn(
+                              "flex-1 h-8 text-[10px] font-mono border-white/5",
+                              slippageBps === bps && "bg-purple-500/20 border-purple-500 text-purple-400"
+                            )}
+                          >
+                            {(bps / 100).toFixed(1)}%
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <Input
+                          type="number"
+                          placeholder="Custom %"
+                          value={slippageBps / 100}
+                          onChange={(e) => setSlippageBps(Math.round(parseFloat(e.target.value || "0") * 100))}
+                          className="bg-black/50 border-white/10 h-8 text-xs font-mono w-24"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">
+                      You Pay (SOL)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        placeholder="0.00"
+                        value={solAmount}
+                        onChange={(e) => setSolAmount(e.target.value)}
+                        className="bg-black/50 border-white/10 h-12 text-xl font-mono focus:border-purple-500/50 pr-16"
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        {isQuoting && <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
+                        <span className="text-sm font-mono text-muted-foreground">SOL</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {jupiterQuote && (
+                    <div className="p-3 bg-black/40 rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">You Receive</span>
+                        <button onClick={handleGetQuote} className="p-1 hover:bg-white/10 rounded transition-colors">
+                          <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isQuoting && "animate-spin")} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xl font-mono font-bold text-white">
+                          {formatTokenAmount(jupiterQuote.outAmount, tokenInfo.decimals)}
+                        </span>
+                        <span className="text-sm font-mono text-purple-400">{tokenInfo.symbol}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>Price Impact</span>
+                        <span className={parseFloat(jupiterQuote.priceImpactPct) > 1 ? "text-yellow-400" : "text-green-400"}>
+                          {parseFloat(jupiterQuote.priceImpactPct).toFixed(2)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>Platform Fee</span>
+                        <span className="text-purple-400">0.5%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleSwap}
+                    disabled={!jupiterQuote || isSwapping || !isConnected}
+                    className="w-full h-10 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold"
+                  >
+                    {isSwapping ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Swapping...
+                      </>
+                    ) : !isConnected ? (
+                      "Connect Wallet to Swap"
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Swap via Jupiter
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-[9px] text-muted-foreground text-center">
+                    Powered by Jupiter. 0.5% fee goes to platform.
+                  </p>
+                </div>
+
                 <div className="flex gap-3">
                   <Button 
                     variant="outline" 
@@ -350,6 +556,8 @@ export default function CreatePool() {
                       setStep(1);
                       setTokenInfo(null);
                       setPriceUsd(null);
+                      setSolAmount("");
+                      setJupiterQuote(null);
                     }}
                     className="flex-1 h-12 border-white/10"
                     data-testid="button-back-step1"

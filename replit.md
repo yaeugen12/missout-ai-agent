@@ -54,6 +54,21 @@ Preferred communication style: Simple, everyday language.
 - **Price API**: Jupiter API for USD price lookups with fallback handling
 - **Randomness**: Switchboard V4 via @switchboard-xyz/on-demand for verifiable randomness
 
+### Jupiter Swap Integration (client/src/lib/jupiterSwap.ts)
+Token purchasing via Jupiter Aggregator API v6:
+- **Location**: Integrated in CreatePool step 2 (token verification screen)
+- **Features**:
+  - SOL → Token swaps with real-time quote preview
+  - 500ms debounced quote fetching for smooth UX
+  - Configurable slippage: preset buttons (0.5%, 1%, 2%, 5%) + custom input
+  - 0.5% platform fee routed to DEV wallet (VITE_DEV_WALLET_PUBKEY env variable)
+  - Price impact display with color-coded warnings
+- **Functions**:
+  - `getJupiterQuote()`: Fetches swap quote with slippage and platform fee
+  - `executeJupiterSwap()`: Deserializes and executes versioned transaction
+  - `formatTokenAmount()`: Human-readable token amount formatting
+- **UI**: Purple/blue gradient card with shopping cart icon, swap button, and "Powered by Jupiter" footer
+
 ### Solana SDK (client/src/lib/solana-sdk/)
 The frontend SDK provides direct smart contract interactions:
 - **Program ID**: 53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw
