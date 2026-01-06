@@ -2,13 +2,15 @@ import { memo, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { type Pool } from "@shared/schema";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye } from "lucide-react";
+import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useCountdown } from "@/hooks/use-countdown";
 import { getTokenAccentColor, shortenAddress } from "@/lib/colorUtils";
 import { Button } from "@/components/ui/button";
 import { DonateModal } from "@/components/DonateModal";
+import { useMissoutSDK } from "@/hooks/useMissoutSDK";
+import { useToast } from "@/hooks/use-toast";
 
 interface PoolCardProps {
   pool: Pool;
@@ -182,8 +184,11 @@ function CountdownRing({
 function PoolCardComponent({ pool }: PoolCardProps) {
   const [copied, setCopied] = useState(false);
   const [donateModalOpen, setDonateModalOpen] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const tokenMetadata = useTokenMetadata(pool.tokenSymbol);
   const accentColor = getTokenAccentColor(pool.tokenSymbol);
+  const { connected, joinPool: sdkJoinPool } = useMissoutSDK();
+  const { toast } = useToast();
   
   const participantsCount = pool.participantsCount ?? 0;
   const totalPot = pool.totalPot ?? 0;
@@ -249,12 +254,39 @@ function PoolCardComponent({ pool }: PoolCardProps) {
     setDonateModalOpen(true);
   }, []);
 
+  const handleJoinClick = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isJoining || !connected) return;
+    
+    setIsJoining(true);
+    try {
+      await sdkJoinPool({
+        poolId: poolAddress || pool.id.toString(),
+        amount: pool.entryAmount.toString(),
+      });
+      toast({
+        title: "Success",
+        description: "Successfully joined the void!",
+      });
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to join pool",
+      });
+    } finally {
+      setIsJoining(false);
+    }
+  }, [isJoining, connected, sdkJoinPool, pool, poolAddress, toast]);
+
   const handleCardClick = useCallback((e: React.MouseEvent) => {
-    if (donateModalOpen) {
+    if (donateModalOpen || isJoining) {
       e.preventDefault();
       e.stopPropagation();
     }
-  }, [donateModalOpen]);
+  }, [donateModalOpen, isJoining]);
 
   return (
     <Link href={`/pool/${pool.id}`} className="block group" data-testid={`card-pool-${pool.id}`} onClick={handleCardClick}>
@@ -431,10 +463,21 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               <Button 
                 className="flex-1 min-w-[120px] gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
                 size="sm"
+                onClick={handleJoinClick}
+                disabled={isJoining || !connected}
                 data-testid={`button-join-pool-${pool.id}`}
               >
-                Get Pulled In
-                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+                {isJoining ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Joining...
+                  </>
+                ) : (
+                  <>
+                    Get Pulled In
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+                  </>
+                )}
               </Button>
             )}
             <div className="flex gap-2 w-full sm:w-auto flex-1">
