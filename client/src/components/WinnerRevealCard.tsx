@@ -1,9 +1,7 @@
 import { motion } from "framer-motion";
-import { useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { generateDicebearUrl, shortenWallet } from "@/hooks/use-profile";
 import { Trophy, Sparkles, ExternalLink } from "lucide-react";
-import { SoundManager } from "@/lib/SoundManager";
 
 interface WinnerRevealCardProps {
   walletAddress: string;
@@ -26,10 +24,6 @@ export function WinnerRevealCard({
   const name = displayName || shortenWallet(walletAddress);
   
   const getSolscanUrl = (hash: string) => `https://solscan.io/tx/${hash}?cluster=devnet`;
-
-  useEffect(() => {
-    SoundManager.play("reveal_burst");
-  }, []);
   
   return (
     <motion.div
