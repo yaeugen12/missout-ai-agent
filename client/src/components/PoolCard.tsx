@@ -67,57 +67,119 @@ function VortexRing({ percentFull, accentColor }: { percentFull: number; accentC
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
   return (
-    <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-28 h-28 opacity-60">
-      <svg className="w-full h-full rotate-[-90deg]" viewBox="0 0 100 100">
-        <circle
-          cx="50"
-          cy="50"
-          r="38"
-          fill="transparent"
-          stroke="currentColor"
-          strokeWidth="1"
-          className="text-white/5"
-        />
-        <circle
-          cx="50"
-          cy="50"
-          r="32"
-          fill="transparent"
-          stroke="currentColor"
-          strokeWidth="0.5"
-          className="text-white/5"
-        />
+    <div className="absolute -right-10 top-1/2 -translate-y-1/2 w-48 h-48 pointer-events-none overflow-visible">
+      {/* Deep Space Background for the Vortex */}
+      <div 
+        className="absolute inset-4 rounded-full bg-black shadow-[0_0_60px_rgba(0,0,0,1)] z-0"
+        style={{ 
+          boxShadow: `0 0 40px ${accentColor.replace("0.8", "0.05")}, inset 0 0 20px ${accentColor.replace("0.8", "0.1")}` 
+        }}
+      />
+      
+      <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
+        <defs>
+          <filter id="vortexGlow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={accentColor} stopOpacity="1" />
+            <stop offset="100%" stopColor={accentColor} stopOpacity="0.4" />
+          </linearGradient>
+        </defs>
+        
+        {/* Ambient Cosmic Dust (Static Rings) */}
+        {[30, 34, 38, 42].map((r, i) => (
+          <circle
+            key={r}
+            cx="50"
+            cy="50"
+            r={r}
+            fill="transparent"
+            stroke="white"
+            strokeWidth="0.25"
+            className="opacity-[0.03]"
+            style={{ transformOrigin: "center" }}
+          />
+        ))}
+        
+        {/* Main Event Horizon Progress Ring */}
         <motion.circle
           cx="50"
           cy="50"
           r="38"
           fill="transparent"
-          stroke={accentColor}
-          strokeWidth="3"
+          stroke="url(#ringGradient)"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ filter: `drop-shadow(0 0 8px ${accentColor})` }}
+          transition={{ duration: 2.5, ease: "circOut" }}
+          style={{ filter: "url(#vortexGlow)" }}
+        />
+
+        {/* Orbiting Photon Sphere (Animated Dots) */}
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="45"
+          fill="transparent"
+          stroke={accentColor}
+          strokeWidth="1.5"
+          strokeDasharray="0.5 15"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+          className="opacity-40"
+        />
+        
+        {/* Counter-rotating accretion disk layer */}
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="32"
+          fill="transparent"
+          stroke={accentColor}
+          strokeWidth="0.5"
+          strokeDasharray="2 10"
+          animate={{ rotate: -360 }}
+          transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+          className="opacity-10"
         />
       </svg>
+      
+      {/* Central Singularity (The Black Hole Core) */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div 
-          className="w-12 h-12 rounded-full"
+          className="w-20 h-20 rounded-full relative overflow-hidden"
           style={{ 
-            background: `radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.8) 50%, transparent 100%)`,
-            boxShadow: `inset 0 0 15px rgba(0,0,0,1), 0 0 20px ${accentColor.replace("0.8", "0.2")}`
+            background: "radial-gradient(circle at center, #000 20%, #050505 50%, transparent 80%)",
           }}
         >
+          {/* Pulsing Core Glow */}
+          <motion.div 
+            className="absolute inset-0 rounded-full"
+            animate={{ 
+              scale: [0.9, 1.1, 0.9],
+              opacity: [0.2, 0.5, 0.2]
+            }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `radial-gradient(circle at center, ${accentColor.replace("0.8", "0.4")} 0%, transparent 70%)` }}
+          />
+          
+          {/* Inner Singularity Point */}
           <div className="absolute inset-0 flex items-center justify-center">
             <motion.div 
-              className="w-1.5 h-1.5 rounded-full bg-white"
+              className="w-1.5 h-1.5 rounded-full bg-white blur-[0.5px]"
               animate={{ 
-                scale: [1, 1.5, 1],
-                opacity: [0.5, 1, 0.5]
+                scale: [1, 2.5, 1],
+                boxShadow: [
+                  `0 0 10px white`,
+                  `0 0 20px ${accentColor}`,
+                  `0 0 10px white`
+                ]
               }}
-              transition={{ duration: 2, repeat: Infinity }}
+              transition={{ duration: 3, repeat: Infinity }}
             />
           </div>
         </div>
@@ -428,16 +490,21 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-white/5 rounded-md p-3">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry</div>
-              <div className="text-lg font-mono font-bold text-white">{pool.entryAmount.toLocaleString()}</div>
-              <div className="text-xs text-primary/80 font-medium">{pool.tokenSymbol}</div>
+          <div className="grid grid-cols-2 gap-3 mb-4 relative">
+            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
+              <div className="text-lg font-mono font-black text-white">{pool.entryAmount.toLocaleString()}</div>
+              <div className="text-xs text-primary/80 font-bold tracking-tight">{pool.tokenSymbol}</div>
             </div>
-            <div className="bg-white/5 rounded-md p-3">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pool Size</div>
-              <div className="text-lg font-mono font-bold text-white">{totalPot.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">{pool.tokenSymbol}</div>
+            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md relative overflow-hidden group/size">
+              {/* Inner glow for Pool Size box to integrate with vortex */}
+              <div 
+                className="absolute -right-8 -top-8 w-24 h-24 blur-2xl opacity-20 pointer-events-none"
+                style={{ backgroundColor: accentColor }}
+              />
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Pool Size</div>
+              <div className="text-lg font-mono font-black text-white">{totalPot.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground font-bold tracking-tight">{pool.tokenSymbol}</div>
             </div>
           </div>
 
