@@ -407,9 +407,6 @@ export default function PoolDetails() {
         <div className="w-full container mx-auto px-4 z-20 pb-12 mt-auto">
           <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 text-center md:text-left">
             <div className="space-y-4">
-              <h1 className="text-6xl md:text-8xl font-display font-black tracking-tighter uppercase leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                {pool.tokenSymbol} <span className="text-primary">VOID</span>
-              </h1>
               <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-xs font-tech text-muted-foreground uppercase tracking-[0.2em]">
                 <span className="flex items-center gap-2 bg-white/5 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
                   <Clock className="w-4 h-4 text-primary" /> {pool.lockDuration}m Horizon
