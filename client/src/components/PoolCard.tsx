@@ -400,8 +400,6 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           }}
         />
 
-        <VortexRing percentFull={percentFull} accentColor={accentColor} />
-
         <div className="relative z-10 pt-2">
           {/* Lock Time Indicator - ABSOLUTELY PROMINENT WITHIN CARD FLOW */}
           {normalizedStatus === "OPEN" && (
