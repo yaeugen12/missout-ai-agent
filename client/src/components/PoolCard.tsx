@@ -62,7 +62,7 @@ function TokenAvatar({
   );
 }
 
-function VortexRing({ percentFull, accentColor, poolSize, symbol }: { percentFull: number; accentColor: string; poolSize: number; symbol: string }) {
+function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { percentFull: number; accentColor: string; poolSize?: number; symbol?: string }) {
   const circumference = 2 * Math.PI * 38;
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
@@ -171,7 +171,7 @@ function VortexRing({ percentFull, accentColor, poolSize, symbol }: { percentFul
           <div className="relative z-10 flex flex-col items-center justify-center text-center">
             <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] font-black leading-none mb-1">Pool Size</span>
             <span className="text-sm font-mono font-black text-white leading-none">
-              {poolSize.toLocaleString()}
+              {(poolSize ?? 0).toLocaleString()}
             </span>
             <span className="text-[9px] text-primary/60 font-black uppercase tracking-tighter mt-0.5">{symbol}</span>
           </div>
