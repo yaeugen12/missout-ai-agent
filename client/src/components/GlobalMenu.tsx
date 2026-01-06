@@ -159,13 +159,6 @@ export function GlobalMenu() {
               description="Top winners and referrers"
               onClose={handleClose}
             />
-            <MenuItem 
-              href="/donate" 
-              icon={Heart} 
-              label="Donate to Pools"
-              description="Support active pools"
-              onClose={handleClose}
-            />
           </MenuSection>
 
           <Separator className="bg-white/10" />
