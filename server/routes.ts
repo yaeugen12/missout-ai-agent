@@ -65,7 +65,7 @@ export async function registerRoutes(
     const pool = await storage.getPool(id);
     if (!pool) return res.status(404).json({ message: "Pool not found" });
     
-    const participants = await storage.getParticipants(id);
+    const participants = await storage.getParticipantsWithProfiles(id);
     res.json({ ...pool, participants });
   });
 

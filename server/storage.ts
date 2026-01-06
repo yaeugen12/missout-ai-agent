@@ -75,6 +75,23 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(participants).where(eq(participants.poolId, poolId));
   }
 
+  async getParticipantsWithProfiles(poolId: number): Promise<Array<Participant & { displayName?: string; displayAvatar?: string }>> {
+    const participantsList = await db.select().from(participants).where(eq(participants.poolId, poolId));
+    
+    const enrichedParticipants = await Promise.all(
+      participantsList.map(async (p) => {
+        const profile = await this.getProfile(p.walletAddress);
+        return {
+          ...p,
+          displayName: profile?.nickname || undefined,
+          displayAvatar: profile?.avatarUrl || undefined,
+        };
+      })
+    );
+    
+    return enrichedParticipants;
+  }
+
   async addParticipant(participant: InsertParticipant): Promise<Participant> {
     // Transaction to add participant and update pool count/pot
     return await db.transaction(async (tx) => {
