@@ -373,6 +373,14 @@ export default function PoolDetails() {
   if (isLoading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>;
   if (error || !pool) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500">Error loading pool</div>;
 
+  // Find winner's profile data from participants list
+  const participants = (pool as any).participants || [];
+  const winnerParticipant = pool.winnerWallet 
+    ? participants.find((p: any) => p.walletAddress === pool.winnerWallet)
+    : null;
+  const winnerDisplayName = winnerParticipant?.displayName;
+  const winnerAvatar = winnerParticipant?.displayAvatar;
+
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
       {/* Hero Section with Black Hole */}
@@ -383,10 +391,12 @@ export default function PoolDetails() {
         <div className="relative z-10 w-full flex-1 flex items-center justify-center mt-16">
           <BlackHoleExperience
             status={pool.status}
-            participants={(pool as any).participants || []}
+            participants={participants}
             maxParticipants={pool.maxParticipants}
             lockEndTime={pool.lockStartTime ? new Date((pool.lockStartTime * 1000) + (pool.lockDuration * 60 * 1000)) : null}
             winnerWallet={pool.winnerWallet}
+            winnerDisplayName={winnerDisplayName}
+            winnerAvatar={winnerAvatar}
             prizeAmount={pool.totalPot || 0}
             tokenSymbol={pool.tokenSymbol}
             payoutTxHash={(pool as any).payoutTxHash}
@@ -567,8 +577,8 @@ export default function PoolDetails() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-              {pool.participants && pool.participants.length > 0 ? (
-                pool.participants.map((p: any) => (
+              {participants.length > 0 ? (
+                participants.map((p: any) => (
                   <ParticipantRow key={p.walletAddress} walletAddress={p.walletAddress} />
                 ))
               ) : (

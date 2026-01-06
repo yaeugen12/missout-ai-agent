@@ -78,13 +78,16 @@ export class DatabaseStorage implements IStorage {
   async getParticipantsWithProfiles(poolId: number): Promise<Array<Participant & { displayName?: string; displayAvatar?: string }>> {
     const participantsList = await db.select().from(participants).where(eq(participants.poolId, poolId));
     
+    const generateDicebearAvatar = (wallet: string, style: string = "bottts") => 
+      `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
+    
     const enrichedParticipants = await Promise.all(
       participantsList.map(async (p) => {
         const profile = await this.getProfile(p.walletAddress);
         return {
           ...p,
           displayName: profile?.nickname || undefined,
-          displayAvatar: profile?.avatarUrl || undefined,
+          displayAvatar: profile?.avatarUrl || generateDicebearAvatar(p.walletAddress, profile?.avatarStyle || "bottts"),
         };
       })
     );
