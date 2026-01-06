@@ -406,33 +406,43 @@ export default function PoolDetails() {
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
       {/* Hero Section with Black Hole */}
-      <div className="relative h-[60vh] flex items-center justify-center border-b border-white/10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_70%)]" />
+      <div className="relative h-[85vh] flex flex-col items-center justify-center border-b border-white/10 pt-12 overflow-hidden bg-black">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.08)_0%,transparent_80%)]" />
         
-        <div className="z-10 w-full max-w-2xl px-4 text-center">
-          <BlackHoleCore 
-            intensity={(pool.participantsCount ?? 0) / pool.maxParticipants} 
-            status={pool.status} 
-          />
+        {/* Black Hole Visual - Fully visible and clean */}
+        <div className="relative z-10 w-full flex-1 flex items-center justify-center">
+          <div className="scale-[0.8] md:scale-[0.9] transform transition-transform duration-700">
+            <BlackHoleCore 
+              intensity={(pool.participantsCount ?? 0) / pool.maxParticipants} 
+              status={pool.status} 
+            />
+          </div>
         </div>
 
-        {/* Overlay Stats */}
-        <div className="absolute bottom-8 left-0 right-0 container mx-auto px-4 flex justify-between items-end">
-          <div>
-            <h1 className="text-5xl font-display font-black mb-2 tracking-tighter">
-              {pool.tokenSymbol} <span className="text-primary">BLACK HOLE</span>
-            </h1>
-            <div className="flex items-center gap-4 text-sm font-tech text-muted-foreground uppercase">
-              <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {pool.lockDuration}m Event Horizon</span>
-              <span className="flex items-center gap-1"><Coins className="w-4 h-4" /> {pool.entryAmount} {pool.tokenSymbol} Entry</span>
+        {/* Content Overlay - Moved completely below the visual */}
+        <div className="w-full container mx-auto px-4 z-20 pb-12 mt-auto">
+          <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 text-center md:text-left">
+            <div className="space-y-4">
+              <h1 className="text-6xl md:text-8xl font-display font-black tracking-tighter uppercase leading-none drop-shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                {pool.tokenSymbol} <span className="text-primary">VOID</span>
+              </h1>
+              <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-xs font-tech text-muted-foreground uppercase tracking-[0.2em]">
+                <span className="flex items-center gap-2 bg-white/5 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
+                  <Clock className="w-4 h-4 text-primary" /> {pool.lockDuration}m Horizon
+                </span>
+                <span className="flex items-center gap-2 bg-white/5 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">
+                  <Coins className="w-4 h-4 text-primary" /> {pool.entryAmount} {pool.tokenSymbol}
+                </span>
+              </div>
             </div>
-          </div>
-          
-          <div className="text-right flex flex-col items-end">
-            <div className="text-4xl font-mono font-bold text-neon-cyan">
-              {(pool.totalPot || 0).toFixed(2)} {pool.tokenSymbol}
+            
+            <div className="flex flex-col items-center md:items-end bg-zinc-900/40 p-6 rounded-2xl border border-white/10 backdrop-blur-xl">
+              <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">Singularity Mass</div>
+              <div className="text-5xl md:text-6xl font-mono font-black text-neon-cyan drop-shadow-[0_0_20px_rgba(0,240,255,0.3)] leading-none tracking-tighter">
+                {(pool.totalPot || 0).toFixed(2)}
+              </div>
+              <div className="text-xs font-mono font-black text-primary mt-3 uppercase tracking-[0.3em] opacity-80">{pool.tokenSymbol}</div>
             </div>
-            <div className="text-sm font-tech text-muted-foreground uppercase tracking-widest">Total Pot</div>
           </div>
         </div>
       </div>
