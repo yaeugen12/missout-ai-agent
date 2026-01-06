@@ -53,6 +53,7 @@ export const profiles = pgTable("profiles", {
   avatarUrl: text("avatar_url"),
   avatarStyle: text("avatar_style").default("bottts"),
   nonce: text("nonce"),
+  nicknameChangeCount: integer("nickname_change_count").default(0),
   lastNicknameChange: timestamp("last_nickname_change"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -99,7 +99,7 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
               <p className="text-xs text-red-400">{nicknameError}</p>
             )}
             <p className="text-xs text-muted-foreground">
-              3-20 characters. Letters, numbers, and underscores only.
+              3-20 characters. Letters, numbers, and underscores only. You can change your nickname twice instantly, then once every 48 hours.
             </p>
           </div>
           

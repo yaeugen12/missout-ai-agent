@@ -353,8 +353,12 @@ export async function registerRoutes(
       if (input.nickname) {
         const cooldown = await storage.checkNicknameCooldown(wallet);
         if (!cooldown.canChange && profile?.nickname !== input.nickname) {
+          const message = profile?.nicknameChangeCount && profile.nicknameChangeCount >= 2
+            ? "Nickname can only be changed once every 48 hours"
+            : "Nickname can only be changed once per week";
+            
           return res.status(429).json({ 
-            message: "Nickname can only be changed once per week",
+            message,
             cooldownEnds: cooldown.cooldownEnds?.toISOString()
           });
         }

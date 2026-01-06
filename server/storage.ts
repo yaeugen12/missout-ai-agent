@@ -176,22 +176,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProfile(walletAddress: string, data: { nickname?: string; avatarUrl?: string; avatarStyle?: string }): Promise<Profile> {
+    const existing = await this.getProfile(walletAddress);
     const updateData: any = {
       ...data,
       updatedAt: new Date(),
       nonce: null
     };
     
-    if (data.nickname !== undefined) {
+    if (data.nickname !== undefined && data.nickname !== existing?.nickname) {
       updateData.lastNicknameChange = new Date();
+      updateData.nicknameChangeCount = (existing?.nicknameChangeCount || 0) + 1;
     }
     
-    const [updated] = await db.update(profiles)
-      .set(updateData)
-      .where(eq(profiles.walletAddress, walletAddress))
-      .returning();
-    
-    return updated;
+    if (existing) {
+      const [updated] = await db.update(profiles)
+        .set(updateData)
+        .where(eq(profiles.walletAddress, walletAddress))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(profiles).values({
+        walletAddress,
+        ...updateData,
+        nicknameChangeCount: data.nickname !== undefined ? 1 : 0
+      } as any).returning();
+      return inserted;
+    }
   }
 
   async isNicknameAvailable(nickname: string, excludeWallet?: string): Promise<boolean> {
@@ -206,11 +216,11 @@ export class DatabaseStorage implements IStorage {
   async checkNicknameCooldown(walletAddress: string): Promise<{ canChange: boolean; cooldownEnds?: Date }> {
     const profile = await this.getProfile(walletAddress);
     
-    if (!profile || !profile.lastNicknameChange) {
+    if (!profile || !profile.lastNicknameChange || (profile.nicknameChangeCount || 0) < 2) {
       return { canChange: true };
     }
     
-    const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+    const cooldownMs = 48 * 60 * 60 * 1000; // 48 hours
     const cooldownEnds = new Date(profile.lastNicknameChange.getTime() + cooldownMs);
     const now = new Date();
     
