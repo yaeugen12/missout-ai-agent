@@ -42,12 +42,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WalletProvider>
+      <WalletProvider>
+        <TooltipProvider>
           <Toaster />
           <Router />
-        </WalletProvider>
-      </TooltipProvider>
+        </TooltipProvider>
+      </WalletProvider>
     </QueryClientProvider>
   );
 }
