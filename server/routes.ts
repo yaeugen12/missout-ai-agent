@@ -179,7 +179,8 @@ export async function registerRoutes(
       const participant = await storage.addParticipant({
         poolId: id,
         walletAddress: input.walletAddress,
-        avatar: input.avatar
+        avatar: input.avatar,
+        txHash: input.txHash // Save txHash to participant record
       });
 
       // Add join transaction
@@ -199,6 +200,46 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
+    }
+  });
+
+  // Cancel pool
+  app.post("/api/pools/:id/cancel", async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.id);
+      const { walletAddress, txHash } = req.body;
+
+      await storage.addTransaction({
+        poolId,
+        walletAddress,
+        type: 'CANCEL',
+        amount: 0,
+        txHash
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // Refund
+  app.post("/api/pools/:id/refund", async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.id);
+      const { walletAddress, txHash } = req.body;
+
+      await storage.addTransaction({
+        poolId,
+        walletAddress,
+        type: 'REFUND',
+        amount: 0,
+        txHash
+      });
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
     }
   });
 
