@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { DonateModal } from "@/components/DonateModal";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
+import { useWallet } from "@solana/wallet-adapter-react";
 
 interface PoolCardProps {
   pool: Pool;
@@ -189,6 +192,9 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const accentColor = getTokenAccentColor(pool.tokenSymbol);
   const { connected, joinPool: sdkJoinPool } = useMissoutSDK();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { publicKey } = useWallet();
+  const walletAddress = publicKey?.toBase58();
   
   const participantsCount = pool.participantsCount ?? 0;
   const totalPot = pool.totalPot ?? 0;
@@ -258,19 +264,41 @@ function PoolCardComponent({ pool }: PoolCardProps) {
     e.preventDefault();
     e.stopPropagation();
     
-    if (isJoining || !connected) return;
+    if (isJoining || !connected || !walletAddress) {
+      if (!connected) toast({ title: "Wallet not connected", description: "Please connect your wallet to join" });
+      return;
+    }
     
     setIsJoining(true);
     try {
-      await sdkJoinPool({
+      // 1. SDK Join (On-chain)
+      const result = await sdkJoinPool({
         poolId: poolAddress || pool.id.toString(),
         amount: pool.entryAmount.toString(),
       });
+
+      if (!result?.tx) {
+        throw new Error("No transaction signature returned from wallet");
+      }
+
+      // 2. Notify Backend
+      await apiRequest('POST', `/api/pools/${pool.id}/join`, {
+        walletAddress: walletAddress,
+        txHash: result.tx
+      });
+
       toast({
         title: "Success",
         description: "Successfully joined the void!",
       });
+
+      // 3. Refresh Data
+      queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
+
     } catch (err: any) {
+      console.error("Join error:", err);
       toast({
         variant: "destructive",
         title: "Error",
@@ -279,7 +307,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
     } finally {
       setIsJoining(false);
     }
-  }, [isJoining, connected, sdkJoinPool, pool, poolAddress, toast]);
+  }, [isJoining, connected, walletAddress, sdkJoinPool, pool, poolAddress, toast, queryClient]);
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
     if (donateModalOpen || isJoining) {
