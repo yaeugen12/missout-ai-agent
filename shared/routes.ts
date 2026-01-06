@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertPoolSchema, pools, participants, transactions } from './schema';
+import { insertPoolSchema, pools, participants, transactions, profiles, updateProfileSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -77,6 +77,43 @@ export const api = {
           topWinners: z.array(z.object({ wallet: z.string(), totalWon: z.number() })),
           topReferrers: z.array(z.object({ wallet: z.string(), referrals: z.number() })),
         }),
+      },
+    },
+  },
+  profiles: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/profile/:wallet',
+      responses: {
+        200: z.object({
+          walletAddress: z.string(),
+          nickname: z.string().nullable(),
+          avatarUrl: z.string().nullable(),
+          avatarStyle: z.string().nullable(),
+          displayName: z.string(),
+          displayAvatar: z.string(),
+        }),
+      },
+    },
+    getNonce: {
+      method: 'GET' as const,
+      path: '/api/profile/:wallet/nonce',
+      responses: {
+        200: z.object({
+          nonce: z.string(),
+          message: z.string(),
+        }),
+      },
+    },
+    update: {
+      method: 'POST' as const,
+      path: '/api/profile/:wallet',
+      input: updateProfileSchema,
+      responses: {
+        200: z.custom<typeof profiles.$inferSelect>(),
+        400: errorSchemas.validation,
+        401: z.object({ message: z.string() }),
+        429: z.object({ message: z.string(), cooldownEnds: z.string().optional() }),
       },
     },
   },

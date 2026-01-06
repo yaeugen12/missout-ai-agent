@@ -46,6 +46,18 @@ export const transactions = pgTable("transactions", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
+export const profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
+  walletAddress: text("wallet_address").notNull().unique(),
+  nickname: text("nickname").unique(),
+  avatarUrl: text("avatar_url"),
+  avatarStyle: text("avatar_style").default("bottts"),
+  nonce: text("nonce"),
+  lastNicknameChange: timestamp("last_nickname_change"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Schemas
 export const insertPoolSchema = createInsertSchema(pools).omit({ 
   id: true, 
@@ -69,6 +81,22 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   timestamp: true 
 });
 
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  nonce: true,
+  lastNicknameChange: true
+});
+
+export const updateProfileSchema = z.object({
+  nickname: z.string().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores allowed").optional(),
+  avatarUrl: z.string().url().optional(),
+  avatarStyle: z.enum(["bottts", "identicon", "shapes", "thumbs", "pixel-art"]).optional(),
+  signature: z.string(),
+  nonce: z.string(),
+});
+
 // Types
 export type Pool = typeof pools.$inferSelect;
 export type InsertPool = z.infer<typeof insertPoolSchema>;
@@ -76,6 +104,9 @@ export type Participant = typeof participants.$inferSelect;
 export type InsertParticipant = z.infer<typeof insertParticipantSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Profile = typeof profiles.$inferSelect;
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 
 // API Request Types
 export type CreatePoolRequest = InsertPool;

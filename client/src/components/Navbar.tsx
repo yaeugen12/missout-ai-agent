@@ -1,10 +1,13 @@
 import { Link, useLocation } from "wouter";
 import { useWallet } from "@/hooks/use-wallet";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
+import { useMyProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, RefreshCw, LogOut, Copy, Check } from "lucide-react";
+import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, RefreshCw, LogOut, Copy, Check, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
+import { ProfileEditModal } from "@/components/ProfileEditModal";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +23,9 @@ export function Navbar() {
   const [location] = useLocation();
   const { isConnected, address, connect, disconnect, isConnecting, publicKey } = useWallet();
   const { solBalance, tokens, isLoading, refresh } = useWalletBalances();
+  const { data: profile } = useMyProfile();
   const [copied, setCopied] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
 
   const navItems = [
     { href: "/terminal", label: "Pool Terminal", icon: Atom },
@@ -91,13 +96,18 @@ export function Navbar() {
                   className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-sm hover:bg-white/10"
                   data-testid="button-wallet-dropdown"
                 >
-                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={profile?.displayAvatar} alt={profile?.displayName} />
+                    <AvatarFallback className="bg-green-500/20 text-green-500 text-[10px]">
+                      {address.slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex flex-col items-start">
                     <span className="text-[10px] text-muted-foreground font-mono uppercase">
                       {solBalance !== null ? `${solBalance.toFixed(4)} SOL` : "..."}
                     </span>
                     <span className="text-xs font-mono text-primary font-bold">
-                      {address.slice(0, 4)}...{address.slice(-4)}
+                      {profile?.displayName || `${address.slice(0, 4)}...${address.slice(-4)}`}
                     </span>
                   </div>
                   <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -204,6 +214,15 @@ export function Navbar() {
                 <DropdownMenuSeparator className="bg-white/10" />
 
                 <DropdownMenuItem 
+                  onClick={() => setProfileModalOpen(true)}
+                  className="cursor-pointer"
+                  data-testid="button-edit-profile"
+                >
+                  <UserCircle className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </DropdownMenuItem>
+
+                <DropdownMenuItem 
                   onClick={disconnect}
                   className="text-destructive focus:text-destructive cursor-pointer"
                   data-testid="button-disconnect"
@@ -230,6 +249,11 @@ export function Navbar() {
           )}
         </div>
       </div>
+
+      <ProfileEditModal 
+        open={profileModalOpen} 
+        onOpenChange={setProfileModalOpen} 
+      />
     </header>
   );
 }

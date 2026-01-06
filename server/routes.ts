@@ -6,7 +6,9 @@ import { z } from "zod";
 import { tokenDiscoveryService, type DiscoveredToken } from "./tokenDiscoveryService";
 import { poolMonitor } from "./pool-monitor";
 import { db } from "./db";
-import { pools } from "@shared/schema";
+import { pools, updateProfileSchema } from "@shared/schema";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -297,6 +299,106 @@ export async function registerRoutes(
       }
     });
   }
+
+  // Profile Routes
+  const shortenWallet = (wallet: string) => `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+  const generateDicebearAvatar = (wallet: string, style: string = "bottts") => 
+    `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
+
+  app.get(api.profiles.get.path, async (req, res) => {
+    const wallet = req.params.wallet;
+    
+    try {
+      const profile = await storage.getProfile(wallet);
+      
+      const displayName = profile?.nickname || shortenWallet(wallet);
+      const displayAvatar = profile?.avatarUrl || generateDicebearAvatar(wallet, profile?.avatarStyle || "bottts");
+      
+      res.json({
+        walletAddress: wallet,
+        nickname: profile?.nickname || null,
+        avatarUrl: profile?.avatarUrl || null,
+        avatarStyle: profile?.avatarStyle || null,
+        displayName,
+        displayAvatar
+      });
+    } catch (err) {
+      console.error("[Profile] Get error:", err);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  app.get(api.profiles.getNonce.path, async (req, res) => {
+    const wallet = req.params.wallet;
+    
+    try {
+      const nonce = await storage.getOrCreateNonce(wallet);
+      const message = `MissOut Profile Update\n\nNonce: ${nonce}\nWallet: ${wallet}\n\nSign this message to verify your identity.`;
+      
+      res.json({ nonce, message });
+    } catch (err) {
+      console.error("[Profile] Nonce error:", err);
+      res.status(500).json({ message: "Failed to generate nonce" });
+    }
+  });
+
+  app.post(api.profiles.update.path, async (req, res) => {
+    const wallet = req.params.wallet;
+    
+    try {
+      const input = updateProfileSchema.parse(req.body);
+      
+      const profile = await storage.getProfile(wallet);
+      if (!profile || profile.nonce !== input.nonce) {
+        return res.status(401).json({ message: "Invalid or expired nonce. Please request a new one." });
+      }
+      
+      const expectedMessage = `MissOut Profile Update\n\nNonce: ${input.nonce}\nWallet: ${wallet}\n\nSign this message to verify your identity.`;
+      const messageBytes = new TextEncoder().encode(expectedMessage);
+      
+      let isValid = false;
+      try {
+        const signatureBytes = bs58.decode(input.signature);
+        const publicKeyBytes = bs58.decode(wallet);
+        isValid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+      } catch (e) {
+        console.error("[Profile] Signature verification error:", e);
+      }
+      
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid signature" });
+      }
+      
+      if (input.nickname) {
+        const cooldown = await storage.checkNicknameCooldown(wallet);
+        if (!cooldown.canChange && profile.nickname !== input.nickname) {
+          return res.status(429).json({ 
+            message: "Nickname can only be changed once per week",
+            cooldownEnds: cooldown.cooldownEnds?.toISOString()
+          });
+        }
+        
+        const available = await storage.isNicknameAvailable(input.nickname, wallet);
+        if (!available) {
+          return res.status(400).json({ message: "Nickname already taken", field: "nickname" });
+        }
+      }
+      
+      const updated = await storage.updateProfile(wallet, {
+        nickname: input.nickname,
+        avatarUrl: input.avatarUrl,
+        avatarStyle: input.avatarStyle
+      });
+      
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      console.error("[Profile] Update error:", err);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
 
   return httpServer;
 }

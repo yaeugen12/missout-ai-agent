@@ -1,10 +1,11 @@
 import { db } from "./db";
 import {
-  pools, participants, transactions,
+  pools, participants, transactions, profiles,
   type Pool, type InsertPool, type Participant, type InsertParticipant,
-  type Transaction, type InsertTransaction
+  type Transaction, type InsertTransaction, type Profile
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { randomBytes } from "crypto";
 
 export interface IStorage {
   // Pools
@@ -26,6 +27,13 @@ export interface IStorage {
     topWinners: { wallet: string; totalWon: number }[];
     topReferrers: { wallet: string; referrals: number }[];
   }>;
+
+  // Profiles
+  getProfile(walletAddress: string): Promise<Profile | undefined>;
+  getOrCreateNonce(walletAddress: string): Promise<string>;
+  updateProfile(walletAddress: string, data: { nickname?: string; avatarUrl?: string; avatarStyle?: string }): Promise<Profile>;
+  isNicknameAvailable(nickname: string, excludeWallet?: string): Promise<boolean>;
+  checkNicknameCooldown(walletAddress: string): Promise<{ canChange: boolean; cooldownEnds?: Date }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -139,6 +147,78 @@ export class DatabaseStorage implements IStorage {
     ];
 
     return { topWinners, topReferrers };
+  }
+
+  // Profile methods
+  async getProfile(walletAddress: string): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.walletAddress, walletAddress));
+    return profile;
+  }
+
+  async getOrCreateNonce(walletAddress: string): Promise<string> {
+    const nonce = randomBytes(32).toString("hex");
+    
+    const existing = await this.getProfile(walletAddress);
+    
+    if (existing) {
+      await db.update(profiles)
+        .set({ nonce, updatedAt: new Date() })
+        .where(eq(profiles.walletAddress, walletAddress));
+    } else {
+      await db.insert(profiles).values({
+        walletAddress,
+        nonce,
+        avatarStyle: "bottts"
+      });
+    }
+    
+    return nonce;
+  }
+
+  async updateProfile(walletAddress: string, data: { nickname?: string; avatarUrl?: string; avatarStyle?: string }): Promise<Profile> {
+    const updateData: any = {
+      ...data,
+      updatedAt: new Date(),
+      nonce: null
+    };
+    
+    if (data.nickname !== undefined) {
+      updateData.lastNicknameChange = new Date();
+    }
+    
+    const [updated] = await db.update(profiles)
+      .set(updateData)
+      .where(eq(profiles.walletAddress, walletAddress))
+      .returning();
+    
+    return updated;
+  }
+
+  async isNicknameAvailable(nickname: string, excludeWallet?: string): Promise<boolean> {
+    const existing = await db.select().from(profiles).where(eq(profiles.nickname, nickname));
+    
+    if (existing.length === 0) return true;
+    if (excludeWallet && existing[0].walletAddress === excludeWallet) return true;
+    
+    return false;
+  }
+
+  async checkNicknameCooldown(walletAddress: string): Promise<{ canChange: boolean; cooldownEnds?: Date }> {
+    const profile = await this.getProfile(walletAddress);
+    
+    if (!profile || !profile.lastNicknameChange) {
+      return { canChange: true };
+    }
+    
+    const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+    const cooldownEnds = new Date(profile.lastNicknameChange.getTime() + cooldownMs);
+    const now = new Date();
+    
+    if (now >= cooldownEnds) {
+      return { canChange: true };
+    }
+    
+    return { canChange: false, cooldownEnds };
   }
 }
 
