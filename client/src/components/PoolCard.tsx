@@ -241,6 +241,27 @@ function CountdownRing({
   );
 }
 
+function CountdownOverlay({ 
+  endTime, 
+  lockDuration 
+}: { 
+  endTime: Date | null; 
+  lockDuration: number;
+}) {
+  const countdown = useCountdown(endTime, lockDuration);
+  return (
+    <div className="bg-black/80 border-2 border-yellow-400 px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(250,204,21,0.4)] flex flex-col items-center gap-2 transform scale-110">
+      <Clock className="w-8 h-8 text-yellow-400 animate-pulse" />
+      <div className="flex flex-col items-center">
+        <span className="text-3xl font-mono font-black text-white leading-none">
+          {countdown.formatted}
+        </span>
+        <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.2em] mt-1">EVENT HORIZON</span>
+      </div>
+    </div>
+  );
+}
+
 function PoolCardComponent({ pool }: PoolCardProps) {
   const [copied, setCopied] = useState(false);
   const [donateModalOpen, setDonateModalOpen] = useState(false);
@@ -409,15 +430,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               animate={{ opacity: 1 }}
               className="absolute -inset-5 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] pointer-events-none"
             >
-              <div className="bg-black/80 border-2 border-yellow-400 px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(250,204,21,0.4)] flex flex-col items-center gap-2 transform scale-110">
-                <Clock className="w-8 h-8 text-yellow-400 animate-pulse" />
-                <div className="flex flex-col items-center">
-                  <span className="text-3xl font-mono font-black text-white leading-none">
-                    {useCountdown(lockEndTime, pool.lockDuration).formatted}
-                  </span>
-                  <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.2em] mt-1">EVENT HORIZON</span>
-                </div>
-              </div>
+              <CountdownOverlay endTime={lockEndTime} lockDuration={pool.lockDuration} />
             </motion.div>
           )}
 
