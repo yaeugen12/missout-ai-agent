@@ -62,7 +62,7 @@ function TokenAvatar({
   );
 }
 
-function VortexRing({ percentFull, accentColor }: { percentFull: number; accentColor: string }) {
+function VortexRing({ percentFull, accentColor, poolSize, symbol }: { percentFull: number; accentColor: string; poolSize: number; symbol: string }) {
   const circumference = 2 * Math.PI * 38;
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
@@ -148,36 +148,40 @@ function VortexRing({ percentFull, accentColor }: { percentFull: number; accentC
         />
       </svg>
       
-      {/* Central Singularity (The Black Hole Core) */}
+      {/* Central Singularity (The Black Hole Core) with Text */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div 
-          className="w-20 h-20 rounded-full relative overflow-hidden"
+          className="w-24 h-24 rounded-full relative overflow-hidden flex flex-col items-center justify-center"
           style={{ 
             background: "radial-gradient(circle at center, #000 20%, #050505 50%, transparent 80%)",
           }}
         >
           {/* Pulsing Core Glow */}
           <motion.div 
-            className="absolute inset-0 rounded-full"
+            className="absolute inset-0 rounded-full z-0"
             animate={{ 
               scale: [0.9, 1.1, 0.9],
-              opacity: [0.2, 0.5, 0.2]
+              opacity: [0.1, 0.3, 0.1]
             }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             style={{ background: `radial-gradient(circle at center, ${accentColor.replace("0.8", "0.4")} 0%, transparent 70%)` }}
           />
           
-          {/* Inner Singularity Point */}
-          <div className="absolute inset-0 flex items-center justify-center">
+          {/* Pool Size Text Integrated in Core */}
+          <div className="relative z-10 flex flex-col items-center justify-center text-center">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] font-black leading-none mb-1">Pool Size</span>
+            <span className="text-sm font-mono font-black text-white leading-none">
+              {poolSize.toLocaleString()}
+            </span>
+            <span className="text-[9px] text-primary/60 font-black uppercase tracking-tighter mt-0.5">{symbol}</span>
+          </div>
+
+          {/* Inner Singularity Point (subtle backdrop) */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
             <motion.div 
-              className="w-1.5 h-1.5 rounded-full bg-white blur-[0.5px]"
+              className="w-1 h-1 rounded-full bg-white blur-[1px]"
               animate={{ 
-                scale: [1, 2.5, 1],
-                boxShadow: [
-                  `0 0 10px white`,
-                  `0 0 20px ${accentColor}`,
-                  `0 0 10px white`
-                ]
+                scale: [1, 3, 1],
               }}
               transition={{ duration: 3, repeat: Infinity }}
             />
@@ -490,22 +494,21 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-4 relative">
-            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md">
+          <div className="mb-4 relative min-h-[120px] flex items-center">
+            {/* Entry Box (Full width but limited to make room for vortex) */}
+            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md w-[55%] z-20">
               <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
-              <div className="text-lg font-mono font-black text-white">{pool.entryAmount.toLocaleString()}</div>
+              <div className="text-lg font-mono font-black text-white leading-none mb-1">{pool.entryAmount.toLocaleString()}</div>
               <div className="text-xs text-primary/80 font-bold tracking-tight">{pool.tokenSymbol}</div>
             </div>
-            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md relative overflow-hidden group/size">
-              {/* Inner glow for Pool Size box to integrate with vortex */}
-              <div 
-                className="absolute -right-8 -top-8 w-24 h-24 blur-2xl opacity-20 pointer-events-none"
-                style={{ backgroundColor: accentColor }}
-              />
-              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Pool Size</div>
-              <div className="text-lg font-mono font-black text-white">{totalPot.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground font-bold tracking-tight">{pool.tokenSymbol}</div>
-            </div>
+
+            {/* Vortex with integrated Pool Size text */}
+            <VortexRing 
+              percentFull={percentFull} 
+              accentColor={accentColor} 
+              poolSize={totalPot}
+              symbol={pool.tokenSymbol}
+            />
           </div>
 
           <div className="flex items-center justify-between mb-4">
