@@ -324,6 +324,17 @@ export default function PoolDetails() {
       }
 
       console.log("=== CANCEL_TX_CONFIRMED ===", result.tx);
+      
+      // Notify backend about cancellation (optional but good for tracking)
+      try {
+        await apiRequest("POST", `/api/pools/${poolId}/cancel`, {
+          walletAddress: address,
+          txHash: result.tx,
+        });
+      } catch (err) {
+        console.warn("Backend notification failed", err);
+      }
+
       const explorerUrl = getSolscanTxUrl(result.tx);
 
       toast({
@@ -361,6 +372,17 @@ export default function PoolDetails() {
     setIsClaimingRefund(true);
     try {
       const result = await claimRefund(poolAddress);
+      
+      // Notify backend about refund
+      try {
+        await apiRequest("POST", `/api/pools/${poolId}/refund`, {
+          walletAddress: address,
+          txHash: result.tx,
+        });
+      } catch (err) {
+        console.warn("Backend notification failed", err);
+      }
+
       toast({
         title: "Refund Claimed",
         description: `Tokens returned. Tx: ${result.tx.slice(0, 8)}...`,

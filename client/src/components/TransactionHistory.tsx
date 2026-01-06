@@ -95,7 +95,7 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
                 {tx.type === 'PAYOUT' ? '+' : ''}{tx.amount.toFixed(2)}
               </div>
               <a 
-                href={tx.txHash ? getSolscanTxUrl(tx.txHash) : `https://solscan.io/account/${tx.walletAddress}?cluster=devnet`} 
+                href={tx.txHash ? getSolscanTxUrl(tx.txHash) : `https://solscan.io/account/${walletAddress}?cluster=devnet`} 
                 target="_blank" 
                 rel="noreferrer"
                 className="flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors uppercase font-tech bg-primary/5 px-2 py-0.5 rounded border border-primary/20 hover:border-primary/50"
