@@ -77,8 +77,11 @@ export function useWalletBalances(): WalletBalances {
 
         // On devnet, try a few hardcoded known mints or fallback to generic symbol for testing
         if (isDevnet) {
-          // You can add common devnet mints here if needed
-          // For now, if we can't find it via Helius, we'll keep the sliced address
+          // Hardcoded metadata for the user's specific token if Helius fails
+          if (mintAddress === "HNcz9fndVXBogLjU55uyvbz79P5qWxaBZVKk7iRSy7jV") {
+            symbol = "HNCZ9F";
+            name = "HNCZ9F Token";
+          }
         }
 
         try {

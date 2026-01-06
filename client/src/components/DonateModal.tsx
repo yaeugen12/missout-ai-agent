@@ -32,7 +32,10 @@ export function DonateModal({ pool, open, onOpenChange }: DonateModalProps) {
 
   const tokenBalance = pool.tokenSymbol === "SOL" 
     ? solBalance 
-    : tokens.find(t => t.symbol.toUpperCase() === pool.tokenSymbol.toUpperCase())?.balance ?? 0;
+    : tokens.find(t => 
+        t.symbol.toUpperCase() === pool.tokenSymbol.toUpperCase() || 
+        t.mint.toLowerCase() === pool.tokenMint?.toLowerCase()
+      )?.balance ?? 0;
 
   const poolAddress = pool.poolAddress;
 
