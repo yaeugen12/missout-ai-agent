@@ -54,6 +54,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    allowedHosts: true,
     hmr: {
       overlay: false,
     },
