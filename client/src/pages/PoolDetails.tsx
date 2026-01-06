@@ -349,8 +349,6 @@ export default function PoolDetails() {
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
-      <Navbar />
-
       {/* Hero Section with Black Hole */}
       <div className="relative h-[60vh] flex items-center justify-center border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_70%)]" />

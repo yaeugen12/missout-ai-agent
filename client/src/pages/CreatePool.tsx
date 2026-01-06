@@ -215,8 +215,6 @@ export default function CreatePool() {
 
   return (
     <div className="min-h-screen bg-black bg-grid-pattern">
-      <Navbar />
-      
       <main className="container mx-auto px-4 py-12 max-w-2xl">
         <Link href="/terminal" className="inline-flex items-center text-muted-foreground hover:text-primary mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Pool Terminal

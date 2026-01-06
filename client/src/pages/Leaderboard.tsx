@@ -6,8 +6,6 @@ import { Trophy, Users, Coins } from "lucide-react";
 export default function Leaderboard() {
   return (
     <div className="min-h-screen bg-grid-pattern flex flex-col">
-      <Navbar />
-      
       <main className="flex-1 container mx-auto px-4 py-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
