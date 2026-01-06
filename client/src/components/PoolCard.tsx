@@ -259,7 +259,8 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const percentFull = Math.min(100, (participantsCount / pool.maxParticipants) * 100);
   const isFull = percentFull >= 100;
   const normalizedStatus = pool.status.toUpperCase();
-  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED";
+  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS";
+  const isLocked = normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS";
   const canDonate = normalizedStatus !== "ENDED" && normalizedStatus !== "CANCELLED";
   
   const lockEndTime = pool.lockTime 
@@ -401,8 +402,27 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         />
 
         <div className="relative z-10 pt-2">
+          {/* Locked/Timer Overlay - Takes full card surface but transparent */}
+          {isLocked && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute -inset-5 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] pointer-events-none"
+            >
+              <div className="bg-black/80 border-2 border-yellow-400 px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(250,204,21,0.4)] flex flex-col items-center gap-2 transform scale-110">
+                <Clock className="w-8 h-8 text-yellow-400 animate-pulse" />
+                <div className="flex flex-col items-center">
+                  <span className="text-3xl font-mono font-black text-white leading-none">
+                    {useCountdown(lockEndTime, pool.lockDuration).formatted}
+                  </span>
+                  <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.2em] mt-1">EVENT HORIZON</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {/* Lock Time Indicator - ABSOLUTELY PROMINENT WITHIN CARD FLOW */}
-          {normalizedStatus === "OPEN" && (
+          {normalizedStatus === "OPEN" && !isFull && (
             <div className="flex justify-center mb-4">
               <div className="bg-black/80 border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-pulse">
                 <Clock className="w-5 h-5 text-primary" />
@@ -545,7 +565,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {normalizedStatus === "OPEN" && !isFull && (
+            {normalizedStatus === "OPEN" && !isFull && !isLocked && (
               <Button 
                 className="flex-1 min-w-[120px] gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
                 size="sm"
@@ -567,7 +587,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               </Button>
             )}
             <div className="flex gap-2 w-full sm:w-auto flex-1">
-              {canDonate && (
+              {canDonate && !isLocked && (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -581,7 +601,10 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               )}
               <Button 
                 variant="outline" 
-                className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]"
+                className={cn(
+                  "flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]",
+                  isLocked && "w-full z-[60] pointer-events-auto bg-black/60 border-yellow-400/50 hover:bg-yellow-400/10"
+                )}
                 size="sm"
                 data-testid={`button-view-pool-${pool.id}`}
               >
