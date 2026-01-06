@@ -7,7 +7,6 @@ import { usePool } from "@/hooks/use-pools";
 import { useWallet } from "@/hooks/use-wallet";
 import { Navbar } from "@/components/Navbar";
 import { BlackHoleExperience } from "@/components/BlackHoleExperience";
-import { RouletteReveal } from "@/components/RouletteReveal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -70,15 +69,12 @@ export default function PoolDetails() {
   const queryClient = useQueryClient();
   const { joinPool, donateToPool, cancelPool, claimRefund, connected: sdkConnected } = useMissoutSDK();
   
-  const [showRoulette, setShowRoulette] = useState(false);
-  const [winnerRevealed, setWinnerRevealed] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isClaimingRefund, setIsClaimingRefund] = useState(false);
   const [isDonating, setIsDonating] = useState(false);
   const [donateModalOpen, setDonateModalOpen] = useState(false);
   const [donateAmount, setDonateAmount] = useState("");
-  const [countdown, setCountdown] = useState<number | null>(null);
 
   const poolAddress = pool?.poolAddress;
   const isCreator = pool?.creatorWallet === address;
@@ -90,37 +86,11 @@ export default function PoolDetails() {
     !(pool as any)?.paused // Check paused state if it exists
   );
   const canClaimRefund = hasJoined && pool?.status === 'cancelled';
-  
-  useEffect(() => {
-    if (pool?.status === 'winnerSelected' && !winnerRevealed) {
-      setShowRoulette(true);
-    }
-  }, [pool?.status, winnerRevealed]);
 
   const invalidateQueries = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [api.pools.list.path] });
     queryClient.invalidateQueries({ queryKey: [api.pools.get.path, poolId] });
   }, [queryClient, poolId]);
-
-  // Countdown timer - only starts when pool is locked (lockStartTime is set)
-  useEffect(() => {
-    if (!pool?.lockStartTime || pool.status !== 'locked') {
-      setCountdown(null);
-      return;
-    }
-
-    const lockEndTime = pool.lockStartTime + (pool.lockDuration * 60); // lockDuration is in minutes
-
-    const updateCountdown = () => {
-      const now = Math.floor(Date.now() / 1000);
-      const remaining = lockEndTime - now;
-      setCountdown(remaining > 0 ? remaining : 0);
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [pool?.lockStartTime, pool?.lockDuration, pool?.status]);
 
   // Auto-refresh pool data when waiting for winner payout
   useEffect(() => {
@@ -459,126 +429,6 @@ export default function PoolDetails() {
           
           {/* Left Col: Actions & Status */}
           <div className="lg:col-span-2 space-y-6">
-            
-            {/* Winner Reveal Area */}
-            <AnimatePresence mode="wait">
-              {showRoulette ? (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="bg-zinc-900 border border-yellow-500/50 rounded-lg overflow-hidden"
-                >
-                  <div className="bg-yellow-500/10 p-2 text-center text-yellow-500 font-bold uppercase text-xs tracking-widest border-b border-yellow-500/20">
-                    SINGULARITY REACHED
-                  </div>
-                  <RouletteReveal
-                    participants={pool.participantsCount ? [{
-                      id: 0,
-                      poolId: pool.id,
-                      walletAddress: pool.winnerWallet!,
-                      avatar: "",
-                      joinedAt: new Date()
-                    }] : []}
-                    winnerAddress={pool.winnerWallet}
-                    onComplete={() => {
-                      setWinnerRevealed(true);
-                      // Keep roulette visible but mark as done
-                    }}
-                  />
-                </motion.div>
-              ) : winnerRevealed || (pool.status === 'ended' && pool.winnerWallet) ? (
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0, filter: "blur(10px)" }}
-                  animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
-                  className="relative bg-zinc-900/80 border-2 border-primary p-8 rounded-xl shadow-[0_0_50px_rgba(0,240,255,0.3)] overflow-hidden"
-                >
-                  {/* Background pulse */}
-                  <motion.div
-                    animate={{ opacity: [0.1, 0.3, 0.1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 bg-primary/20"
-                  />
-
-                  <div className="relative z-10 text-center">
-                    {/* Trophy Icon */}
-                    <motion.div
-                      initial={{ y: 20 }}
-                      animate={{ y: 0 }}
-                      className="inline-block p-4 rounded-full bg-primary/20 mb-4 border border-primary/50"
-                    >
-                      <Trophy className="w-12 h-12 text-primary drop-shadow-[0_0_15px_rgba(0,240,255,1)]" />
-                    </motion.div>
-
-                    {/* Title */}
-                    <h2 className="text-4xl font-display font-black text-white mb-2 tracking-tighter italic uppercase">
-                      ESCAPED THE <span className="text-primary">VOID</span>
-                    </h2>
-
-                    {/* Winner Wallet */}
-                    <div className="bg-black/50 py-3 px-6 rounded-lg inline-block border border-white/5 mb-6">
-                      <p className="font-mono text-primary text-lg font-black tracking-widest">
-                        {pool.winnerWallet ? `${pool.winnerWallet.slice(0, 4)}...${pool.winnerWallet.slice(-4)}` : 'Unknown'}
-                      </p>
-                    </div>
-
-                    {/* Token Breakdown */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                      <div className="bg-black/30 p-4 rounded-lg border border-primary/30 text-center">
-                        <div className="text-xs text-muted-foreground font-tech uppercase tracking-wider mb-1">
-                          Winner Payout
-                        </div>
-                        <div className="text-2xl font-mono font-black text-primary">
-                          {((pool.totalPot || 0) * 0.90).toFixed(2)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">{pool.tokenSymbol}</div>
-                      </div>
-
-                      <div className="bg-black/30 p-4 rounded-lg border border-white/10 text-center">
-                        <div className="text-xs text-muted-foreground font-tech uppercase tracking-wider mb-1">
-                          DEV Fee
-                        </div>
-                        <div className="text-2xl font-mono font-black text-white">
-                          {((pool.totalPot || 0) * 0.05).toFixed(2)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">5%</div>
-                      </div>
-
-                      <div className="bg-black/30 p-4 rounded-lg border border-white/10 text-center">
-                        <div className="text-xs text-muted-foreground font-tech uppercase tracking-wider mb-1">
-                          Burned
-                        </div>
-                        <div className="text-2xl font-mono font-black text-orange-400">
-                          {((pool.totalPot || 0) * 0.035).toFixed(2)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">3.5%</div>
-                      </div>
-
-                      <div className="bg-black/30 p-4 rounded-lg border border-white/10 text-center">
-                        <div className="text-xs text-muted-foreground font-tech uppercase tracking-wider mb-1">
-                          Treasury
-                        </div>
-                        <div className="text-2xl font-mono font-black text-white">
-                          {((pool.totalPot || 0) * 0.015).toFixed(2)}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">1.5%</div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : pool.status === 'winnerSelected' && !pool.winnerWallet ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-6 text-center"
-                >
-                  <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mx-auto mb-3" />
-                  <p className="text-yellow-500 font-tech uppercase tracking-wider">
-                    Waiting for payout...
-                  </p>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
 
             {/* Action Card */}
             <div className="bg-white/5 border border-white/10 p-6 rounded-lg backdrop-blur-sm">
@@ -701,36 +551,6 @@ export default function PoolDetails() {
                 </div>
               )}
 
-              {/* Countdown Timer - only shows when pool is locked */}
-              {pool.status === 'locked' && countdown !== null && (
-                <div className="mt-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center">
-                  <div className="text-xs text-yellow-500 font-tech uppercase tracking-widest mb-2">
-                    Event Horizon Countdown
-                  </div>
-                  {countdown > 0 ? (
-                    <div className="text-3xl font-mono font-bold text-yellow-400">
-                      {Math.floor(countdown / 60).toString().padStart(2, '0')}:
-                      {(countdown % 60).toString().padStart(2, '0')}
-                    </div>
-                  ) : (
-                    <div className="text-lg font-bold text-yellow-400">
-                      Lock expired - awaiting resolution
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Waiting for players - when pool is open */}
-              {pool.status === 'open' && (
-                <div className="mt-6 p-4 bg-primary/10 border border-primary/30 rounded-lg text-center">
-                  <div className="text-xs text-primary font-tech uppercase tracking-widest mb-2">
-                    Waiting for players
-                  </div>
-                  <div className="text-lg font-mono text-primary">
-                    {pool.participantsCount || 0} / {pool.maxParticipants} joined
-                  </div>
-                </div>
-              )}
             </div>
 
           </div>
