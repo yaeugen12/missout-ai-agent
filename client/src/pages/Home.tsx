@@ -2,7 +2,6 @@ import { useState, useCallback } from "react";
 import { usePools } from "@/hooks/use-pools";
 import { PoolCard } from "@/components/PoolCard";
 import { PoolFilters } from "@/components/PoolFilters";
-import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Loader2, LayoutGrid, Atom } from "lucide-react";
 import { Link } from "wouter";
@@ -22,9 +21,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-grid-pattern">
-      <Navbar />
-      
+    <div className="bg-grid-pattern">
       <main className="container mx-auto px-4 py-12">
         <DevnetReadiness />
 
