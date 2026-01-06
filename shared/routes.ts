@@ -116,6 +116,24 @@ export const api = {
         429: z.object({ message: z.string(), cooldownEnds: z.string().optional() }),
       },
     },
+    transactions: {
+      method: 'GET' as const,
+      path: '/api/profile/:wallet/transactions',
+      responses: {
+        200: z.array(z.object({
+          id: z.number(),
+          poolId: z.number(),
+          walletAddress: z.string(),
+          type: z.string(),
+          amount: z.number(),
+          txHash: z.string().nullable(),
+          timestamp: z.string(),
+          pool: z.object({
+            tokenSymbol: z.string(),
+          })
+        })),
+      },
+    },
   },
 };
 

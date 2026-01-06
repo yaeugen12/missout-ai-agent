@@ -131,6 +131,29 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(transactions).where(eq(transactions.poolId, poolId));
   }
 
+  async getWalletTransactions(walletAddress: string) {
+    return await db.transaction(async (tx) => {
+      const results = await tx.select({
+        id: transactions.id,
+        poolId: transactions.id,
+        walletAddress: transactions.walletAddress,
+        type: transactions.type,
+        amount: transactions.amount,
+        txHash: transactions.txHash,
+        timestamp: transactions.timestamp,
+        pool: {
+          tokenSymbol: pools.tokenSymbol
+        }
+      })
+      .from(transactions)
+      .innerJoin(pools, eq(transactions.poolId, pools.id))
+      .where(eq(transactions.walletAddress, walletAddress))
+      .orderBy(desc(transactions.timestamp));
+      
+      return results;
+    });
+  }
+
   async getLeaderboard() {
     // Mock implementation for MVP using simple aggregations
     // Real impl would be complex SQL

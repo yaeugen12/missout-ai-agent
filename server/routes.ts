@@ -130,7 +130,8 @@ export async function registerRoutes(
         poolId: pool.id,
         walletAddress: input.creatorWallet,
         type: 'JOIN',
-        amount: pool.entryAmount
+        amount: pool.entryAmount,
+        txHash: input.txHash
       });
 
       res.status(201).json(pool);
@@ -186,7 +187,8 @@ export async function registerRoutes(
         poolId: id,
         walletAddress: input.walletAddress,
         type: 'JOIN',
-        amount: pool.entryAmount
+        amount: pool.entryAmount,
+        txHash: input.txHash
       });
 
       // Return updated pool data
@@ -233,7 +235,8 @@ export async function registerRoutes(
         poolId: id,
         walletAddress: input.walletAddress,
         type: 'DONATE',
-        amount: input.amount
+        amount: input.amount,
+        txHash: input.txHash
       });
 
       // Return updated pool data
@@ -422,6 +425,17 @@ export async function registerRoutes(
       }
       console.error("[Profile] Update error:", err);
       res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  app.get(api.profiles.transactions.path, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+      const txs = await storage.getWalletTransactions(wallet);
+      res.json(txs);
+    } catch (err) {
+      console.error("[Profile] Transactions error:", err);
+      res.status(500).json({ message: "Failed to fetch transactions" });
     }
   });
 

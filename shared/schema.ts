@@ -43,6 +43,7 @@ export const transactions = pgTable("transactions", {
   walletAddress: text("wallet_address").notNull(),
   type: text("type").notNull(), // JOIN, DONATE
   amount: doublePrecision("amount").notNull(),
+  txHash: text("tx_hash"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
