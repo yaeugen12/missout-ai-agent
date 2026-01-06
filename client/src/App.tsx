@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletProvider } from "@/components/WalletProvider";
 import { initConnection } from "./lib/solana-sdk/connection";
+import { Navbar } from "@/components/Navbar";
 
 // Initialize connection as early as possible
 initConnection().catch(console.error);
@@ -41,14 +42,19 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WalletProvider>
-          <Toaster />
-          <Router />
-        </WalletProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <WalletProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div className="min-h-screen bg-black text-white selection:bg-primary/30">
+            <Navbar />
+            <main className="container mx-auto px-4 py-8">
+              <Router />
+            </main>
+            <Toaster />
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </WalletProvider>
   );
 }
 

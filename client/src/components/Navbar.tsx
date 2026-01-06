@@ -58,8 +58,8 @@ export function Navbar() {
             <Link href="/" className="group flex items-center gap-2">
               <div className="relative">
                 <div className="absolute inset-0 bg-primary blur opacity-50 group-hover:opacity-100 transition-opacity" />
-                <div className="relative h-8 w-8 bg-black border border-primary flex items-center justify-center">
-                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                <div className="relative h-8 w-8 bg-black border border-primary flex items-center justify-center overflow-hidden">
+                  <div className="w-full h-full bg-[radial-gradient(circle,rgba(0,243,255,0.4)_0%,transparent_70%)] animate-pulse" />
                 </div>
               </div>
               <span className="text-xl font-display font-bold text-white tracking-widest group-hover:text-primary transition-colors">
@@ -97,7 +97,7 @@ export function Navbar() {
                   data-testid="button-wallet-dropdown"
                 >
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src={profile?.displayAvatar} alt={profile?.displayName} />
+                    <AvatarImage src={profile?.avatarUrl || profile?.displayAvatar} alt={profile?.displayName} className="object-cover" />
                     <AvatarFallback className="bg-green-500/20 text-green-500 text-[10px]">
                       {address.slice(0, 2)}
                     </AvatarFallback>
@@ -118,32 +118,18 @@ export function Navbar() {
                 className="w-80 bg-black/95 border-white/10"
                 data-testid="dropdown-wallet-content"
               >
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {address.slice(0, 8)}...{address.slice(-8)}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-6 w-6"
-                      onClick={copyAddress}
-                      data-testid="button-copy-address"
-                    >
-                      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-6 w-6"
-                      onClick={refresh}
-                      disabled={isLoading}
-                      data-testid="button-refresh-balances"
-                    >
-                      <RefreshCw className={cn("w-3 h-3", isLoading && "animate-spin")} />
-                    </Button>
+                <div className="px-3 py-3 border-b border-white/5 mb-1">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10 border border-primary/20">
+                      <AvatarImage src={profile?.avatarUrl || profile?.displayAvatar} className="object-cover" />
+                      <AvatarFallback className="bg-primary/10">MO</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-medium truncate">{profile?.displayName || "Anonymous User"}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">{address}</span>
+                    </div>
                   </div>
-                </DropdownMenuLabel>
+                </div>
 
                 <DropdownMenuSeparator className="bg-white/10" />
 
