@@ -487,8 +487,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             {/* Entry Box (Full width but limited to make room for vortex) */}
             <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md w-[55%] z-20">
               <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
-              <div className="text-lg font-mono font-black text-white leading-none mb-1">{pool.entryAmount.toLocaleString()}</div>
-              <div className="text-xs text-primary/80 font-bold tracking-tight">{pool.tokenSymbol}</div>
+              <div className="text-lg font-mono font-black text-white leading-none">{pool.entryAmount.toLocaleString()}</div>
             </div>
 
             {/* Vortex with integrated Pool Size text */}
