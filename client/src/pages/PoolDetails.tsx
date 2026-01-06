@@ -6,7 +6,7 @@ import { useParams } from "wouter";
 import { usePool } from "@/hooks/use-pools";
 import { useWallet } from "@/hooks/use-wallet";
 import { Navbar } from "@/components/Navbar";
-import { BlackHoleCore } from "@/components/BlackHoleCore";
+import { BlackHoleExperience } from "@/components/BlackHoleExperience";
 import { RouletteReveal } from "@/components/RouletteReveal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -409,14 +409,18 @@ export default function PoolDetails() {
       <div className="relative h-[100vh] flex flex-col items-center justify-center border-b border-white/10 pt-28 overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.08)_0%,transparent_80%)]" />
         
-        {/* Black Hole Visual - Fully visible and clean */}
+        {/* Black Hole Visual with Orbiting Avatars */}
         <div className="relative z-10 w-full flex-1 flex items-center justify-center mt-16">
-          <div className="w-[480px] h-[480px] md:w-[580px] md:h-[580px]">
-            <BlackHoleCore 
-              intensity={(pool.participantsCount ?? 0) / pool.maxParticipants} 
-              status={pool.status} 
-            />
-          </div>
+          <BlackHoleExperience
+            status={pool.status}
+            participants={(pool as any).participants || []}
+            maxParticipants={pool.maxParticipants}
+            lockEndTime={pool.lockStartTime ? new Date((pool.lockStartTime * 1000) + (pool.lockDuration * 60 * 1000)) : null}
+            winnerWallet={pool.winnerWallet}
+            prizeAmount={pool.totalPot || 0}
+            tokenSymbol={pool.tokenSymbol}
+            payoutTxHash={(pool as any).payoutTxHash}
+          />
         </div>
 
         {/* Content Overlay - Moved completely below the visual */}

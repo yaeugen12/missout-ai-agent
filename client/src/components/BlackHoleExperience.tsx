@@ -12,6 +12,7 @@ interface Participant {
   id: number;
   walletAddress: string;
   avatar?: string | null;
+  displayAvatar?: string | null;
   displayName?: string;
 }
 
@@ -43,13 +44,13 @@ export function BlackHoleExperience({
   const normalizedStatus = status.toUpperCase();
   
   const phase: BlackHolePhase = useMemo(() => {
-    if (normalizedStatus === "ENDED" || normalizedStatus === "WINNER") {
+    if (normalizedStatus === "ENDED" || normalizedStatus === "WINNER" || normalizedStatus === "WINNERSELECTED") {
       return "reveal";
     }
-    if (normalizedStatus === "RANDOMNESS") {
+    if (normalizedStatus === "RANDOMNESS" || normalizedStatus === "PROCESSING") {
       return "randomness";
     }
-    if (normalizedStatus === "LOCKED") {
+    if (normalizedStatus === "LOCKED" || normalizedStatus === "FULL") {
       return "countdown";
     }
     return "orbit";

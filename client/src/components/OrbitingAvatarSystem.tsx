@@ -7,6 +7,7 @@ interface Participant {
   id: number;
   walletAddress: string;
   avatar?: string | null;
+  displayAvatar?: string | null;
   displayName?: string;
 }
 
@@ -131,7 +132,7 @@ export function OrbitingAvatarSystem({
                 >
                   <OrbitingAvatar
                     walletAddress={participant.walletAddress}
-                    avatar={participant.avatar}
+                    avatar={participant.displayAvatar || participant.avatar}
                     displayName={participant.displayName}
                     isWinner={isWinner}
                     phase={phase}

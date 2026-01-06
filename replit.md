@@ -70,6 +70,15 @@ The frontend SDK provides direct smart contract interactions:
 - **Shared Types**: Types and schemas in shared/ directory are used by both frontend and backend
 - **API Contract**: shared/routes.ts defines the complete API contract with Zod schemas for validation
 
+### Black Hole Animation System (client/src/components/)
+Interactive animated experience for pool lifecycle with Framer Motion:
+- **BlackHoleExperience**: Main wrapper orchestrating all animation phases based on pool status
+- **OrbitingAvatarSystem**: Participant avatars orbit around the black hole; new joiners animate in with staggered positions
+- **CountdownDisplay**: Timer shown in black hole center when pool is locked (full)
+- **RandomnessLoader**: Pulsating animation during winner selection processing
+- **WinnerRevealCard**: Cosmic-themed winner announcement card with avatar, nickname, prize amount
+- **Phase States**: orbit (open) → countdown (locked) → randomness (processing) → reveal (winner selected)
+
 ## External Dependencies
 
 ### Database
