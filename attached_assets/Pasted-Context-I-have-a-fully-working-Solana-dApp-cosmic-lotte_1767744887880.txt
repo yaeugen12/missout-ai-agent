@@ -1,0 +1,249 @@
+Context:
+I have a fully working Solana dApp (cosmic lottery pools) with:
+
+An Anchor on-chain program (already deployed).
+
+A TypeScript/JS SDK that talks to this program (client side + backend usage).
+
+A backend (pool monitor, APIs) and a React frontend with a cosmic / black-hole themed UI.
+
+On-chain, the program already implements both:
+
+claim_refund(ctx: Context<ClaimRefund>)
+
+claim_rent(ctx: Context<ClaimRent>)
+
+with all the necessary logic on-chain (including:
+
+5% burn for the creator on refund,
+
+full refund for other participants,
+
+rent reclaim for pool creators
+etc.).
+
+I do not want to change the on-chain logic.
+You are allowed (and encouraged) to use the existing Solana SDK for this project to build and send transactions for claim_refund and claim_rent.
+
+🎯 GOAL
+
+Implement, end-to-end, two user-facing features in the dApp:
+
+Claim Refund – for participants of cancelled pools.
+
+Claim Rent – for creators of pools (to reclaim rent for closed/ended/cancelled pools).
+
+Both should:
+
+Use the existing Anchor program + SDK.
+
+Integrate into the existing cosmic UI / branding.
+
+Reuse existing backend and SDK where it makes sense (for listing pools, statuses, etc.).
+
+1️⃣ CLAIM REFUND – SPECIFIC LOGIC
+
+Business logic (high level):
+
+A pool can be cancelled (by creator, dev, expiration, etc.).
+
+When a pool is in a "Cancelled" state on-chain & in DB, participants are eligible for claim_refund.
+
+When a user presses "Claim Refund":
+
+You must detect all pools where:
+
+pool.status == Cancelled
+
+user’s wallet is in participants list
+
+user has not already claimed refund for that pool
+
+For each such pool, a claim_refund transaction can be sent on-chain using the SDK:
+
+For the creator of the pool:
+
+they lose 5% (burned on-chain as per program logic).
+
+For all other participants:
+
+they get full refund (100% of their stake), as per program logic.
+
+After the transaction confirms, UI should show success and mark that refund as claimed (so it doesn’t appear again).
+
+Implementation expectations:
+
+You can either:
+
+Call backend APIs (if there are existing /api/pools endpoints with pool status + participants),
+or
+
+Use the SDK directly to fetch pool accounts and filter on the client by:
+
+status = Cancelled
+
+contains current wallet in participants
+
+You must build a claimRefund(pool) function that:
+
+builds the Anchor / SDK instruction claim_refund for that pool & user
+
+sends the transaction through the connected wallet
+
+handles success / error and updates local state
+
+Add a "Refunds" section in the UI where the user can:
+
+see a list of eligible pools for refund
+
+show token symbol, amount to refund (if easily computed or fetched), pool id
+
+click a "Claim Refund" button per pool, or a "Claim All" if you want
+
+see status: Pending / Confirmed / Already claimed
+
+Use the cosmic theme (dark, neon, orbital vibe) for the UI:
+
+refund cards with glowing borders
+
+cosmic loading animation while the TX is pending
+
+success toast like:
+"Refund claimed – your tokens escaped the collapsed pool ✨"
+
+2️⃣ CLAIM RENT – SPECIFIC LOGIC
+
+Business logic:
+
+When a creator opens a pool, they pay rent on-chain.
+
+After certain terminal states (Ended / Cancelled / Closed etc. – based on the current on-chain logic), the creator can reclaim rent using claim_rent.
+
+Only the creator wallet of the pool is eligible for claim rent for that pool.
+
+Implementation expectations:
+
+Detect all pools where:
+
+pool.creator == current_wallet
+
+pool is in a final state compatible with claim_rent (Ended, Cancelled, Closed, WinnerSelected, etc. according to how the program is written)
+
+rent has not yet been claimed for that pool
+
+Implement a claimRent(pool) function that:
+
+builds the claim_rent instruction via the existing SDK / Anchor client
+
+sends the transaction via the connected wallet
+
+updates UI / backend to mark rent as claimed
+
+Create a "Rent Claims" section (or tab) in the same "Claims" area:
+
+list all creator pools where rent is claimable
+
+show pool id, estimated rent amount (if known), status
+
+"Claim Rent" button per row
+
+The UI theme should match the rest of the app:
+
+maybe golden / aurora glow to differentiate from refund (which is more bluish)
+
+success toast like:
+"Rent reclaimed – gravitational costs recovered 🔮"
+
+3️⃣ TECHNICAL REQUIREMENTS
+
+Do not modify the on-chain Anchor program.
+
+Use the existing SDK for:
+
+building claim_refund transactions
+
+building claim_rent transactions
+
+optionally fetching pool accounts if needed
+
+If there is already a shared "pool service" on the backend or in /shared or solana-sdk, extend it cleanly rather than duplicating logic.
+
+Keep code type-safe (TypeScript where applicable).
+
+Handle:
+
+wallet not connected
+
+no eligible pools
+
+transaction failures (user rejects, network issues, etc.)
+
+Make sure that once a refund or rent is claimed:
+
+the UI no longer shows it as available
+
+any local or backend cache is updated
+
+4️⃣ FRONTEND UI/UX DETAILS (COSMIC STYLE)
+
+Use the existing brand & style (cosmic, singularity, orbit). For example:
+
+Add a "Claims" section in the main navigation or under user profile/wallet menu.
+
+Inside "Claims":
+
+Tabs or segments: Refunds | Rent
+
+For each pool row:
+
+show:
+
+Pool ID
+
+Token symbol / icon
+
+Amount (if available)
+
+Status label: Cancelled, Ended, etc.
+
+Button: Claim Refund or Claim Rent
+
+Use subtle animations:
+
+loading ring around the button while TX is pending
+
+card glow on hover
+
+small particle effect on success (optional, if easy to integrate)
+
+5️⃣ OUTPUT EXPECTATIONS
+
+Please:
+
+Identify where in the codebase to integrate:
+
+hooks / services for claims (e.g. useClaims, claimService).
+
+UI components for the "Claims" section.
+
+Implement or extend:
+
+SDK usage for claim_refund and claim_rent
+
+Any needed helper functions to find eligible pools.
+
+Implement React components:
+
+<ClaimsPage /> or similar
+
+<RefundClaims />
+
+<RentClaims />
+
+Wire everything to the connected wallet flow:
+
+only show claims if a wallet is connected
+
+handle re-fetch after a successful claim
+
+Keep code clean, modular, and consistent with the existing project structure.

@@ -19,7 +19,8 @@ import {
   Trophy,
   Heart,
   HelpCircle,
-  ChevronRight
+  ChevronRight,
+  ArrowUpFromLine
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -134,10 +135,10 @@ export function GlobalMenu() {
 
           <MenuSection title="User / Wallet">
             <MenuItem 
-              href="/rewards" 
-              icon={Wallet} 
-              label="Refund & Rent Claim"
-              description="Winnings, rent, and refunds"
+              href="/claims" 
+              icon={ArrowUpFromLine} 
+              label="Claim Center"
+              description="Refunds and rent recovery"
               onClose={handleClose}
             />
             <MenuItem 
@@ -147,6 +148,13 @@ export function GlobalMenu() {
               description="Earnings and invited users"
               onClose={handleClose}
             />
+            <MenuItem 
+              href="/rewards" 
+              icon={Trophy} 
+              label="Hall of Fame"
+              description="Top winners and stats"
+              onClose={handleClose}
+            />
           </MenuSection>
 
           <Separator className="bg-white/10" />
@@ -154,7 +162,7 @@ export function GlobalMenu() {
           <MenuSection title="Social">
             <MenuItem 
               href="/leaderboard" 
-              icon={Trophy} 
+              icon={LayoutGrid} 
               label="Leaderboard"
               description="Top winners and referrers"
               onClose={handleClose}

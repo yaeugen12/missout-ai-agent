@@ -60,6 +60,53 @@ export async function registerRoutes(
     res.json(pools);
   });
 
+  app.get("/api/pools/claimable", async (req, res) => {
+    try {
+      const wallet = req.query.wallet as string;
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet address required" });
+      }
+      
+      const allPools = await storage.getPools();
+      
+      const refunds: any[] = [];
+      const rents: any[] = [];
+      
+      for (const pool of allPools) {
+        const participants = await storage.getParticipants(pool.id);
+        const participantWallets = participants.map(p => p.walletAddress);
+        
+        const poolData = {
+          id: pool.id,
+          onChainAddress: pool.onChainAddress,
+          status: pool.status,
+          tokenMint: pool.tokenMint,
+          tokenSymbol: pool.tokenSymbol,
+          tokenLogoUrl: pool.tokenLogoUrl,
+          entryFee: pool.entryFee,
+          creatorWallet: pool.creatorWallet,
+          participants: participantWallets,
+        };
+        
+        if (pool.status === "cancelled" && participantWallets.includes(wallet)) {
+          refunds.push(poolData);
+        }
+        
+        if (
+          pool.creatorWallet === wallet &&
+          ["ended", "cancelled"].includes(pool.status)
+        ) {
+          rents.push(poolData);
+        }
+      }
+      
+      res.json({ refunds, rents });
+    } catch (error) {
+      console.error("Error fetching claimable pools:", error);
+      res.status(500).json({ message: "Failed to fetch claimable pools" });
+    }
+  });
+
   app.get(api.pools.get.path, async (req, res) => {
     const id = Number(req.params.id);
     const pool = await storage.getPool(id);

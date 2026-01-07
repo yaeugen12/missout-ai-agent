@@ -10,6 +10,7 @@ import {
   donateToPool,
   cancelPool,
   claimRefund,
+  claimRent,
   unlockPool,
   requestRandomness,
   selectWinner,
@@ -35,6 +36,7 @@ export interface UseMissoutSDKResult {
   donateToPool: (params: DonateParams) => Promise<{ tx: string }>;
   cancelPool: (poolId: string) => Promise<{ tx: string }>;
   claimRefund: (poolId: string) => Promise<{ tx: string }>;
+  claimRent: (poolId: string, closeTarget: PublicKey) => Promise<{ tx: string }>;
   unlockPool: (poolId: string) => Promise<{ tx: string }>;
   requestRandomness: (poolId: string, randomnessAccount: PublicKey) => Promise<{ tx: string }>;
   selectWinner: (poolId: string, randomnessAccount: PublicKey) => Promise<{ tx: string }>;
@@ -125,6 +127,16 @@ export function useMissoutSDK(): UseMissoutSDKResult {
     [wallet.connected]
   );
 
+  const wrappedClaimRent = useCallback(
+    async (poolId: string, closeTarget: PublicKey) => {
+      if (!wallet.connected) {
+        throw new Error("Wallet not connected");
+      }
+      return claimRent(poolId, closeTarget);
+    },
+    [wallet.connected]
+  );
+
   const wrappedUnlockPool = useCallback(
     async (poolId: string) => {
       if (!wallet.connected) {
@@ -176,6 +188,7 @@ export function useMissoutSDK(): UseMissoutSDKResult {
     donateToPool: wrappedDonateToPool,
     cancelPool: wrappedCancelPool,
     claimRefund: wrappedClaimRefund,
+    claimRent: wrappedClaimRent,
     unlockPool: wrappedUnlockPool,
     requestRandomness: wrappedRequestRandomness,
     selectWinner: wrappedSelectWinner,

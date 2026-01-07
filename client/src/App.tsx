@@ -22,6 +22,7 @@ import Leaderboard from "@/pages/Leaderboard";
 import Referrals from "@/pages/Referrals";
 import Donate from "@/pages/Donate";
 import HowItWorks from "@/pages/HowItWorks";
+import Claims from "@/pages/Claims";
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/referrals" component={Referrals} />
       <Route path="/donate" component={Donate} />
       <Route path="/how-it-works" component={HowItWorks} />
+      <Route path="/claims" component={Claims} />
       <Route component={NotFound} />
     </Switch>
   );
