@@ -125,6 +125,18 @@ export class DatabaseStorage implements IStorage {
   async addParticipant(participant: InsertParticipant): Promise<Participant> {
     // Transaction to add participant and update pool count/pot
     return await db.transaction(async (tx) => {
+      // SECURITY: Check for duplicate participant BEFORE inserting
+      const existingParticipant = await tx.query.participants.findFirst({
+        where: and(
+          eq(participants.poolId, participant.poolId),
+          eq(participants.walletAddress, participant.walletAddress)
+        )
+      });
+      
+      if (existingParticipant) {
+        throw new Error("DUPLICATE_PARTICIPANT: Wallet already joined this pool");
+      }
+      
       const [newParticipant] = await tx.insert(participants).values(participant).returning();
       
       const pool = await tx.query.pools.findFirst({

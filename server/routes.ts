@@ -12,6 +12,114 @@ import bs58 from "bs58";
 import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
+import crypto from "crypto";
+import { Connection } from "@solana/web3.js";
+
+// ===========================================
+// SECURITY: On-Chain Transaction Verification
+// ===========================================
+const solanaConnection = new Connection(
+  process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+  "confirmed"
+);
+
+/**
+ * Verify a transaction exists on-chain and involves the expected wallet
+ * Returns true if transaction is valid and confirmed
+ */
+async function verifyOnChainTransaction(
+  txHash: string, 
+  expectedWallet: string,
+  expectedPoolAddress?: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const tx = await solanaConnection.getTransaction(txHash, {
+      commitment: "confirmed",
+      maxSupportedTransactionVersion: 0
+    });
+    
+    if (!tx) {
+      return { valid: false, error: "Transaction not found on-chain" };
+    }
+    
+    if (tx.meta?.err) {
+      return { valid: false, error: "Transaction failed on-chain" };
+    }
+    
+    // Check if the expected wallet signed or is involved in the transaction
+    const accountKeys = tx.transaction.message.staticAccountKeys.map(k => k.toBase58());
+    
+    if (!accountKeys.includes(expectedWallet)) {
+      return { valid: false, error: "Wallet not found in transaction signers" };
+    }
+    
+    // If pool address provided, verify it's in the transaction
+    if (expectedPoolAddress && !accountKeys.includes(expectedPoolAddress)) {
+      return { valid: false, error: "Pool address not found in transaction" };
+    }
+    
+    return { valid: true };
+  } catch (err: any) {
+    console.error("[SECURITY] On-chain verification error:", err.message);
+    return { valid: false, error: "Failed to verify transaction on-chain" };
+  }
+}
+
+// ===========================================
+// SECURITY: File Upload Hardening
+// ===========================================
+
+// Allowed image types with their magic bytes (file signatures)
+const ALLOWED_IMAGE_TYPES: Record<string, { mimeType: string; magicBytes: number[][] }> = {
+  '.jpg': { mimeType: 'image/jpeg', magicBytes: [[0xFF, 0xD8, 0xFF]] },
+  '.jpeg': { mimeType: 'image/jpeg', magicBytes: [[0xFF, 0xD8, 0xFF]] },
+  '.png': { mimeType: 'image/png', magicBytes: [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]] },
+  '.gif': { mimeType: 'image/gif', magicBytes: [[0x47, 0x49, 0x46, 0x38, 0x37, 0x61], [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]] },
+  '.webp': { mimeType: 'image/webp', magicBytes: [[0x52, 0x49, 0x46, 0x46]] }, // RIFF header
+};
+
+// Validate file content matches claimed type
+async function validateImageContent(filePath: string, claimedMimeType: string): Promise<boolean> {
+  try {
+    const buffer = Buffer.alloc(12);
+    const fileHandle = await fs.open(filePath, 'r');
+    await fileHandle.read(buffer, 0, 12, 0);
+    await fileHandle.close();
+
+    // Find expected magic bytes for this mime type
+    for (const [ext, config] of Object.entries(ALLOWED_IMAGE_TYPES)) {
+      if (config.mimeType === claimedMimeType) {
+        for (const magic of config.magicBytes) {
+          let matches = true;
+          for (let i = 0; i < magic.length; i++) {
+            if (buffer[i] !== magic[i]) {
+              matches = false;
+              break;
+            }
+          }
+          if (matches) return true;
+        }
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Sanitize filename to prevent path traversal and injection attacks
+function sanitizeFilename(originalName: string): string {
+  // Remove path components
+  const basename = path.basename(originalName);
+  // Remove dangerous characters, keep only alphanumeric, dots, underscores, hyphens
+  const sanitized = basename.replace(/[^a-zA-Z0-9._-]/g, '');
+  // Ensure extension is valid
+  const ext = path.extname(sanitized).toLowerCase();
+  if (!ALLOWED_IMAGE_TYPES[ext]) {
+    return ''; // Invalid extension
+  }
+  return sanitized;
+}
 
 // Setup upload directory
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
@@ -25,33 +133,79 @@ const storage_multer = multer.diskStorage({
     }
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    // Generate secure random filename to prevent guessing
+    const randomId = crypto.randomBytes(16).toString('hex');
+    const ext = path.extname(file.originalname).toLowerCase();
+    // Validate extension
+    if (!ALLOWED_IMAGE_TYPES[ext]) {
+      return cb(new Error('Invalid file extension'), '');
+    }
+    cb(null, `${randomId}${ext}`);
   }
 });
 
 const upload = multer({ 
   storage: storage_multer,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: { 
+    fileSize: 2 * 1024 * 1024, // 2MB max
+    files: 1 // Only 1 file per request
+  },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not an image!'));
+    // Check mime type
+    const allowedMimes = Object.values(ALLOWED_IMAGE_TYPES).map(t => t.mimeType);
+    if (!allowedMimes.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WEBP allowed.'));
     }
+    // Check extension
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES[ext]) {
+      return cb(new Error('Invalid file extension.'));
+    }
+    // Verify extension matches mime type
+    if (ALLOWED_IMAGE_TYPES[ext].mimeType !== file.mimetype) {
+      return cb(new Error('File extension does not match content type.'));
+    }
+    cb(null, true);
   }
 });
+
+// ===========================================
+// SECURITY: Wallet Signature Verification
+// ===========================================
+function verifyWalletSignature(walletAddress: string, message: string, signature: string): boolean {
+  try {
+    const publicKey = bs58.decode(walletAddress);
+    const messageBytes = new TextEncoder().encode(message);
+    const signatureBytes = bs58.decode(signature);
+    return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKey);
+  } catch {
+    return false;
+  }
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Upload Endpoint
-  app.post("/api/upload", upload.single('file'), (req, res) => {
+  // Upload Endpoint with security validation
+  app.post("/api/upload", upload.single('file'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
+
+    // SECURITY: Validate actual file content matches claimed mime type
+    const isValidContent = await validateImageContent(req.file.path, req.file.mimetype);
+    if (!isValidContent) {
+      // Delete the invalid file
+      try {
+        await fs.unlink(req.file.path);
+      } catch {}
+      console.log("[SECURITY] Rejected upload - content does not match mime type");
+      return res.status(400).json({ message: "Invalid file content. File does not appear to be a valid image." });
+    }
+
     const publicUrl = `/uploads/${req.file.filename}`;
+    console.log("[UPLOAD] Accepted file:", req.file.filename);
     res.json({ url: publicUrl });
   });
   // Pools
@@ -112,14 +266,69 @@ export async function registerRoutes(
     }
   });
 
-  // Mark refund as claimed
+  // Mark refund as claimed - SECURITY: Requires wallet signature + on-chain tx proof
   app.post("/api/pools/:poolId/claim-refund", async (req, res) => {
     try {
       const poolId = Number(req.params.poolId);
-      const { wallet } = req.body;
+      const { wallet, txHash, signature, message } = req.body;
 
       if (!wallet) {
         return res.status(400).json({ message: "Wallet address required" });
+      }
+
+      // SECURITY: Require cryptographic signature to prove wallet ownership
+      if (!signature || !message) {
+        console.log("[SECURITY] Claim refund rejected - missing signature");
+        return res.status(400).json({ message: "Wallet signature required to prove ownership" });
+      }
+
+      // Verify the signature proves wallet ownership
+      if (!verifyWalletSignature(wallet, message, signature)) {
+        console.log("[SECURITY] Claim refund rejected - invalid signature");
+        return res.status(401).json({ message: "Invalid wallet signature" });
+      }
+
+      // Validate message contains expected claim info (prevent replay attacks)
+      const expectedMessagePattern = `claim-refund:${poolId}:`;
+      if (!message.startsWith(expectedMessagePattern)) {
+        console.log("[SECURITY] Claim refund rejected - invalid message format");
+        return res.status(400).json({ message: "Invalid claim message format" });
+      }
+
+      // SECURITY: Require transaction hash as proof of on-chain claim
+      if (!txHash) {
+        console.log("[SECURITY] Claim refund rejected - no txHash provided");
+        return res.status(400).json({ message: "Transaction hash required as proof of on-chain claim" });
+      }
+
+      // Validate txHash format
+      if (!txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
+        return res.status(400).json({ message: "Invalid transaction signature format" });
+      }
+
+      // Get pool to verify on-chain
+      const pool = await storage.getPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      // SECURITY: Verify transaction exists on-chain and involves the wallet + pool
+      const onChainVerification = await verifyOnChainTransaction(txHash, wallet, pool.poolAddress || undefined);
+      if (!onChainVerification.valid) {
+        console.log("[SECURITY] Claim refund rejected - on-chain verification failed:", onChainVerification.error);
+        return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
+      }
+
+      // Verify participant exists and hasn't already claimed
+      const participantsList = await storage.getParticipants(poolId);
+      const participant = participantsList.find(p => p.walletAddress === wallet);
+      
+      if (!participant) {
+        return res.status(404).json({ message: "Participant not found in this pool" });
+      }
+      
+      if (participant.refundClaimed) {
+        return res.status(409).json({ message: "Refund already claimed" });
       }
 
       const result = await storage.markRefundClaimed(poolId, wallet);
@@ -128,6 +337,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Participant not found" });
       }
 
+      console.log("[CLAIM] Refund marked as claimed (on-chain verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking refund as claimed:", error);
@@ -135,10 +345,67 @@ export async function registerRoutes(
     }
   });
 
-  // Mark rent as claimed
+  // Mark rent as claimed - SECURITY: Requires wallet signature + creator verification + on-chain tx proof
   app.post("/api/pools/:poolId/claim-rent", async (req, res) => {
     try {
       const poolId = Number(req.params.poolId);
+      const { wallet, txHash, signature, message } = req.body;
+
+      // SECURITY: Require wallet and txHash
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet address required" });
+      }
+
+      // SECURITY: Require cryptographic signature to prove wallet ownership
+      if (!signature || !message) {
+        console.log("[SECURITY] Claim rent rejected - missing signature");
+        return res.status(400).json({ message: "Wallet signature required to prove ownership" });
+      }
+
+      // Verify the signature proves wallet ownership
+      if (!verifyWalletSignature(wallet, message, signature)) {
+        console.log("[SECURITY] Claim rent rejected - invalid signature");
+        return res.status(401).json({ message: "Invalid wallet signature" });
+      }
+
+      // Validate message contains expected claim info (prevent replay attacks)
+      const expectedMessagePattern = `claim-rent:${poolId}:`;
+      if (!message.startsWith(expectedMessagePattern)) {
+        console.log("[SECURITY] Claim rent rejected - invalid message format");
+        return res.status(400).json({ message: "Invalid claim message format" });
+      }
+
+      if (!txHash) {
+        console.log("[SECURITY] Claim rent rejected - no txHash provided");
+        return res.status(400).json({ message: "Transaction hash required as proof of on-chain claim" });
+      }
+
+      // Validate txHash format
+      if (!txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
+        return res.status(400).json({ message: "Invalid transaction signature format" });
+      }
+
+      // SECURITY: Verify caller is the pool creator
+      const pool = await storage.getPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      if (pool.creatorWallet !== wallet) {
+        console.log("[SECURITY] Claim rent rejected - not creator:", { wallet, creator: pool.creatorWallet });
+        return res.status(403).json({ message: "Only pool creator can claim rent" });
+      }
+
+      if (pool.rentClaimed) {
+        return res.status(409).json({ message: "Rent already claimed" });
+      }
+
+      // SECURITY: Verify transaction exists on-chain and involves the wallet + pool
+      const onChainVerification = await verifyOnChainTransaction(txHash, wallet, pool.poolAddress || undefined);
+      if (!onChainVerification.valid) {
+        console.log("[SECURITY] Claim rent rejected - on-chain verification failed:", onChainVerification.error);
+        return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
+      }
 
       const result = await storage.markRentClaimed(poolId);
 
@@ -146,6 +413,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Pool not found" });
       }
 
+      console.log("[CLAIM] Rent marked as claimed (verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking rent as claimed:", error);
@@ -269,12 +537,22 @@ export async function registerRoutes(
 
       console.log("[JOIN] Valid join:", { txHash: input.txHash?.substring(0, 20) + "...", wallet: input.walletAddress });
 
-      const participant = await storage.addParticipant({
-        poolId: id,
-        walletAddress: input.walletAddress,
-        avatar: input.avatar,
-        txHash: input.txHash // Save txHash to participant record
-      });
+      let participant;
+      try {
+        participant = await storage.addParticipant({
+          poolId: id,
+          walletAddress: input.walletAddress,
+          avatar: input.avatar,
+          txHash: input.txHash // Save txHash to participant record
+        });
+      } catch (err: any) {
+        // SECURITY: Handle duplicate participant error
+        if (err.message?.includes("DUPLICATE_PARTICIPANT")) {
+          console.log("[SECURITY] Blocked duplicate join attempt:", input.walletAddress);
+          return res.status(409).json({ message: "You have already joined this pool" });
+        }
+        throw err;
+      }
 
       // Add join transaction
       await storage.addTransaction({
