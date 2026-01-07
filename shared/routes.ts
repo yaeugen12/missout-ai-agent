@@ -79,6 +79,38 @@ export const api = {
         }),
       },
     },
+    winners: {
+      method: 'GET' as const,
+      path: '/api/leaderboard/winners',
+      responses: {
+        200: z.array(z.object({
+          wallet: z.string(),
+          winsCount: z.number(),
+          totalTokensWon: z.number(),
+          totalUsdWon: z.number(),
+          biggestWinTokens: z.number(),
+          biggestWinUsd: z.number(),
+          lastWinAt: z.string().nullable(),
+          tokenMint: z.string().nullable(),
+          tokenSymbol: z.string().nullable(),
+        })),
+      },
+    },
+    referrers: {
+      method: 'GET' as const,
+      path: '/api/leaderboard/referrers',
+      responses: {
+        200: z.array(z.object({
+          wallet: z.string(),
+          referralsCount: z.number(),
+          totalTokensEarned: z.number(),
+          totalUsdEarned: z.number(),
+          activeReferrals: z.number(),
+          firstReferralAt: z.string().nullable(),
+          lastReferralAt: z.string().nullable(),
+        })),
+      },
+    },
   },
   profiles: {
     get: {

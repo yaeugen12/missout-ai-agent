@@ -33,7 +33,7 @@ export function Navbar() {
     { href: "/initialize", label: "Initialize", icon: Plus },
     { href: "/terminal", label: "Pool Terminal", icon: Atom },
     { href: "/discovery", label: "Discovery (V2-soon)", icon: Terminal },
-    { href: "/rewards", label: "Rewards", icon: Trophy },
+    { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ];
 
   const copyAddress = () => {

@@ -30,6 +30,29 @@ export interface IStorage {
     topReferrers: { wallet: string; referrals: number }[];
   }>;
 
+  // New detailed leaderboard endpoints
+  getTopWinners(limit?: number): Promise<Array<{
+    wallet: string;
+    winsCount: number;
+    totalTokensWon: number;
+    totalUsdWon: number;
+    biggestWinTokens: number;
+    biggestWinUsd: number;
+    lastWinAt: Date | null;
+    tokenMint: string | null;
+    tokenSymbol: string | null;
+  }>>;
+
+  getTopReferrers(limit?: number): Promise<Array<{
+    wallet: string;
+    referralsCount: number;
+    totalTokensEarned: number;
+    totalUsdEarned: number;
+    activeReferrals: number;
+    firstReferralAt: Date | null;
+    lastReferralAt: Date | null;
+  }>>;
+
   // Profiles
   getProfile(walletAddress: string): Promise<Profile | undefined>;
   getOrCreateNonce(walletAddress: string): Promise<string>;
@@ -177,21 +200,75 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLeaderboard() {
-    // Mock implementation for MVP using simple aggregations
-    // Real impl would be complex SQL
-    const topWinners = [
-      { wallet: "8xqt...3f9a", totalWon: 150.5 },
-      { wallet: "Ab2d...9k12", totalWon: 80.0 },
-      { wallet: "5f3a...1b9c", totalWon: 45.2 },
-    ];
-    
-    const topReferrers = [
-      { wallet: "9y1m...2p8z", referrals: 42 },
-      { wallet: "3k9c...7h4x", referrals: 28 },
-      { wallet: "7j2n...5r1q", referrals: 15 },
-    ];
+    // Use real data from new methods
+    const topWinners = await this.getTopWinners(10);
+    const topReferrers = await this.getTopReferrers(10);
 
-    return { topWinners, topReferrers };
+    return { 
+      topWinners: topWinners.map(w => ({ wallet: w.wallet, totalWon: w.totalTokensWon })),
+      topReferrers: topReferrers.map(r => ({ wallet: r.wallet, referrals: r.referralsCount }))
+    };
+  }
+
+  async getTopWinners(limit: number = 20) {
+    // Query pools with winners, aggregate by wallet
+    const result = await db.execute(sql`
+      SELECT 
+        winner_wallet as wallet,
+        COUNT(*)::int as wins_count,
+        COALESCE(SUM(total_pot), 0)::float as total_tokens_won,
+        COALESCE(MAX(total_pot), 0)::float as biggest_win_tokens,
+        MAX(end_time) as last_win_at,
+        token_mint,
+        token_symbol
+      FROM pools
+      WHERE winner_wallet IS NOT NULL 
+        AND status = 'ended'
+      GROUP BY winner_wallet, token_mint, token_symbol
+      ORDER BY total_tokens_won DESC
+      LIMIT ${limit}
+    `);
+
+    return (result.rows as any[]).map(row => ({
+      wallet: row.wallet as string,
+      winsCount: row.wins_count as number,
+      totalTokensWon: row.total_tokens_won as number,
+      totalUsdWon: 0, // Would need price API integration
+      biggestWinTokens: row.biggest_win_tokens as number,
+      biggestWinUsd: 0, // Would need price API integration
+      lastWinAt: row.last_win_at as Date | null,
+      tokenMint: row.token_mint as string | null,
+      tokenSymbol: row.token_symbol as string | null,
+    }));
+  }
+
+  async getTopReferrers(limit: number = 20) {
+    // Query referral_relations and referral_rewards
+    const result = await db.execute(sql`
+      SELECT 
+        rr.referrer_wallet as wallet,
+        COUNT(DISTINCT rr.referred_wallet)::int as referrals_count,
+        COALESCE(SUM(
+          (COALESCE(rew.amount_pending, '0')::numeric + COALESCE(rew.amount_claimed, '0')::numeric) / 1e9
+        ), 0)::float as total_tokens_earned,
+        MIN(rr.created_at) as first_referral_at,
+        MAX(rr.created_at) as last_referral_at
+      FROM referral_relations rr
+      LEFT JOIN referral_rewards rew ON rr.referrer_wallet = rew.referrer_wallet
+      GROUP BY rr.referrer_wallet
+      ORDER BY referrals_count DESC
+      LIMIT ${limit}
+    `);
+
+    return (result.rows as any[]).map(row => ({
+      wallet: row.wallet as string,
+      referralsCount: row.referrals_count as number,
+      totalTokensEarned: row.total_tokens_earned as number,
+      totalUsdEarned: 0, // Would need price API integration
+      activeReferrals: 0, // Could be computed with additional query
+      firstReferralAt: row.first_referral_at as Date | null,
+      lastReferralAt: row.last_referral_at as Date | null,
+    }));
   }
 
   // Profile methods

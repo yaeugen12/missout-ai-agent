@@ -149,20 +149,8 @@ export function GlobalMenu() {
               onClose={handleClose}
             />
             <MenuItem 
-              href="/rewards" 
-              icon={Trophy} 
-              label="Hall of Fame"
-              description="Top winners and stats"
-              onClose={handleClose}
-            />
-          </MenuSection>
-
-          <Separator className="bg-white/10" />
-
-          <MenuSection title="Social">
-            <MenuItem 
               href="/leaderboard" 
-              icon={LayoutGrid} 
+              icon={Trophy} 
               label="Leaderboard"
               description="Top winners and referrers"
               onClose={handleClose}

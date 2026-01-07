@@ -359,6 +359,36 @@ export async function registerRoutes(
     res.json(data);
   });
 
+  // Detailed leaderboard endpoints
+  app.get(api.leaderboard.winners.path, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const winners = await storage.getTopWinners(Math.min(limit, 100));
+      res.json(winners.map(w => ({
+        ...w,
+        lastWinAt: w.lastWinAt?.toISOString() || null,
+      })));
+    } catch (error) {
+      console.error("Error fetching top winners:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get(api.leaderboard.referrers.path, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const referrers = await storage.getTopReferrers(Math.min(limit, 100));
+      res.json(referrers.map(r => ({
+        ...r,
+        firstReferralAt: r.firstReferralAt?.toISOString() || null,
+        lastReferralAt: r.lastReferralAt?.toISOString() || null,
+      })));
+    } catch (error) {
+      console.error("Error fetching top referrers:", error);
+      res.status(500).json({ message: "Failed to fetch leaderboard" });
+    }
+  });
+
   // Token Discovery API
   app.get("/api/discovery/tokens", async (req, res) => {
     try {
