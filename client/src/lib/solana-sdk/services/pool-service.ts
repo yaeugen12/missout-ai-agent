@@ -1075,8 +1075,8 @@ export async function claimRefundsBatch(
     const chunkPoolIds = chunk.map(c => c.poolId);
     
     try {
-      chunk.forEach(c => onProgress?.({ 
-        current: i + chunk.indexOf(c) + 1, 
+      chunk.forEach((c, idx) => onProgress?.({ 
+        current: i + idx + 1, 
         total: builtInstructions.length, 
         poolId: c.poolId, 
         status: 'sending' 
@@ -1085,15 +1085,15 @@ export async function claimRefundsBatch(
       const sig = await client.buildAndSendTransaction(chunk.map(c => c.instruction));
       console.log(`BATCH_CLAIM_REFUNDS TX (${chunkPoolIds.join(', ')}):`, sig);
 
-      chunkPoolIds.forEach(poolId => {
+      chunkPoolIds.forEach((poolId, idx) => {
         results.push({ poolId, success: true, tx: sig });
-        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
+        onProgress?.({ current: i + idx + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
       });
     } catch (error: any) {
       console.error(`Batch refund claim failed for chunk:`, error);
-      chunkPoolIds.forEach(poolId => {
+      chunkPoolIds.forEach((poolId, idx) => {
         results.push({ poolId, success: false, error: error.message });
-        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'failed' });
+        onProgress?.({ current: i + idx + 1, total: builtInstructions.length, poolId, status: 'failed' });
       });
     }
   }
@@ -1133,8 +1133,8 @@ export async function claimRentsBatch(
     const chunkPoolIds = chunk.map(c => c.poolId);
     
     try {
-      chunk.forEach(c => onProgress?.({ 
-        current: i + chunk.indexOf(c) + 1, 
+      chunk.forEach((c, idx) => onProgress?.({ 
+        current: i + idx + 1, 
         total: builtInstructions.length, 
         poolId: c.poolId, 
         status: 'sending' 
@@ -1143,15 +1143,15 @@ export async function claimRentsBatch(
       const sig = await client.buildAndSendTransaction(chunk.map(c => c.instruction));
       console.log(`BATCH_CLAIM_RENTS TX (${chunkPoolIds.join(', ')}):`, sig);
 
-      chunkPoolIds.forEach(poolId => {
+      chunkPoolIds.forEach((poolId, idx) => {
         results.push({ poolId, success: true, tx: sig });
-        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
+        onProgress?.({ current: i + idx + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
       });
     } catch (error: any) {
       console.error(`Batch rent claim failed for chunk:`, error);
-      chunkPoolIds.forEach(poolId => {
+      chunkPoolIds.forEach((poolId, idx) => {
         results.push({ poolId, success: false, error: error.message });
-        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'failed' });
+        onProgress?.({ current: i + idx + 1, total: builtInstructions.length, poolId, status: 'failed' });
       });
     }
   }
