@@ -1,6 +1,7 @@
 import { db } from "../db";
-import { pools } from "@shared/schema";
+import { pools, transactions } from "@shared/schema";
 import { eq, not, inArray } from "drizzle-orm";
+import { storage } from "../storage";
 import {
   fetchPoolStateOnChain,
   unlockPoolOnChain,
@@ -319,6 +320,24 @@ export class PoolMonitor {
           endTime: new Date()
         })
         .where(eq(pools.id, pool.id));
+
+      // REFERRAL REWARDS: Allocate 1.5% treasury fee among referrers
+      try {
+        if (pool.tokenMint && pool.totalPot) {
+          const TREASURY_FEE_BPS = 150; // 1.5% as basis points
+          const treasuryFeeAmount = Math.floor((pool.totalPot * TREASURY_FEE_BPS) / 10000);
+          
+          // Convert to token units (assuming tokenMint has decimals)
+          // For now, store as raw amount string (backend will handle proper decimal conversion)
+          const feeAmountStr = treasuryFeeAmount.toString();
+          
+          log(`Pool ${pool.id} 💰 Allocating referral rewards: ${feeAmountStr} (1.5% of ${pool.totalPot})`);
+          await storage.allocateReferralRewards(pool.id, pool.tokenMint, feeAmountStr);
+          log(`Pool ${pool.id} ✅ Referral rewards allocated`);
+        }
+      } catch (refErr: any) {
+        log(`Pool ${pool.id} ⚠️ Failed to allocate referral rewards: ${refErr.message}`);
+      }
     } catch (err: any) {
       log(`Pool ${pool.id} ❌ payoutWinner() failed: ${err.message}`);
       this.handleRetry(pool.id, "payout");

@@ -132,6 +132,7 @@ export const referralRewards = pgTable("referral_rewards", {
   amountPending: text("amount_pending").default("0"),
   amountClaimed: text("amount_claimed").default("0"),
   lastUpdated: timestamp("last_updated").defaultNow(),
+  lastClaimTimestamp: bigint("last_claim_timestamp", { mode: "number" }),
 }, (table) => ({
   uniqueReferrerMint: unique().on(table.referrerWallet, table.tokenMint),
 }));

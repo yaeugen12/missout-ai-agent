@@ -480,6 +480,171 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // REFERRAL SYSTEM ROUTES
+  // ============================================
+
+  app.get("/api/referrals/link/:wallet", async (req, res) => {
+    const wallet = req.params.wallet;
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : "https://missout.app";
+    
+    const referralLink = `${baseUrl}?ref=${wallet}`;
+    res.json({ link: referralLink, wallet });
+  });
+
+  app.post("/api/referrals/register", async (req, res) => {
+    try {
+      const { referredWallet, referrerWallet, source } = req.body;
+      
+      if (!referredWallet || !referrerWallet) {
+        return res.status(400).json({ message: "Missing wallet addresses" });
+      }
+
+      if (referredWallet === referrerWallet) {
+        return res.status(400).json({ message: "Cannot refer yourself" });
+      }
+
+      const existing = await storage.getReferralRelation(referredWallet);
+      if (existing) {
+        return res.json({ 
+          success: false, 
+          message: "Already has a referrer",
+          referrer: existing.referrerWallet
+        });
+      }
+
+      const relation = await storage.createReferralRelation(referredWallet, referrerWallet, source || "link");
+      
+      if (relation) {
+        res.json({ success: true, relation });
+      } else {
+        res.status(400).json({ success: false, message: "Failed to create referral" });
+      }
+    } catch (err) {
+      console.error("[Referral] Register error:", err);
+      res.status(500).json({ message: "Failed to register referral" });
+    }
+  });
+
+  app.get("/api/referrals/check/:wallet", async (req, res) => {
+    const wallet = req.params.wallet;
+    const relation = await storage.getReferralRelation(wallet);
+    res.json({ 
+      hasReferrer: !!relation,
+      referrer: relation?.referrerWallet || null
+    });
+  });
+
+  app.get("/api/referrals/summary/:wallet", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const stats = await storage.getReferralStats(wallet);
+      res.json(stats);
+    } catch (err) {
+      console.error("[Referral] Summary error:", err);
+      res.status(500).json({ message: "Failed to fetch referral summary" });
+    }
+  });
+
+  app.get("/api/referrals/rewards/:wallet", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const rewards = await storage.getReferralRewards(wallet);
+      res.json(rewards);
+    } catch (err) {
+      console.error("[Referral] Rewards error:", err);
+      res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
+  app.get("/api/referrals/invited/:wallet", async (req, res) => {
+    try {
+      const wallet = req.params.wallet;
+      const invited = await storage.getInvitedUsers(wallet);
+      res.json(invited);
+    } catch (err) {
+      console.error("[Referral] Invited error:", err);
+      res.status(500).json({ message: "Failed to fetch invited users" });
+    }
+  });
+
+  app.post("/api/referrals/claim", async (req, res) => {
+    try {
+      const { wallet, tokenMint, signature, message } = req.body;
+      
+      if (!wallet || !tokenMint || !signature || !message) {
+        return res.status(400).json({ message: "Missing required fields (wallet, tokenMint, signature, message)" });
+      }
+
+      // Verify the wallet signature to prove ownership
+      try {
+        const publicKeyBytes = bs58.decode(wallet);
+        const signatureBytes = bs58.decode(signature);
+        const messageBytes = new TextEncoder().encode(message);
+        
+        const isValid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+        
+        if (!isValid) {
+          console.log("[Referral] Claim rejected - invalid signature for wallet:", wallet);
+          return res.status(401).json({ success: false, message: "Invalid signature. Please sign again." });
+        }
+        
+        // Verify the message contains the expected claim data and parse timestamp
+        const expectedPrefix = `Claim referral rewards for ${tokenMint} at `;
+        if (!message.startsWith(expectedPrefix)) {
+          console.log("[Referral] Claim rejected - message mismatch:", message);
+          return res.status(401).json({ success: false, message: "Invalid claim message format." });
+        }
+        
+        // Extract and validate timestamp to prevent replay attacks
+        const timestampStr = message.substring(expectedPrefix.length);
+        const timestamp = parseInt(timestampStr, 10);
+        
+        if (isNaN(timestamp)) {
+          console.log("[Referral] Claim rejected - invalid timestamp:", timestampStr);
+          return res.status(401).json({ success: false, message: "Invalid claim timestamp." });
+        }
+        
+        const now = Date.now();
+        const maxAge = 60 * 1000; // 60 seconds
+        
+        if (now - timestamp > maxAge) {
+          console.log("[Referral] Claim rejected - expired signature, age:", now - timestamp, "ms");
+          return res.status(401).json({ success: false, message: "Signature expired. Please sign again." });
+        }
+        
+        if (timestamp > now + 5000) { // Allow 5 seconds clock skew
+          console.log("[Referral] Claim rejected - future timestamp:", timestamp);
+          return res.status(401).json({ success: false, message: "Invalid timestamp." });
+        }
+        
+        console.log("[Referral] Signature verified for wallet:", wallet, "age:", now - timestamp, "ms");
+        
+        // Pass timestamp to atomic claim function for replay protection
+        const result = await storage.claimReferralReward(wallet, tokenMint, timestamp);
+        
+        if (result.success) {
+          res.json({ 
+            success: true, 
+            amount: result.amount,
+            message: "Claim initiated. Tokens will be sent to your wallet."
+          });
+        } else {
+          res.status(400).json({ success: false, message: result.error });
+        }
+        return;
+      } catch (sigErr) {
+        console.error("[Referral] Signature verification error:", sigErr);
+        return res.status(401).json({ success: false, message: "Signature verification failed." });
+      }
+    } catch (err) {
+      console.error("[Referral] Claim error:", err);
+      res.status(500).json({ message: "Failed to process claim" });
+    }
+  });
+
   return httpServer;
 }
 

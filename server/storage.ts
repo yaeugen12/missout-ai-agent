@@ -395,32 +395,55 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async claimReferralReward(referrerWallet: string, tokenMint: string): Promise<{ success: boolean; amount: string; error?: string }> {
-    const [reward] = await db.select().from(referralRewards)
-      .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+  async claimReferralReward(referrerWallet: string, tokenMint: string, claimTimestamp?: number): Promise<{ success: boolean; amount: string; error?: string }> {
+    return await db.transaction(async (tx) => {
+      // Use raw SQL with SELECT FOR UPDATE to lock the row atomically
+      const lockQuery = claimTimestamp
+        ? sql`
+            SELECT * FROM referral_rewards 
+            WHERE referrer_wallet = ${referrerWallet} 
+              AND token_mint = ${tokenMint}
+              AND CAST(amount_pending AS BIGINT) > 0
+              AND (last_claim_timestamp IS NULL OR last_claim_timestamp < ${claimTimestamp})
+            FOR UPDATE
+          `
+        : sql`
+            SELECT * FROM referral_rewards 
+            WHERE referrer_wallet = ${referrerWallet} 
+              AND token_mint = ${tokenMint}
+              AND CAST(amount_pending AS BIGINT) > 0
+            FOR UPDATE
+          `;
 
-    if (!reward || BigInt(reward.amountPending || "0") <= BigInt(0)) {
-      return { success: false, amount: "0", error: "No pending rewards to claim" };
-    }
+      const lockedRows = await tx.execute(lockQuery);
+      const reward = lockedRows.rows[0] as any;
 
-    const amountToClaim = reward.amountPending || "0";
+      if (!reward) {
+        return { success: false, amount: "0", error: "No pending rewards to claim or signature already used" };
+      }
 
-    await db.insert(referralClaims).values({
-      referrerWallet,
-      tokenMint,
-      amount: amountToClaim,
-      status: "pending"
+      const amountToClaim = reward.amount_pending || "0";
+      const newAmountClaimed = (BigInt(reward.amount_claimed || "0") + BigInt(amountToClaim)).toString();
+
+      // Atomic update - only this transaction can proceed now
+      await tx.update(referralRewards)
+        .set({
+          amountPending: "0",
+          amountClaimed: newAmountClaimed,
+          lastUpdated: new Date(),
+          lastClaimTimestamp: claimTimestamp ?? null
+        })
+        .where(eq(referralRewards.id, reward.id));
+
+      await tx.insert(referralClaims).values({
+        referrerWallet,
+        tokenMint,
+        amount: amountToClaim,
+        status: "pending"
+      });
+
+      return { success: true, amount: amountToClaim };
     });
-
-    await db.update(referralRewards)
-      .set({
-        amountPending: "0",
-        amountClaimed: (BigInt(reward.amountClaimed || "0") + BigInt(amountToClaim)).toString(),
-        lastUpdated: new Date()
-      })
-      .where(eq(referralRewards.id, reward.id));
-
-    return { success: true, amount: amountToClaim };
   }
 
   async updateClaimStatus(claimId: number, status: string, txSignature?: string): Promise<void> {
@@ -431,6 +454,24 @@ export class DatabaseStorage implements IStorage {
 
   async getPendingClaims(): Promise<ReferralClaim[]> {
     return await db.select().from(referralClaims).where(eq(referralClaims.status, "pending"));
+  }
+
+  async getLastClaimTimestamp(referrerWallet: string, tokenMint: string): Promise<number | null> {
+    const [reward] = await db.select({ lastClaimTimestamp: referralRewards.lastClaimTimestamp })
+      .from(referralRewards)
+      .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+    return reward?.lastClaimTimestamp ?? null;
+  }
+
+  async setLastClaimTimestamp(referrerWallet: string, tokenMint: string, timestamp: number): Promise<void> {
+    const [existing] = await db.select().from(referralRewards)
+      .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+    
+    if (existing) {
+      await db.update(referralRewards)
+        .set({ lastClaimTimestamp: timestamp })
+        .where(eq(referralRewards.id, existing.id));
+    }
   }
 }
 
