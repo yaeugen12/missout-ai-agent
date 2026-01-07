@@ -205,6 +205,40 @@ Unified interface for recovering funds from cancelled pools and reclaiming rent 
 - Refund: pool.status === "cancelled" AND user is participant
 - Rent: pool.status in ["ended", "cancelled"] AND user is pool creator
 
+## Security Architecture (Production-Ready)
+
+### Claim Endpoint Security (server/routes.ts)
+Multi-layer verification for all claim operations:
+1. **Wallet Signature Verification**: Uses TweetNaCl (nacl.sign.detached.verify) to cryptographically prove wallet ownership
+2. **Anti-Replay Messages**: Messages must match pattern `claim-{type}:{poolId}:{timestamp}` to prevent replay attacks
+3. **On-Chain Transaction Verification**: verifyOnChainTransaction() confirms:
+   - Transaction exists on Solana blockchain
+   - Transaction did not fail (no tx.meta.err)
+   - Expected wallet is in transaction signers
+   - Pool address is in transaction accounts (when applicable)
+4. **Creator/Participant Checks**: Verifies caller is authorized (participant for refunds, creator for rent)
+
+### File Upload Hardening (server/routes.ts)
+- **Magic Byte Validation**: Validates actual file content headers for PNG/JPEG/GIF/WebP
+- **Secure Filenames**: Uses crypto.randomBytes(16) for random hex filenames
+- **Size Limits**: 5MB max with multer, 10 files max
+- **Extension Verification**: Whitelist of allowed extensions (png, jpg, jpeg, gif, webp)
+
+### Duplicate Participant Prevention (server/storage.ts)
+- addParticipant() throws structured error `{ code: "DUPLICATE_PARTICIPANT" }` if wallet already exists in pool
+- Prevents economic exploits from multiple entries
+
+### Wallet Authentication (shared/routes.ts, server/routes.ts)
+- Nonce-based challenge-response for profile updates
+- Message signing with timestamp validation
+- 60-second message expiry to prevent replay attacks
+
+### Recommendations for Mainnet
+- Consider external security audit before mainnet deployment
+- Monitor for rate limiting abuse
+- Add WebP magic byte validation (currently accepts all WebP headers)
+- Review bigint vs doublePrecision for numeric precision in large token amounts
+
 ## External Dependencies
 
 ### Database

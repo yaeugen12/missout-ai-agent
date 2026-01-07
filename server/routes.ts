@@ -13,7 +13,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 // ===========================================
 // SECURITY: On-Chain Transaction Verification
@@ -23,13 +23,38 @@ const solanaConnection = new Connection(
   "confirmed"
 );
 
+// MissOut Program ID
+const MISSOUT_PROGRAM_ID = "53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw";
+
+// Anchor instruction discriminators (first 8 bytes of sha256("global:instruction_name"))
+// These are pre-computed for claim_refund and claim_rent instructions
+// claim_refund: sha256("global:claim_refund")[0..8] = [143, 160, 32, 23, 17, 97, 156, 101]
+// claim_rent: sha256("global:claim_rent")[0..8] = [215, 25, 159, 196, 195, 68, 217, 41]
+const CLAIM_REFUND_DISCRIMINATOR = [143, 160, 32, 23, 17, 97, 156, 101];
+const CLAIM_RENT_DISCRIMINATOR = [215, 25, 159, 196, 195, 68, 217, 41];
+
 /**
- * Verify a transaction exists on-chain and involves the expected wallet
- * Returns true if transaction is valid and confirmed
+ * Check if instruction data starts with the expected discriminator
  */
-async function verifyOnChainTransaction(
+function matchesDiscriminator(data: Buffer | Uint8Array, discriminator: number[]): boolean {
+  if (data.length < 8) return false;
+  for (let i = 0; i < 8; i++) {
+    if (data[i] !== discriminator[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Verify a transaction exists on-chain, succeeded, invoked our program
+ * with the correct claim instruction, and involves the expected wallet and pool.
+ * 
+ * SECURITY: This prevents attackers from reusing unrelated transactions
+ * (like join/donate transactions) to fake claims.
+ */
+async function verifyOnChainClaimTransaction(
   txHash: string, 
   expectedWallet: string,
+  claimType: "refund" | "rent",
   expectedPoolAddress?: string
 ): Promise<{ valid: boolean; error?: string }> {
   try {
@@ -46,16 +71,69 @@ async function verifyOnChainTransaction(
       return { valid: false, error: "Transaction failed on-chain" };
     }
     
-    // Check if the expected wallet signed or is involved in the transaction
-    const accountKeys = tx.transaction.message.staticAccountKeys.map(k => k.toBase58());
+    // Get all account keys including loaded addresses for versioned transactions
+    const staticKeys = tx.transaction.message.staticAccountKeys.map(k => k.toBase58());
+    const loadedWritable = tx.meta?.loadedAddresses?.writable?.map(k => k.toBase58()) || [];
+    const loadedReadonly = tx.meta?.loadedAddresses?.readonly?.map(k => k.toBase58()) || [];
+    const allAccountKeys = [...staticKeys, ...loadedWritable, ...loadedReadonly];
     
-    if (!accountKeys.includes(expectedWallet)) {
-      return { valid: false, error: "Wallet not found in transaction signers" };
+    // Determine which discriminator to check based on claim type
+    const expectedDiscriminator = claimType === "refund" 
+      ? CLAIM_REFUND_DISCRIMINATOR 
+      : CLAIM_RENT_DISCRIMINATOR;
+    
+    // SECURITY: Verify the transaction contains a claim instruction with correct discriminator
+    // Check compiled instructions in the message
+    const compiledInstructions = tx.transaction.message.compiledInstructions;
+    let foundClaimInstruction = false;
+    
+    for (const ix of compiledInstructions) {
+      const programId = allAccountKeys[ix.programIdIndex];
+      if (programId === MISSOUT_PROGRAM_ID) {
+        // Check if instruction data matches the expected claim discriminator
+        if (matchesDiscriminator(ix.data, expectedDiscriminator)) {
+          foundClaimInstruction = true;
+          break;
+        }
+      }
+    }
+    
+    // Also check inner instructions (CPI calls)
+    if (!foundClaimInstruction && tx.meta?.innerInstructions) {
+      for (const inner of tx.meta.innerInstructions) {
+        for (const ix of inner.instructions as any[]) {
+          const programId = allAccountKeys[ix.programIdIndex];
+          if (programId === MISSOUT_PROGRAM_ID) {
+            const data = bs58.decode(ix.data);
+            if (matchesDiscriminator(data, expectedDiscriminator)) {
+              foundClaimInstruction = true;
+              break;
+            }
+          }
+        }
+        if (foundClaimInstruction) break;
+      }
+    }
+    
+    if (!foundClaimInstruction) {
+      return { valid: false, error: `No claim_${claimType} instruction found in transaction` };
+    }
+    
+    // Check if the expected wallet is in the transaction
+    if (!allAccountKeys.includes(expectedWallet)) {
+      return { valid: false, error: "Wallet not found in transaction" };
     }
     
     // If pool address provided, verify it's in the transaction
-    if (expectedPoolAddress && !accountKeys.includes(expectedPoolAddress)) {
+    if (expectedPoolAddress && !allAccountKeys.includes(expectedPoolAddress)) {
       return { valid: false, error: "Pool address not found in transaction" };
+    }
+    
+    // Verify the wallet signed the transaction
+    const numSignatures = tx.transaction.signatures.length;
+    const signerKeys = staticKeys.slice(0, numSignatures);
+    if (!signerKeys.includes(expectedWallet)) {
+      return { valid: false, error: "Wallet did not sign this transaction" };
     }
     
     return { valid: true };
@@ -312,8 +390,8 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Pool not found" });
       }
 
-      // SECURITY: Verify transaction exists on-chain and involves the wallet + pool
-      const onChainVerification = await verifyOnChainTransaction(txHash, wallet, pool.poolAddress || undefined);
+      // SECURITY: Verify transaction contains actual claim_refund instruction
+      const onChainVerification = await verifyOnChainClaimTransaction(txHash, wallet, "refund", pool.poolAddress || undefined);
       if (!onChainVerification.valid) {
         console.log("[SECURITY] Claim refund rejected - on-chain verification failed:", onChainVerification.error);
         return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
@@ -400,8 +478,8 @@ export async function registerRoutes(
         return res.status(409).json({ message: "Rent already claimed" });
       }
 
-      // SECURITY: Verify transaction exists on-chain and involves the wallet + pool
-      const onChainVerification = await verifyOnChainTransaction(txHash, wallet, pool.poolAddress || undefined);
+      // SECURITY: Verify transaction contains actual claim_rent instruction
+      const onChainVerification = await verifyOnChainClaimTransaction(txHash, wallet, "rent", pool.poolAddress || undefined);
       if (!onChainVerification.valid) {
         console.log("[SECURITY] Claim rent rejected - on-chain verification failed:", onChainVerification.error);
         return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
