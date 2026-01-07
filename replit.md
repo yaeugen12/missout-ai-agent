@@ -158,6 +158,24 @@ Complete referral system allowing users to earn 1.5% of pool fees when their ref
 4. When pool completes, allocateReferralRewards() splits 1.5% treasury fee equally among unique referrers
 5. User claims via signed message → atomic database transaction → pending status for payout processing
 
+### Claims Center (client/src/pages/Claims.tsx)
+Unified interface for recovering funds from cancelled pools and reclaiming rent from closed pools:
+
+**Features**:
+- **Refunds Tab** (cyan theme): Recover tokens from cancelled Black Holes where user was a participant
+- **Rent Tab** (amber theme): Reclaim rent from ended/cancelled pools where user was the creator
+
+**Backend Route** (server/routes.ts):
+- `GET /api/pools/claimable?wallet=ADDRESS`: Returns eligible pools for both refunds and rent recovery
+
+**SDK Functions** (client/src/hooks/useMissoutSDK.ts):
+- `claimRefund(poolId, walletAddress)`: Claim refund from cancelled pool
+- `claimRent(poolId, closeTarget)`: Claim rent from closed pool
+
+**Eligibility Rules**:
+- Refund: pool.status === "cancelled" AND user is participant
+- Rent: pool.status in ["ended", "cancelled"] AND user is pool creator
+
 ## External Dependencies
 
 ### Database
