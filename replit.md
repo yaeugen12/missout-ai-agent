@@ -123,6 +123,41 @@ Howler.js integration with lazy loading for atmospheric audio:
 - Volume range: 0.15 - 0.35 for subtle atmosphere
 - Lazy loading: Sounds load on first play, not on page load
 
+### Referral Rewards System
+Complete referral system allowing users to earn 1.5% of pool fees when their referrals participate:
+
+**Database Tables** (shared/schema.ts):
+- `referral_relations`: One-to-one mapping of referred wallet → referrer wallet (immutable)
+- `referral_rewards`: Aggregated pending/claimed amounts per referrer per token mint
+- `referral_reward_events`: Audit log of individual reward allocations
+- `referral_claims`: Claim transaction records with status tracking
+
+**Backend Routes** (server/routes.ts):
+- `POST /api/referrals/register`: Register referral relation on wallet connect
+- `GET /api/referrals/link/:wallet`: Generate referral link for wallet
+- `GET /api/referrals/summary/:wallet`: Get total stats (invited, earned, claimed)
+- `GET /api/referrals/rewards/:wallet`: Get pending rewards by token
+- `GET /api/referrals/invited/:wallet`: List invited users
+- `POST /api/referrals/claim`: Claim rewards with wallet signature verification
+
+**Security Features**:
+- Wallet signature verification using TweetNaCl (nacl.sign.detached.verify)
+- Timestamp validation with 60-second expiry to prevent replay attacks
+- SELECT FOR UPDATE with atomic transaction to prevent race conditions
+- Self-referral prevention (cannot refer yourself)
+
+**Frontend Integration**:
+- `useReferralCapture` hook: Captures ?ref= URL parameter to localStorage, auto-registers on wallet connect
+- Referrals page: Shows stats, pending rewards with claim buttons, invited users list
+- Claim flow: Signs timestamped message with wallet before claiming
+
+**Reward Flow**:
+1. User visits site with ?ref=WALLET_ADDRESS URL
+2. Referrer stored in localStorage, URL cleaned
+3. On wallet connect, referral registered via POST /api/referrals/register
+4. When pool completes, allocateReferralRewards() splits 1.5% treasury fee equally among unique referrers
+5. User claims via signed message → atomic database transaction → pending status for payout processing
+
 ## External Dependencies
 
 ### Database
