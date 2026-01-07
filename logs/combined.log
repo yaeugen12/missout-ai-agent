@@ -110,3 +110,6 @@
 {"level":"info","message":"Server started successfully","nodeEnv":"development","pid":1357868,"port":5000,"service":"missout-api","timestamp":"2026-01-07 13:01:04"}
 {"level":"info","message":"SIGINT received, starting graceful shutdown...","service":"missout-api","timestamp":"2026-01-07 13:03:14"}
 {"level":"error","message":"Graceful shutdown timeout, forcing exit","service":"missout-api","timestamp":"2026-01-07 13:03:45"}
+{"level":"warn","message":"REDIS_URL not configured - caching disabled","service":"missout-api","timestamp":"2026-01-07 14:53:00"}
+{"level":"info","message":"Redis cache initialized","service":"missout-api","timestamp":"2026-01-07 14:53:00"}
+{"level":"info","message":"Server started successfully","nodeEnv":"development","pid":840,"port":5000,"service":"missout-api","timestamp":"2026-01-07 14:53:00"}
