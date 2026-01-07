@@ -1,23 +1,76 @@
 import { useTopWinners, useTopReferrers, TopWinner, TopReferrer } from "@/hooks/use-leaderboard";
 import { useWallet } from "@/hooks/use-wallet";
+import { useProfile, generateDicebearUrl, shortenWallet } from "@/hooks/use-profile";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, Users, Loader2, Crown, Star, Sparkles, Gift, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
-function generateDicebearAvatar(wallet: string, style: string = "bottts") {
-  return `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
-}
-
-function truncateWallet(wallet: string) {
-  return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
-}
-
 function formatTokenAmount(amount: number, decimals: number = 4) {
   if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
   if (amount >= 1000) return `${(amount / 1000).toFixed(2)}K`;
   return amount.toFixed(decimals);
+}
+
+function LeaderboardAvatar({ wallet, isTop3 }: { wallet: string; isTop3: boolean }) {
+  const { data: profile, isLoading } = useProfile(wallet);
+  
+  const displayAvatar = profile?.displayAvatar || generateDicebearUrl(wallet);
+  const displayName = profile?.displayName || shortenWallet(wallet);
+  
+  if (isLoading) {
+    return (
+      <Avatar className={cn("h-10 w-10 border-2 animate-pulse", isTop3 ? "border-white/30" : "border-white/10")}>
+        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+          {wallet.slice(0, 2).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+  
+  return (
+    <Avatar className={cn("h-10 w-10 border-2", isTop3 ? "border-white/30" : "border-white/10")}>
+      <AvatarImage src={displayAvatar} alt={displayName} />
+      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+        {displayName.slice(0, 2).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+function LeaderboardName({ wallet, isTop3, isCurrentUser }: { wallet: string; isTop3: boolean; isCurrentUser: boolean }) {
+  const { data: profile, isLoading } = useProfile(wallet);
+  
+  const displayName = profile?.displayName || shortenWallet(wallet);
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className={cn("font-mono text-sm animate-pulse", isTop3 ? "text-white font-bold" : "text-muted-foreground")}>
+          {shortenWallet(wallet)}
+        </span>
+        {isCurrentUser && (
+          <span className="px-2 py-0.5 text-[10px] font-tech uppercase bg-primary/20 text-primary rounded-full">
+            You
+          </span>
+        )}
+      </div>
+    );
+  }
+  
+  return (
+    <div className="flex items-center gap-2">
+      <span className={cn("text-sm truncate max-w-[140px]", isTop3 ? "text-white font-bold" : "text-muted-foreground")}>
+        {displayName}
+      </span>
+      {isCurrentUser && (
+        <span className="px-2 py-0.5 text-[10px] font-tech uppercase bg-primary/20 text-primary rounded-full">
+          You
+        </span>
+      )}
+    </div>
+  );
 }
 
 interface LeaderboardRowProps {
@@ -67,24 +120,10 @@ function LeaderboardRow({ rank, wallet, isCurrentUser, children, accentColor = "
         #{rank}
       </div>
 
-      <Avatar className={cn("h-10 w-10 border-2", isTop3 ? "border-white/30" : "border-white/10")}>
-        <AvatarImage src={generateDicebearAvatar(wallet)} alt={wallet} />
-        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-          {wallet.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+      <LeaderboardAvatar wallet={wallet} isTop3={isTop3} />
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className={cn("font-mono text-sm", isTop3 ? "text-white font-bold" : "text-muted-foreground")}>
-            {truncateWallet(wallet)}
-          </span>
-          {isCurrentUser && (
-            <span className="px-2 py-0.5 text-[10px] font-tech uppercase bg-primary/20 text-primary rounded-full">
-              You
-            </span>
-          )}
-        </div>
+        <LeaderboardName wallet={wallet} isTop3={isTop3} isCurrentUser={isCurrentUser} />
       </div>
 
       {children}
