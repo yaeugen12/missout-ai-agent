@@ -11,6 +11,8 @@ import {
   cancelPool,
   claimRefund,
   claimRent,
+  claimRefundsBatch,
+  claimRentsBatch,
   unlockPool,
   requestRandomness,
   selectWinner,
@@ -23,6 +25,8 @@ import {
   type DonateParams,
   type PoolState,
   type ParticipantsState,
+  type BatchClaimResult,
+  type BatchClaimProgress,
 } from "@/lib/solana-sdk";
 
 export interface UseMissoutSDKResult {
@@ -37,6 +41,8 @@ export interface UseMissoutSDKResult {
   cancelPool: (poolId: string) => Promise<{ tx: string }>;
   claimRefund: (poolId: string) => Promise<{ tx: string }>;
   claimRent: (poolId: string, closeTarget: PublicKey) => Promise<{ tx: string }>;
+  claimRefundsBatch: (poolIds: string[], onProgress?: (progress: BatchClaimProgress) => void) => Promise<BatchClaimResult[]>;
+  claimRentsBatch: (poolIds: string[], closeTarget: PublicKey, onProgress?: (progress: BatchClaimProgress) => void) => Promise<BatchClaimResult[]>;
   unlockPool: (poolId: string) => Promise<{ tx: string }>;
   requestRandomness: (poolId: string, randomnessAccount: PublicKey) => Promise<{ tx: string }>;
   selectWinner: (poolId: string, randomnessAccount: PublicKey) => Promise<{ tx: string }>;
@@ -137,6 +143,26 @@ export function useMissoutSDK(): UseMissoutSDKResult {
     [wallet.connected]
   );
 
+  const wrappedClaimRefundsBatch = useCallback(
+    async (poolIds: string[], onProgress?: (progress: BatchClaimProgress) => void) => {
+      if (!wallet.connected) {
+        throw new Error("Wallet not connected");
+      }
+      return claimRefundsBatch(poolIds, onProgress);
+    },
+    [wallet.connected]
+  );
+
+  const wrappedClaimRentsBatch = useCallback(
+    async (poolIds: string[], closeTarget: PublicKey, onProgress?: (progress: BatchClaimProgress) => void) => {
+      if (!wallet.connected) {
+        throw new Error("Wallet not connected");
+      }
+      return claimRentsBatch(poolIds, closeTarget, onProgress);
+    },
+    [wallet.connected]
+  );
+
   const wrappedUnlockPool = useCallback(
     async (poolId: string) => {
       if (!wallet.connected) {
@@ -189,6 +215,8 @@ export function useMissoutSDK(): UseMissoutSDKResult {
     cancelPool: wrappedCancelPool,
     claimRefund: wrappedClaimRefund,
     claimRent: wrappedClaimRent,
+    claimRefundsBatch: wrappedClaimRefundsBatch,
+    claimRentsBatch: wrappedClaimRentsBatch,
     unlockPool: wrappedUnlockPool,
     requestRandomness: wrappedRequestRandomness,
     selectWinner: wrappedSelectWinner,

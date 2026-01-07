@@ -6,8 +6,9 @@ import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Loader2, Wallet, RefreshCw, ArrowUpFromLine, Coins, Sparkles } from "lucide-react";
+import { Loader2, Wallet, RefreshCw, ArrowUpFromLine, Coins, Sparkles, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { BatchClaimProgress } from "@/lib/solana-sdk";
 
 interface PoolForClaim {
   id: number;
@@ -23,11 +24,14 @@ interface PoolForClaim {
 
 export default function Claims() {
   const { publicKey, connected } = useWallet();
-  const { claimRefund, claimRent } = useMissoutSDK();
+  const { claimRefund, claimRent, claimRefundsBatch, claimRentsBatch } = useMissoutSDK();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [claimingRefund, setClaimingRefund] = useState<string | null>(null);
   const [claimingRent, setClaimingRent] = useState<string | null>(null);
+  const [claimingAllRefunds, setClaimingAllRefunds] = useState(false);
+  const [claimingAllRents, setClaimingAllRents] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<BatchClaimProgress | null>(null);
 
   const walletAddress = publicKey?.toBase58();
 
@@ -88,6 +92,98 @@ export default function Claims() {
       setClaimingRent(null);
     }
   }, [claimRent, publicKey, toast, queryClient]);
+
+  const handleClaimAllRefunds = useCallback(async (pools: PoolForClaim[]) => {
+    if (pools.length === 0) return;
+    
+    const poolIds = pools.map(p => p.onChainAddress).filter(Boolean);
+    if (poolIds.length === 0) return;
+
+    setClaimingAllRefunds(true);
+    setBatchProgress(null);
+
+    try {
+      const results = await claimRefundsBatch(poolIds, (progress) => {
+        setBatchProgress(progress);
+      });
+
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+
+      if (successful > 0) {
+        toast({
+          title: "Batch Refund Complete!",
+          description: `${successful} refund${successful > 1 ? 's' : ''} claimed${failed > 0 ? `, ${failed} failed` : ''}`,
+        });
+      }
+
+      if (failed > 0 && successful === 0) {
+        toast({
+          title: "Batch Refund Failed",
+          description: `All ${failed} claims failed`,
+          variant: "destructive",
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/pools/claimable"] });
+    } catch (error: any) {
+      console.error("Batch refund error:", error);
+      toast({
+        title: "Batch Refund Failed",
+        description: error.message || "Failed to claim refunds",
+        variant: "destructive",
+      });
+    } finally {
+      setClaimingAllRefunds(false);
+      setBatchProgress(null);
+    }
+  }, [claimRefundsBatch, toast, queryClient]);
+
+  const handleClaimAllRents = useCallback(async (pools: PoolForClaim[]) => {
+    if (pools.length === 0 || !publicKey) return;
+    
+    const poolIds = pools.map(p => p.onChainAddress).filter(Boolean);
+    if (poolIds.length === 0) return;
+
+    setClaimingAllRents(true);
+    setBatchProgress(null);
+
+    try {
+      const results = await claimRentsBatch(poolIds, publicKey, (progress) => {
+        setBatchProgress(progress);
+      });
+
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+
+      if (successful > 0) {
+        toast({
+          title: "Batch Rent Claim Complete!",
+          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}`,
+        });
+      }
+
+      if (failed > 0 && successful === 0) {
+        toast({
+          title: "Batch Rent Claim Failed",
+          description: `All ${failed} claims failed`,
+          variant: "destructive",
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/pools/claimable"] });
+    } catch (error: any) {
+      console.error("Batch rent claim error:", error);
+      toast({
+        title: "Batch Rent Claim Failed",
+        description: error.message || "Failed to claim rent",
+        variant: "destructive",
+      });
+    } finally {
+      setClaimingAllRents(false);
+      setBatchProgress(null);
+    }
+  }, [claimRentsBatch, publicKey, toast, queryClient]);
 
   if (!connected) {
     return (
@@ -152,9 +248,30 @@ export default function Claims() {
 
             <TabsContent value="refunds" className="mt-0">
               <div className="bg-zinc-900/30 border border-cyan-500/20 rounded-lg p-6 backdrop-blur-sm">
-                <div className="flex items-center gap-3 mb-6 border-b border-cyan-500/20 pb-4">
-                  <RefreshCw className="w-5 h-5 text-cyan-400" />
-                  <h2 className="text-lg font-display font-bold text-cyan-400">Available Refunds</h2>
+                <div className="flex items-center justify-between mb-6 border-b border-cyan-500/20 pb-4">
+                  <div className="flex items-center gap-3">
+                    <RefreshCw className="w-5 h-5 text-cyan-400" />
+                    <h2 className="text-lg font-display font-bold text-cyan-400">Available Refunds</h2>
+                  </div>
+                  {refundPools.length > 1 && (
+                    <Button
+                      onClick={() => handleClaimAllRefunds(refundPools)}
+                      disabled={claimingAllRefunds || !!claimingRefund}
+                      className="bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-black font-tech uppercase text-xs flex items-center gap-2"
+                    >
+                      {claimingAllRefunds ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : 'Processing...'}
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4" />
+                          Claim All ({refundPools.length})
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {isLoading ? (
@@ -233,9 +350,30 @@ export default function Claims() {
 
             <TabsContent value="rent" className="mt-0">
               <div className="bg-zinc-900/30 border border-amber-500/20 rounded-lg p-6 backdrop-blur-sm">
-                <div className="flex items-center gap-3 mb-6 border-b border-amber-500/20 pb-4">
-                  <Coins className="w-5 h-5 text-amber-400" />
-                  <h2 className="text-lg font-display font-bold text-amber-400">Rent Recovery</h2>
+                <div className="flex items-center justify-between mb-6 border-b border-amber-500/20 pb-4">
+                  <div className="flex items-center gap-3">
+                    <Coins className="w-5 h-5 text-amber-400" />
+                    <h2 className="text-lg font-display font-bold text-amber-400">Rent Recovery</h2>
+                  </div>
+                  {rentPools.length > 1 && (
+                    <Button
+                      onClick={() => handleClaimAllRents(rentPools)}
+                      disabled={claimingAllRents || !!claimingRent}
+                      className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black font-tech uppercase text-xs flex items-center gap-2"
+                    >
+                      {claimingAllRents ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : 'Processing...'}
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4" />
+                          Claim All ({rentPools.length})
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {isLoading ? (

@@ -935,3 +935,226 @@ export async function setLockDuration(
 
   return { tx: sig };
 }
+
+// ============================================================================
+// BATCH CLAIM FUNCTIONS
+// ============================================================================
+
+export interface BatchClaimResult {
+  poolId: string;
+  success: boolean;
+  tx?: string;
+  error?: string;
+}
+
+export interface BatchClaimProgress {
+  current: number;
+  total: number;
+  poolId: string;
+  status: 'pending' | 'sending' | 'confirmed' | 'failed';
+}
+
+/**
+ * Build a single claim refund instruction without sending
+ */
+export async function buildClaimRefundInstruction(
+  poolId: string
+): Promise<{ instruction: TransactionInstruction; poolId: string }> {
+  const client = getMissoutClient();
+  const wallet = client.getWallet();
+  const conn = client.getConnection();
+
+  if (!wallet?.publicKey) {
+    throw new Error("Wallet not connected");
+  }
+
+  const poolPk = new PublicKey(poolId);
+  const poolState = await client.getPoolState(poolId);
+
+  if (!poolState) {
+    throw new Error(`Pool not found: ${poolId}`);
+  }
+
+  const [participantsPda] = deriveParticipantsPda(poolPk);
+  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+  const userPk = wallet.publicKey;
+  
+  const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
+  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
+  const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+  const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  const ix = createInstructionWithDiscriminator(
+    [117, 222, 118, 104, 193, 151, 141, 125],
+    Buffer.alloc(0),
+    [
+      { pubkey: userPk, isSigner: true, isWritable: true },
+      { pubkey: poolState.mint, isSigner: false, isWritable: false },
+      { pubkey: poolPk, isSigner: false, isWritable: true },
+      { pubkey: participantsPda, isSigner: false, isWritable: true },
+      { pubkey: poolToken, isSigner: false, isWritable: true },
+      { pubkey: userToken, isSigner: false, isWritable: true },
+      { pubkey: treasuryToken, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ]
+  );
+
+  return { instruction: ix, poolId };
+}
+
+/**
+ * Build a single claim rent instruction without sending
+ */
+export async function buildClaimRentInstruction(
+  poolId: string,
+  closeTarget: PublicKey
+): Promise<{ instruction: TransactionInstruction; poolId: string }> {
+  const client = getMissoutClient();
+  const wallet = client.getWallet();
+
+  if (!wallet?.publicKey) {
+    throw new Error("Wallet not connected");
+  }
+
+  const poolPk = new PublicKey(poolId);
+  const poolState = await client.getPoolState(poolId);
+
+  if (!poolState) {
+    throw new Error(`Pool not found: ${poolId}`);
+  }
+
+  const [participantsPda] = deriveParticipantsPda(poolPk);
+  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+  const userPk = wallet.publicKey;
+
+  const ix = createInstructionWithDiscriminator(
+    [57, 233, 51, 137, 102, 101, 26, 101],
+    Buffer.alloc(0),
+    [
+      { pubkey: poolPk, isSigner: false, isWritable: true },
+      { pubkey: poolState.mint, isSigner: false, isWritable: true },
+      { pubkey: poolToken, isSigner: false, isWritable: true },
+      { pubkey: closeTarget, isSigner: false, isWritable: true },
+      { pubkey: userPk, isSigner: true, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: participantsPda, isSigner: false, isWritable: true },
+    ]
+  );
+
+  return { instruction: ix, poolId };
+}
+
+/**
+ * Batch claim refunds from multiple cancelled pools
+ * Chunks instructions to stay within transaction size limits (max 3 per tx)
+ */
+export async function claimRefundsBatch(
+  poolIds: string[],
+  onProgress?: (progress: BatchClaimProgress) => void
+): Promise<BatchClaimResult[]> {
+  const client = getMissoutClient();
+  const results: BatchClaimResult[] = [];
+  const CHUNK_SIZE = 3; // Conservative limit for transaction size
+
+  // Build all instructions first
+  const instructionPromises = poolIds.map(async (poolId, index) => {
+    try {
+      onProgress?.({ current: index + 1, total: poolIds.length, poolId, status: 'pending' });
+      return await buildClaimRefundInstruction(poolId);
+    } catch (error: any) {
+      results.push({ poolId, success: false, error: error.message });
+      return null;
+    }
+  });
+
+  const builtInstructions = (await Promise.all(instructionPromises)).filter(Boolean) as { instruction: TransactionInstruction; poolId: string }[];
+
+  // Chunk and send transactions
+  for (let i = 0; i < builtInstructions.length; i += CHUNK_SIZE) {
+    const chunk = builtInstructions.slice(i, i + CHUNK_SIZE);
+    const chunkPoolIds = chunk.map(c => c.poolId);
+    
+    try {
+      chunk.forEach(c => onProgress?.({ 
+        current: i + chunk.indexOf(c) + 1, 
+        total: builtInstructions.length, 
+        poolId: c.poolId, 
+        status: 'sending' 
+      }));
+
+      const sig = await client.buildAndSendTransaction(chunk.map(c => c.instruction));
+      console.log(`BATCH_CLAIM_REFUNDS TX (${chunkPoolIds.join(', ')}):`, sig);
+
+      chunkPoolIds.forEach(poolId => {
+        results.push({ poolId, success: true, tx: sig });
+        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
+      });
+    } catch (error: any) {
+      console.error(`Batch refund claim failed for chunk:`, error);
+      chunkPoolIds.forEach(poolId => {
+        results.push({ poolId, success: false, error: error.message });
+        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'failed' });
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Batch claim rent from multiple closed pools
+ * Chunks instructions to stay within transaction size limits (max 3 per tx)
+ */
+export async function claimRentsBatch(
+  poolIds: string[],
+  closeTarget: PublicKey,
+  onProgress?: (progress: BatchClaimProgress) => void
+): Promise<BatchClaimResult[]> {
+  const client = getMissoutClient();
+  const results: BatchClaimResult[] = [];
+  const CHUNK_SIZE = 3; // Conservative limit for transaction size
+
+  // Build all instructions first
+  const instructionPromises = poolIds.map(async (poolId, index) => {
+    try {
+      onProgress?.({ current: index + 1, total: poolIds.length, poolId, status: 'pending' });
+      return await buildClaimRentInstruction(poolId, closeTarget);
+    } catch (error: any) {
+      results.push({ poolId, success: false, error: error.message });
+      return null;
+    }
+  });
+
+  const builtInstructions = (await Promise.all(instructionPromises)).filter(Boolean) as { instruction: TransactionInstruction; poolId: string }[];
+
+  // Chunk and send transactions
+  for (let i = 0; i < builtInstructions.length; i += CHUNK_SIZE) {
+    const chunk = builtInstructions.slice(i, i + CHUNK_SIZE);
+    const chunkPoolIds = chunk.map(c => c.poolId);
+    
+    try {
+      chunk.forEach(c => onProgress?.({ 
+        current: i + chunk.indexOf(c) + 1, 
+        total: builtInstructions.length, 
+        poolId: c.poolId, 
+        status: 'sending' 
+      }));
+
+      const sig = await client.buildAndSendTransaction(chunk.map(c => c.instruction));
+      console.log(`BATCH_CLAIM_RENTS TX (${chunkPoolIds.join(', ')}):`, sig);
+
+      chunkPoolIds.forEach(poolId => {
+        results.push({ poolId, success: true, tx: sig });
+        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'confirmed' });
+      });
+    } catch (error: any) {
+      console.error(`Batch rent claim failed for chunk:`, error);
+      chunkPoolIds.forEach(poolId => {
+        results.push({ poolId, success: false, error: error.message });
+        onProgress?.({ current: i + 1, total: builtInstructions.length, poolId, status: 'failed' });
+      });
+    }
+  }
+
+  return results;
+}

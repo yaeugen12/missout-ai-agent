@@ -29,6 +29,11 @@ export {
   sweepExpiredPool,
   claimRent,
   setLockDuration,
+  // Batch claim functions
+  claimRefundsBatch,
+  claimRentsBatch,
+  buildClaimRefundInstruction,
+  buildClaimRentInstruction,
   // Fetch functions
   fetchPoolState,
   fetchParticipants,
@@ -37,6 +42,8 @@ export {
   type CreatePoolParams,
   type JoinPoolParams,
   type DonateParams,
+  type BatchClaimResult,
+  type BatchClaimProgress,
 } from "./services/pool-service";
 
 // Event system exports
