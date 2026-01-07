@@ -366,7 +366,7 @@ export async function registerRoutes(
       const winners = await storage.getTopWinners(Math.min(limit, 100));
       res.json(winners.map(w => ({
         ...w,
-        lastWinAt: w.lastWinAt?.toISOString() || null,
+        lastWinAt: w.lastWinAt ? (typeof w.lastWinAt === 'string' ? w.lastWinAt : new Date(w.lastWinAt).toISOString()) : null,
       })));
     } catch (error) {
       console.error("Error fetching top winners:", error);
@@ -380,8 +380,8 @@ export async function registerRoutes(
       const referrers = await storage.getTopReferrers(Math.min(limit, 100));
       res.json(referrers.map(r => ({
         ...r,
-        firstReferralAt: r.firstReferralAt?.toISOString() || null,
-        lastReferralAt: r.lastReferralAt?.toISOString() || null,
+        firstReferralAt: r.firstReferralAt ? (typeof r.firstReferralAt === 'string' ? r.firstReferralAt : new Date(r.firstReferralAt).toISOString()) : null,
+        lastReferralAt: r.lastReferralAt ? (typeof r.lastReferralAt === 'string' ? r.lastReferralAt : new Date(r.lastReferralAt).toISOString()) : null,
       })));
     } catch (error) {
       console.error("Error fetching top referrers:", error);

@@ -16,7 +16,6 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import PoolDetails from "@/pages/PoolDetails";
 import CreatePool from "@/pages/CreatePool";
-import Rewards from "@/pages/Rewards";
 import Terminal from "@/pages/Terminal";
 import Leaderboard from "@/pages/Leaderboard";
 import Referrals from "@/pages/Referrals";
@@ -31,7 +30,7 @@ function Router() {
       <Route path="/terminal" component={Home} />
       <Route path="/pool/:id" component={PoolDetails} />
       <Route path="/initialize" component={CreatePool} />
-      <Route path="/rewards" component={Rewards} />
+      <Route path="/rewards" component={Leaderboard} />
       <Route path="/discovery" component={Terminal} />
       <Route path="/leaderboard" component={Leaderboard} />
       <Route path="/referrals" component={Referrals} />

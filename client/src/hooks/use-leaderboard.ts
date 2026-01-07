@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 
-// GET /api/leaderboard
 export function useLeaderboard() {
   return useQuery({
     queryKey: [api.leaderboard.get.path],
@@ -9,6 +8,50 @@ export function useLeaderboard() {
       const res = await fetch(api.leaderboard.get.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch leaderboard");
       return api.leaderboard.get.responses[200].parse(await res.json());
+    },
+  });
+}
+
+export type TopWinner = {
+  wallet: string;
+  winsCount: number;
+  totalTokensWon: number;
+  totalUsdWon: number;
+  biggestWinTokens: number;
+  biggestWinUsd: number;
+  lastWinAt: string | null;
+  tokenMint: string | null;
+  tokenSymbol: string | null;
+};
+
+export type TopReferrer = {
+  wallet: string;
+  referralsCount: number;
+  totalTokensEarned: number;
+  totalUsdEarned: number;
+  activeReferrals: number;
+  firstReferralAt: string | null;
+  lastReferralAt: string | null;
+};
+
+export function useTopWinners(limit: number = 20) {
+  return useQuery<TopWinner[]>({
+    queryKey: [api.leaderboard.winners.path, limit],
+    queryFn: async () => {
+      const res = await fetch(`${api.leaderboard.winners.path}?limit=${limit}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch top winners");
+      return res.json();
+    },
+  });
+}
+
+export function useTopReferrers(limit: number = 20) {
+  return useQuery<TopReferrer[]>({
+    queryKey: [api.leaderboard.referrers.path, limit],
+    queryFn: async () => {
+      const res = await fetch(`${api.leaderboard.referrers.path}?limit=${limit}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch top referrers");
+      return res.json();
     },
   });
 }
