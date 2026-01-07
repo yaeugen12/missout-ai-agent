@@ -164,6 +164,7 @@ Unified interface for recovering funds from cancelled pools and reclaiming rent 
 **Features**:
 - **Refunds Tab** (cyan theme): Recover tokens from cancelled Black Holes where user was a participant
 - **Rent Tab** (amber theme): Reclaim rent from ended/cancelled pools where user was the creator
+- **Batch Claiming**: "Claim All" buttons appear when 2+ claims are available
 
 **Backend Route** (server/routes.ts):
 - `GET /api/pools/claimable?wallet=ADDRESS`: Returns eligible pools for both refunds and rent recovery
@@ -171,6 +172,13 @@ Unified interface for recovering funds from cancelled pools and reclaiming rent 
 **SDK Functions** (client/src/hooks/useMissoutSDK.ts):
 - `claimRefund(poolId, walletAddress)`: Claim refund from cancelled pool
 - `claimRent(poolId, closeTarget)`: Claim rent from closed pool
+- `claimRefundsBatch(poolIds, onProgress)`: Batch claim multiple refunds with chunked transactions
+- `claimRentsBatch(poolIds, closeTarget, onProgress)`: Batch claim multiple rents with chunked transactions
+
+**Batch Claiming Strategy**:
+- Chunks instructions into groups of 3 to stay within Solana's 1232-byte transaction limit
+- Real-time progress tracking with `BatchClaimProgress` type (current/total, status per pool)
+- Partial failure handling: returns per-pool success/failure with error messages
 
 **Eligibility Rules**:
 - Refund: pool.status === "cancelled" AND user is participant
