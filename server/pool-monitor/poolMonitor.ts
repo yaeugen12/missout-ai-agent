@@ -205,6 +205,7 @@ export class PoolMonitor {
     const lockDuration = onChainState.lockDuration?.toNumber() || 0;
     const unlockAt = lockStartTime + lockDuration;
 
+    console.log(`[DEBUG] Pool ${pool.id} on-chain values: lockStartTime=${lockStartTime}, lockDuration=${lockDuration}, calculated unlockAt=${unlockAt}`);
     log(`Pool ${pool.id} state=Locked now=${now} unlockAt=${unlockAt} remaining=${Math.max(0, unlockAt - now)}s`);
 
     if (now >= unlockAt) {

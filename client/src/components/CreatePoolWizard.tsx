@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, ArrowLeft, Loader2, Check, Rocket, CircleDot } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ArrowRight, ArrowLeft, Loader2, Check, Rocket, CircleDot, FlaskConical } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,6 +46,16 @@ interface TokenInfo {
 
 export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: CreatePoolWizardProps) {
   const [step, setStep] = useState(1);
+
+  // Debug: Log step changes
+  useEffect(() => {
+    console.log('[DEBUG CreatePoolWizard] Current step:', step);
+  }, [step]);
+
+  // Debug: Log mock randomness state
+  useEffect(() => {
+    console.log('[DEBUG CreatePoolWizard] Mock randomness enabled:', useMockRandomness);
+  }, [useMockRandomness]);
   const [mintAddress, setMintAddress] = useState("");
 
   // Prefill mint address when provided
@@ -57,6 +68,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
   const [entryAmount, setEntryAmount] = useState("1");
   const [participants, setParticipants] = useState(10);
   const [lockDuration, setLockDuration] = useState(5);
+  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   
@@ -87,6 +99,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         setEntryAmount("1");
         setParticipants(10);
         setLockDuration(5);
+        setUseMockRandomness(true); // Reset to mock randomness for next pool
       }, 300);
     }
   }, [open]);
@@ -179,7 +192,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         burnFeeBps: 0,
         treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
         treasuryFeeBps: 0,
-        allowMock: false,
+        allowMock: useMockRandomness, // Use mock randomness if enabled
       });
 
       console.log("=== SDK_RETURNED ===");
@@ -433,6 +446,28 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                     className="w-full"
                     data-testid="slider-lock-duration"
                   />
+                </div>
+
+                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4 text-amber-400" />
+                      <Label htmlFor="mock-randomness" className="text-amber-400 font-semibold cursor-pointer">
+                        Mock Randomness (Devnet)
+                      </Label>
+                    </div>
+                    <Switch
+                      id="mock-randomness"
+                      checked={useMockRandomness}
+                      onCheckedChange={setUseMockRandomness}
+                      className="data-[state=checked]:bg-amber-500"
+                    />
+                  </div>
+                  <p className="text-xs text-amber-400/80 leading-relaxed">
+                    {useMockRandomness
+                      ? "✓ Using mock randomness - instant reveals, no Switchboard delays"
+                      : "⚠ Using real Switchboard VRF - may experience delays on Devnet"}
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-lg bg-muted/50 space-y-2 text-sm">

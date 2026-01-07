@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/hooks/use-wallet";
 import { useCreatePool } from "@/hooks/use-pools";
@@ -21,12 +22,12 @@ import { PublicKey } from "@solana/web3.js";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
 const DEV_WALLET_PUBKEY = import.meta.env.VITE_DEV_WALLET_PUBKEY || "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
-import { 
-  Loader2, 
-  ArrowLeft, 
-  ArrowRight, 
-  Atom, 
-  Search, 
+import {
+  Loader2,
+  ArrowLeft,
+  ArrowRight,
+  Atom,
+  Search,
   AlertCircle,
   Check,
   Coins,
@@ -36,7 +37,8 @@ import {
   CheckCircle2,
   ShoppingCart,
   Settings2,
-  RefreshCw
+  RefreshCw,
+  FlaskConical
 } from "lucide-react";
 import { Link } from "wouter";
 import { getJupiterQuote, executeJupiterSwap, formatTokenAmount, JupiterQuote } from "@/lib/jupiterSwap";
@@ -56,6 +58,7 @@ export default function CreatePool() {
   const [lockDuration, setLockDuration] = useState(60);
   const [customDuration, setCustomDuration] = useState("");
   const [isPriceMissingAccepted, setIsPriceMissingAccepted] = useState(false);
+  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
 
   const [solAmount, setSolAmount] = useState<string>("");
   const [slippageBps, setSlippageBps] = useState<number>(100);
@@ -138,6 +141,8 @@ export default function CreatePool() {
         creator: publicKey.toBase58(),
       });
 
+      console.log("=== MOCK_RANDOMNESS_STATE ===", useMockRandomness);
+
       const sdkResult = await createPoolOnChain({
         mint: mintPubkey,
         amount: entryAmount,
@@ -148,7 +153,7 @@ export default function CreatePool() {
         burnFeeBps: 0,
         treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
         treasuryFeeBps: 0,
-        allowMock: false,
+        allowMock: useMockRandomness,
       });
 
       console.log("=== SDK_RETURNED ===");
@@ -746,6 +751,28 @@ export default function CreatePool() {
                     <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">Horizon</div>
                     <div className="font-mono text-sm font-bold">{lockDuration} Minutes</div>
                   </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4 text-amber-400" />
+                      <Label htmlFor="mock-randomness" className="text-amber-400 font-semibold cursor-pointer">
+                        Mock Randomness (Devnet)
+                      </Label>
+                    </div>
+                    <Switch
+                      id="mock-randomness"
+                      checked={useMockRandomness}
+                      onCheckedChange={setUseMockRandomness}
+                      className="data-[state=checked]:bg-amber-500"
+                    />
+                  </div>
+                  <p className="text-xs text-amber-400/80 leading-relaxed">
+                    {useMockRandomness
+                      ? "✓ Using mock randomness - instant reveals, no Switchboard delays"
+                      : "⚠ Using real Switchboard VRF - may experience delays on Devnet"}
+                  </p>
                 </div>
 
                 <div className="flex gap-3">

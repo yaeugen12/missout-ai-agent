@@ -48,11 +48,20 @@ export default function Claims() {
   });
 
   const handleClaimRefund = useCallback(async (pool: PoolForClaim) => {
-    if (!pool.onChainAddress) return;
-    
+    if (!pool.onChainAddress || !walletAddress) return;
+
     setClaimingRefund(pool.onChainAddress);
     try {
+      // Claim on blockchain
       const result = await claimRefund(pool.onChainAddress);
+
+      // Mark as claimed in database
+      await fetch(`/api/pools/${pool.id}/claim-refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: walletAddress }),
+      });
+
       toast({
         title: "Refund Claimed!",
         description: `Your tokens escaped the collapsed pool. TX: ${result.tx.slice(0, 8)}...`,
@@ -68,14 +77,22 @@ export default function Claims() {
     } finally {
       setClaimingRefund(null);
     }
-  }, [claimRefund, toast, queryClient]);
+  }, [claimRefund, walletAddress, toast, queryClient]);
 
   const handleClaimRent = useCallback(async (pool: PoolForClaim) => {
     if (!pool.onChainAddress || !publicKey) return;
-    
+
     setClaimingRent(pool.onChainAddress);
     try {
+      // Claim on blockchain
       const result = await claimRent(pool.onChainAddress, publicKey);
+
+      // Mark as claimed in database
+      await fetch(`/api/pools/${pool.id}/claim-rent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
       toast({
         title: "Rent Reclaimed!",
         description: `Gravitational costs recovered. TX: ${result.tx.slice(0, 8)}...`,

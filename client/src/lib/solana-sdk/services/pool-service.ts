@@ -128,7 +128,9 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
 
   Buffer.from(salt).copy(dataBuffer, offset); offset += 32;
   dataBuffer.writeUInt8(params.maxParticipants, offset); offset += 1; // u8, not u16!
+  console.log("[DEBUG] lockDurationSeconds VALUE BEFORE WRITE:", params.lockDurationSeconds, "TYPE:", typeof params.lockDurationSeconds);
   dataBuffer.writeBigInt64LE(BigInt(params.lockDurationSeconds), offset); offset += 8;
+  console.log("[DEBUG] lockDurationSeconds IN BUFFER:", dataBuffer.readBigInt64LE(offset - 8));
   const amountBytes = tokenAmount.toBN().toArrayLike(Buffer, 'le', 8); // u64 = 8 bytes, not 16!
   amountBytes.copy(dataBuffer, offset); offset += 8;
   Buffer.from(params.devWallet.toBytes()).copy(dataBuffer, offset); offset += 32;
@@ -428,18 +430,20 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
+  // Claim Refund instruction - discriminator from IDL: [15, 16, 30, 161, 255, 228, 97, 60]
+  // Account order from IDL: mint, pool, pool_token, user_token, treasury_token, user, token_program, participants
   const ix = createInstructionWithDiscriminator(
-    [117, 222, 118, 104, 193, 151, 141, 125],
+    [15, 16, 30, 161, 255, 228, 97, 60],
     Buffer.alloc(0),
     [
-      { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: poolState.mint, isSigner: false, isWritable: false },
+      { pubkey: poolState.mint, isSigner: false, isWritable: true },
       { pubkey: poolPk, isSigner: false, isWritable: true },
-      { pubkey: participantsPda, isSigner: false, isWritable: true },
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: userToken, isSigner: false, isWritable: true },
       { pubkey: treasuryToken, isSigner: false, isWritable: true },
+      { pubkey: userPk, isSigner: true, isWritable: true },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
 
@@ -984,18 +988,20 @@ export async function buildClaimRefundInstruction(
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
+  // Claim Refund instruction - discriminator from IDL: [15, 16, 30, 161, 255, 228, 97, 60]
+  // Account order from IDL: mint, pool, pool_token, user_token, treasury_token, user, token_program, participants
   const ix = createInstructionWithDiscriminator(
-    [117, 222, 118, 104, 193, 151, 141, 125],
+    [15, 16, 30, 161, 255, 228, 97, 60],
     Buffer.alloc(0),
     [
-      { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: poolState.mint, isSigner: false, isWritable: false },
+      { pubkey: poolState.mint, isSigner: false, isWritable: true },
       { pubkey: poolPk, isSigner: false, isWritable: true },
-      { pubkey: participantsPda, isSigner: false, isWritable: true },
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: userToken, isSigner: false, isWritable: true },
       { pubkey: treasuryToken, isSigner: false, isWritable: true },
+      { pubkey: userPk, isSigner: true, isWritable: true },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
 

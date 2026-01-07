@@ -19,7 +19,9 @@ export interface IStorage {
   // Participants
   getParticipants(poolId: number): Promise<Participant[]>;
   addParticipant(participant: InsertParticipant): Promise<Participant>;
-  
+  markRefundClaimed(poolId: number, wallet: string): Promise<boolean>;
+  markRentClaimed(poolId: number): Promise<boolean>;
+
   // Transactions
   addTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getPoolTransactions(poolId: number): Promise<Transaction[]>;
@@ -149,6 +151,27 @@ export class DatabaseStorage implements IStorage {
       
       return newParticipant;
     });
+  }
+
+  async markRefundClaimed(poolId: number, wallet: string): Promise<boolean> {
+    const result = await db.update(participants)
+      .set({ refundClaimed: 1 })
+      .where(and(
+        eq(participants.poolId, poolId),
+        eq(participants.walletAddress, wallet)
+      ))
+      .returning();
+
+    return result.length > 0;
+  }
+
+  async markRentClaimed(poolId: number): Promise<boolean> {
+    const result = await db.update(pools)
+      .set({ rentClaimed: 1 })
+      .where(eq(pools.id, poolId))
+      .returning();
+
+    return result.length > 0;
   }
 
   async addTransaction(transaction: InsertTransaction): Promise<Transaction> {

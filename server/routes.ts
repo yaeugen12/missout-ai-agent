@@ -74,27 +74,32 @@ export async function registerRoutes(
       
       for (const pool of allPools) {
         const participants = await storage.getParticipants(pool.id);
-        const participantWallets = participants.map(p => p.walletAddress);
-        
+
         const poolData = {
           id: pool.id,
-          onChainAddress: pool.onChainAddress,
+          onChainAddress: pool.poolAddress, // Map poolAddress from DB to onChainAddress for frontend
           status: pool.status,
           tokenMint: pool.tokenMint,
           tokenSymbol: pool.tokenSymbol,
-          tokenLogoUrl: pool.tokenLogoUrl,
-          entryFee: pool.entryFee,
+          tokenLogoUrl: undefined, // Token logo can be fetched from token metadata if needed
+          entryFee: pool.entryAmount.toString(), // Use entryAmount from DB, convert to string for frontend
           creatorWallet: pool.creatorWallet,
-          participants: participantWallets,
+          participants: participants.map(p => p.walletAddress),
         };
-        
-        if (pool.status === "cancelled" && participantWallets.includes(wallet)) {
-          refunds.push(poolData);
+
+        // Check if user can claim refund (pool cancelled, user is participant, refund not yet claimed)
+        if (pool.status === "cancelled") {
+          const userParticipant = participants.find(p => p.walletAddress === wallet);
+          if (userParticipant && !userParticipant.refundClaimed) {
+            refunds.push(poolData);
+          }
         }
-        
+
+        // Check if creator can claim rent (pool ended/cancelled, rent not yet claimed)
         if (
           pool.creatorWallet === wallet &&
-          ["ended", "cancelled"].includes(pool.status)
+          ["ended", "cancelled"].includes(pool.status) &&
+          !pool.rentClaimed
         ) {
           rents.push(poolData);
         }
@@ -104,6 +109,47 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching claimable pools:", error);
       res.status(500).json({ message: "Failed to fetch claimable pools" });
+    }
+  });
+
+  // Mark refund as claimed
+  app.post("/api/pools/:poolId/claim-refund", async (req, res) => {
+    try {
+      const poolId = Number(req.params.poolId);
+      const { wallet } = req.body;
+
+      if (!wallet) {
+        return res.status(400).json({ message: "Wallet address required" });
+      }
+
+      const result = await storage.markRefundClaimed(poolId, wallet);
+
+      if (!result) {
+        return res.status(404).json({ message: "Participant not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking refund as claimed:", error);
+      res.status(500).json({ message: "Failed to mark refund as claimed" });
+    }
+  });
+
+  // Mark rent as claimed
+  app.post("/api/pools/:poolId/claim-rent", async (req, res) => {
+    try {
+      const poolId = Number(req.params.poolId);
+
+      const result = await storage.markRentClaimed(poolId);
+
+      if (!result) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking rent as claimed:", error);
+      res.status(500).json({ message: "Failed to mark rent as claimed" });
     }
   });
 

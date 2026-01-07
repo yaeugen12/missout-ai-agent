@@ -27,6 +27,7 @@ export const pools = pgTable("pools", {
   randomnessHex: text("randomness_hex"), // Revealed randomness value
   txHash: text("tx_hash"), // Winner payout transaction hash
   allowMock: integer("allow_mock").default(0), // 1 = use mock randomness for testing
+  rentClaimed: integer("rent_claimed").default(0), // 1 if creator claimed rent
 });
 
 export const participants = pgTable("participants", {
@@ -35,6 +36,7 @@ export const participants = pgTable("participants", {
   walletAddress: text("wallet_address").notNull(),
   avatar: text("avatar"), // mock avatar url
   joinedAt: timestamp("joined_at").defaultNow(),
+  refundClaimed: integer("refund_claimed").default(0), // 1 if refund was claimed
 });
 
 export const transactions = pgTable("transactions", {
