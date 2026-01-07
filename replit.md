@@ -158,6 +158,27 @@ Complete referral system allowing users to earn 1.5% of pool fees when their ref
 4. When pool completes, allocateReferralRewards() splits 1.5% treasury fee equally among unique referrers
 5. User claims via signed message → atomic database transaction → pending status for payout processing
 
+### Leaderboard System (client/src/pages/Leaderboard.tsx)
+Comprehensive ranking display for winners and referrers with cosmic styling:
+
+**Features**:
+- **Winners Tab** (gold theme): Rankings by total wins and tokens won
+- **Referrers Tab** (purple theme): Rankings by referral count and earnings
+- **Cosmic Styling**: Gold/silver/bronze gradients for top 3, crown/star/sparkles icons
+- **Dicebear Avatars**: Auto-generated avatars based on wallet address
+
+**Backend Endpoints** (server/routes.ts):
+- `GET /api/leaderboard/winners?limit=20`: Top winners with winsCount, totalTokensWon, tokenSymbol, lastWinAt
+- `GET /api/leaderboard/referrers?limit=20`: Top referrers with referralsCount, totalTokensEarned, dates
+
+**Storage Functions** (server/storage.ts):
+- `getTopWinners(limit)`: SQL aggregation of pools where winnerWallet = wallet, status = ended
+- `getTopReferrers(limit)`: SQL aggregation of referral_relations with reward amounts
+
+**Display Metrics**:
+- Winners: Rank, avatar, wallet, wins count, total tokens won, token symbol, last win timestamp
+- Referrers: Rank, avatar, wallet, referral count, total earned, first/last referral dates
+
 ### Claims Center (client/src/pages/Claims.tsx)
 Unified interface for recovering funds from cancelled pools and reclaiming rent from closed pools:
 
