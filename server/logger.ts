@@ -4,10 +4,29 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// ============================================================
+// FIX: Support for both ESM (local dev) and CJS (Render build)
+// ============================================================
 
+let __filename: string;
+let __dirname: string;
+
+try {
+  // Works in ESM (tsx local)
+  __filename = fileURLToPath(import.meta.url);
+  __dirname = dirname(__filename);
+} catch {
+  // Works in CJS (Render build)
+  // @ts-ignore
+  __filename = typeof __filename !== "undefined" ? __filename : "";
+  // @ts-ignore
+  __dirname = typeof __dirname !== "undefined" ? __dirname : process.cwd();
+}
+
+// ------------------------------------------------------------
 // Ensure logs directory exists
+// ------------------------------------------------------------
+
 const logsDir = path.resolve(__dirname, '../logs');
 if (!existsSync(logsDir)) {
   mkdirSync(logsDir, { recursive: true });
@@ -25,18 +44,16 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'missout-api' },
   transports: [
-    // Always log errors to file
     new winston.transports.File({
       filename: path.join(logsDir, 'error.log'),
       level: 'error',
-      maxsize: 5242880, // 5MB
+      maxsize: 5242880,
       maxFiles: 5,
     }),
 
-    // Log all to combined file in production
     new winston.transports.File({
       filename: path.join(logsDir, 'combined.log'),
-      maxsize: 5242880, // 5MB
+      maxsize: 5242880,
       maxFiles: 5,
     }),
   ],
@@ -44,22 +61,30 @@ export const logger = winston.createLogger({
 
 // Console logging
 if (isDevelopment) {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    ),
-  }));
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    })
+  );
 } else {
-  // Production console logging (minimal)
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple(),
-    level: 'warn', // Only warnings and errors
-  }));
+  logger.add(
+    new winston.transports.Console({
+      format: winston.format.simple(),
+      level: 'warn',
+    })
+  );
 }
 
-// Helper functions for common patterns
-export const logRequest = (method: string, path: string, statusCode: number, duration: number) => {
+// Helper functions
+export const logRequest = (
+  method: string,
+  path: string,
+  statusCode: number,
+  duration: number
+) => {
   logger.info('HTTP Request', {
     method,
     path,
