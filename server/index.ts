@@ -8,6 +8,7 @@ import { poolMonitor } from "./pool-monitor/poolMonitor";
 import { pool as dbPool } from "./db";
 import { initRedis } from "./cache";
 import { logger, logError } from "./logger";
+import { startCleanupJob, stopCleanupJob } from "./transactionCleanup";
 import { readFileSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -168,6 +169,10 @@ app.use((req, res, next) => {
     log("Pool monitor will not run. Check DEV_WALLET_PRIVATE_KEY in .env", "FATAL");
   }
 
+  // Start transaction cleanup job
+  startCleanupJob();
+  log("Transaction cleanup job started (runs every 24 hours)");
+
   // ============================================
   // HEALTH CHECK ENDPOINT
   // ============================================
@@ -269,9 +274,20 @@ app.use((req, res, next) => {
       logger.info('HTTP server closed, no new connections accepted');
 
       try {
+        // Stop transaction cleanup job
+        stopCleanupJob();
+        logger.info('Transaction cleanup job stopped');
+
         // Stop Pool Monitor (finish current operations)
-        poolMonitor.stop();
+        await poolMonitor.stop();
         logger.info('Pool Monitor stopped');
+
+        // Close Redis connection
+        const { redis } = await import('./cache');
+        if (redis) {
+          await redis.quit();
+          logger.info('Redis connection closed');
+        }
 
         // Close database connections
         await dbPool.end();

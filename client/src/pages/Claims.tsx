@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Wallet, RefreshCw, ArrowUpFromLine, Coins, Sparkles, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BatchClaimProgress } from "@/lib/solana-sdk";
+import bs58 from "bs58";
 
 interface PoolForClaim {
   id: number;
@@ -23,7 +24,7 @@ interface PoolForClaim {
 }
 
 export default function Claims() {
-  const { publicKey, connected } = useWallet();
+  const { publicKey, connected, signMessage } = useWallet();
   const { claimRefund, claimRent, claimRefundsBatch, claimRentsBatch } = useMissoutSDK();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -48,19 +49,39 @@ export default function Claims() {
   });
 
   const handleClaimRefund = useCallback(async (pool: PoolForClaim) => {
-    if (!pool.onChainAddress || !walletAddress) return;
+    if (!pool.onChainAddress || !walletAddress || !publicKey || !signMessage) return;
 
     setClaimingRefund(pool.onChainAddress);
     try {
       // Claim on blockchain
       const result = await claimRefund(pool.onChainAddress);
 
+      // Wait 2 seconds for transaction to propagate to all RPC nodes
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Sign message to prove wallet ownership
+      const timestamp = Date.now();
+      const message = `claim-refund:${pool.id}:${timestamp}`;
+      const messageBytes = new TextEncoder().encode(message);
+      const signatureBytes = await signMessage(messageBytes);
+      const signature = bs58.encode(signatureBytes);
+
       // Mark as claimed in database
-      await fetch(`/api/pools/${pool.id}/claim-refund`, {
+      const response = await fetch(`/api/pools/${pool.id}/claim-refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet: walletAddress }),
+        body: JSON.stringify({
+          wallet: walletAddress,
+          txHash: result.tx,
+          signature,
+          message
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to mark refund as claimed');
+      }
 
       toast({
         title: "Refund Claimed!",
@@ -77,21 +98,42 @@ export default function Claims() {
     } finally {
       setClaimingRefund(null);
     }
-  }, [claimRefund, walletAddress, toast, queryClient]);
+  }, [claimRefund, walletAddress, publicKey, signMessage, toast, queryClient]);
 
   const handleClaimRent = useCallback(async (pool: PoolForClaim) => {
-    if (!pool.onChainAddress || !publicKey) return;
+    if (!pool.onChainAddress || !publicKey || !walletAddress || !signMessage) return;
 
     setClaimingRent(pool.onChainAddress);
     try {
       // Claim on blockchain
       const result = await claimRent(pool.onChainAddress, publicKey);
 
+      // Wait 2 seconds for transaction to propagate to all RPC nodes
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Sign message to prove wallet ownership
+      const timestamp = Date.now();
+      const message = `claim-rent:${pool.id}:${timestamp}`;
+      const messageBytes = new TextEncoder().encode(message);
+      const signatureBytes = await signMessage(messageBytes);
+      const signature = bs58.encode(signatureBytes);
+
       // Mark as claimed in database
-      await fetch(`/api/pools/${pool.id}/claim-rent`, {
+      const response = await fetch(`/api/pools/${pool.id}/claim-rent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: walletAddress,
+          txHash: result.tx,
+          signature,
+          message
+        }),
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to mark rent as claimed');
+      }
 
       toast({
         title: "Rent Reclaimed!",
@@ -108,7 +150,7 @@ export default function Claims() {
     } finally {
       setClaimingRent(null);
     }
-  }, [claimRent, publicKey, toast, queryClient]);
+  }, [claimRent, publicKey, walletAddress, signMessage, toast, queryClient]);
 
   const handleClaimAllRefunds = useCallback(async (pools: PoolForClaim[]) => {
     if (pools.length === 0) return;

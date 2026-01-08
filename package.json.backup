@@ -1,5 +1,5 @@
 {
-  "name": "missout",
+  "name": "rest-express",
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
@@ -8,18 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "chmod +x scripts/migrate-database.sh && ./scripts/migrate-database.sh",
-    "db:test": "psql $DATABASE_URL -c 'SELECT NOW();'",
-    "db:backup": "pg_dump $DIRECT_DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql",
-    "health": "curl -s http://localhost:5000/health | jq",
-    "pm2:start": "pm2 start npm --name missout-backend -- start",
-    "pm2:stop": "pm2 stop missout-backend",
-    "pm2:restart": "pm2 restart missout-backend",
-    "pm2:logs": "pm2 logs missout-backend",
-    "pm2:monit": "pm2 monit missout-backend"
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

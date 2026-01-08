@@ -5,7 +5,7 @@ import {
   WalletProvider as SolanaWalletProvider,
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
+
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 
@@ -22,10 +22,11 @@ interface WalletProviderProps {
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const endpoint = HELIUS_DEVNET_RPC;
 
-  // Use a stable identity for wallets array
+  // IMPORTANT:
+  // PhantomWalletAdapter MUST NOT be added manually
+  // Phantom registers automatically through the Solana Wallet Standard
   const wallets = useMemo(
     () => [
-      new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
       new BackpackWalletAdapter(),
     ],
@@ -47,9 +48,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         autoConnect={true}
         localStorageKey="missout-wallet-key"
       >
-        <WalletModalProvider>
-          {children}
-        </WalletModalProvider>
+        <WalletModalProvider>{children}</WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>
   );

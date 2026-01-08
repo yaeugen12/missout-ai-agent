@@ -37,12 +37,28 @@ export class PoolMonitor {
     this.tick();
   }
 
-  stop() {
+  async stop() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
     this.isRunning = false;
+    log("Pool monitor stopping, waiting for active pools to finish...");
+
+    // Wait for all processing pools to finish (max 25 seconds)
+    const maxWait = 25000;
+    const startTime = Date.now();
+    while (processingPools.size > 0 && Date.now() - startTime < maxWait) {
+      log(`Waiting for ${processingPools.size} pool(s) to finish processing...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    if (processingPools.size > 0) {
+      log(`⚠️ Force stopping with ${processingPools.size} pool(s) still processing`);
+    } else {
+      log("✅ All pools finished processing");
+    }
+
     log("Pool monitor stopped");
   }
 

@@ -196,6 +196,7 @@ export default function CreatePool() {
 
     console.log("[CreatePool] BEFORE createPoolBackend - tokenInfo:", tokenInfo);
     console.log("[CreatePool] BEFORE createPoolBackend - tokenMint value:", tokenInfo.mint);
+    console.log("[CreatePool] BEFORE createPoolBackend - allowMock:", useMockRandomness ? 1 : 0);
 
     createPoolBackend({
       tokenSymbol: tokenInfo.symbol,
@@ -208,6 +209,7 @@ export default function CreatePool() {
       maxParticipants: participants,
       lockDuration: lockDuration,
       creatorWallet: address,
+      allowMock: useMockRandomness ? 1 : 0,
     }, {
       onSuccess: (pool) => {
         console.log("=== BACKEND_SUCCESS ===", pool.id);

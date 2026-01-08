@@ -5,7 +5,7 @@ import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import { tokenDiscoveryService, type DiscoveredToken } from "./tokenDiscoveryService";
 import { poolMonitor } from "./pool-monitor";
-import { db } from "./db";
+import { db, pool as pgPool } from "./db";
 import { pools, updateProfileSchema } from "@shared/schema";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
@@ -13,135 +13,18 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { Connection, PublicKey } from "@solana/web3.js";
-
-// ===========================================
-// SECURITY: On-Chain Transaction Verification
-// ===========================================
-const solanaConnection = new Connection(
-  process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
-  "confirmed"
-);
-
-// MissOut Program ID
-const MISSOUT_PROGRAM_ID = "53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw";
-
-// Anchor instruction discriminators (first 8 bytes of sha256("global:instruction_name"))
-// These are pre-computed for claim_refund and claim_rent instructions
-// claim_refund: sha256("global:claim_refund")[0..8] = [143, 160, 32, 23, 17, 97, 156, 101]
-// claim_rent: sha256("global:claim_rent")[0..8] = [215, 25, 159, 196, 195, 68, 217, 41]
-const CLAIM_REFUND_DISCRIMINATOR = [143, 160, 32, 23, 17, 97, 156, 101];
-const CLAIM_RENT_DISCRIMINATOR = [215, 25, 159, 196, 195, 68, 217, 41];
-
-/**
- * Check if instruction data starts with the expected discriminator
- */
-function matchesDiscriminator(data: Buffer | Uint8Array, discriminator: number[]): boolean {
-  if (data.length < 8) return false;
-  for (let i = 0; i < 8; i++) {
-    if (data[i] !== discriminator[i]) return false;
-  }
-  return true;
-}
-
-/**
- * Verify a transaction exists on-chain, succeeded, invoked our program
- * with the correct claim instruction, and involves the expected wallet and pool.
- * 
- * SECURITY: This prevents attackers from reusing unrelated transactions
- * (like join/donate transactions) to fake claims.
- */
-async function verifyOnChainClaimTransaction(
-  txHash: string, 
-  expectedWallet: string,
-  claimType: "refund" | "rent",
-  expectedPoolAddress?: string
-): Promise<{ valid: boolean; error?: string }> {
-  try {
-    const tx = await solanaConnection.getTransaction(txHash, {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0
-    });
-    
-    if (!tx) {
-      return { valid: false, error: "Transaction not found on-chain" };
-    }
-    
-    if (tx.meta?.err) {
-      return { valid: false, error: "Transaction failed on-chain" };
-    }
-    
-    // Get all account keys including loaded addresses for versioned transactions
-    const staticKeys = tx.transaction.message.staticAccountKeys.map(k => k.toBase58());
-    const loadedWritable = tx.meta?.loadedAddresses?.writable?.map(k => k.toBase58()) || [];
-    const loadedReadonly = tx.meta?.loadedAddresses?.readonly?.map(k => k.toBase58()) || [];
-    const allAccountKeys = [...staticKeys, ...loadedWritable, ...loadedReadonly];
-    
-    // Determine which discriminator to check based on claim type
-    const expectedDiscriminator = claimType === "refund" 
-      ? CLAIM_REFUND_DISCRIMINATOR 
-      : CLAIM_RENT_DISCRIMINATOR;
-    
-    // SECURITY: Verify the transaction contains a claim instruction with correct discriminator
-    // Check compiled instructions in the message
-    const compiledInstructions = tx.transaction.message.compiledInstructions;
-    let foundClaimInstruction = false;
-    
-    for (const ix of compiledInstructions) {
-      const programId = allAccountKeys[ix.programIdIndex];
-      if (programId === MISSOUT_PROGRAM_ID) {
-        // Check if instruction data matches the expected claim discriminator
-        if (matchesDiscriminator(ix.data, expectedDiscriminator)) {
-          foundClaimInstruction = true;
-          break;
-        }
-      }
-    }
-    
-    // Also check inner instructions (CPI calls)
-    if (!foundClaimInstruction && tx.meta?.innerInstructions) {
-      for (const inner of tx.meta.innerInstructions) {
-        for (const ix of inner.instructions as any[]) {
-          const programId = allAccountKeys[ix.programIdIndex];
-          if (programId === MISSOUT_PROGRAM_ID) {
-            const data = bs58.decode(ix.data);
-            if (matchesDiscriminator(data, expectedDiscriminator)) {
-              foundClaimInstruction = true;
-              break;
-            }
-          }
-        }
-        if (foundClaimInstruction) break;
-      }
-    }
-    
-    if (!foundClaimInstruction) {
-      return { valid: false, error: `No claim_${claimType} instruction found in transaction` };
-    }
-    
-    // Check if the expected wallet is in the transaction
-    if (!allAccountKeys.includes(expectedWallet)) {
-      return { valid: false, error: "Wallet not found in transaction" };
-    }
-    
-    // If pool address provided, verify it's in the transaction
-    if (expectedPoolAddress && !allAccountKeys.includes(expectedPoolAddress)) {
-      return { valid: false, error: "Pool address not found in transaction" };
-    }
-    
-    // Verify the wallet signed the transaction
-    const numSignatures = tx.transaction.signatures.length;
-    const signerKeys = staticKeys.slice(0, numSignatures);
-    if (!signerKeys.includes(expectedWallet)) {
-      return { valid: false, error: "Wallet did not sign this transaction" };
-    }
-    
-    return { valid: true };
-  } catch (err: any) {
-    console.error("[SECURITY] On-chain verification error:", err.message);
-    return { valid: false, error: "Failed to verify transaction on-chain" };
-  }
-}
+import {
+  verifyClaimRefundTransaction,
+  verifyClaimRentTransaction,
+  verifyPoolCreationTransaction,
+  verifyJoinTransaction,
+  verifyCancelPoolTransaction,
+  verifyDonateTransaction
+} from "./transactionVerifier";
+import {
+  isTxHashUsed,
+  markTxHashUsed
+} from "./transactionHashTracker";
 
 // ===========================================
 // SECURITY: File Upload Hardening
@@ -288,8 +171,13 @@ export async function registerRoutes(
   });
   // Pools
   app.get(api.pools.list.path, async (req, res) => {
-    const pools = await storage.getPools();
-    res.json(pools);
+    const allPools = await storage.getPools();
+
+    // Filter out cancelled pools with refunds returned
+    // Keep only active, pending, ended pools (but not cancelled ones)
+    const activePools = allPools.filter(pool => pool.status !== 'cancelled');
+
+    res.json(activePools);
   });
 
   app.get("/api/pools/claimable", async (req, res) => {
@@ -390,33 +278,74 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Pool not found" });
       }
 
-      // SECURITY: Verify transaction contains actual claim_refund instruction
-      const onChainVerification = await verifyOnChainClaimTransaction(txHash, wallet, "refund", pool.poolAddress || undefined);
-      if (!onChainVerification.valid) {
-        console.log("[SECURITY] Claim refund rejected - on-chain verification failed:", onChainVerification.error);
-        return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
+      const txAlreadyUsed = await isTxHashUsed(txHash);
+      if (txAlreadyUsed) {
+        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: txHash.slice(0, 20), poolId, wallet });
+        return res.status(409).json({ message: "Transaction hash already used" });
       }
 
-      // Verify participant exists and hasn't already claimed
+      // SECURITY: Verify transaction contains actual claim_refund instruction
+      if (!pool.poolAddress) {
+        return res.status(400).json({ message: "Pool has no on-chain address" });
+      }
+
+      const verification = await verifyClaimRefundTransaction(
+        txHash,
+        wallet,
+        pool.poolAddress
+      );
+
+      if (!verification.valid) {
+        console.log("[REFUND_VERIFY] Transaction verification failed:", verification.reason);
+        return res.status(400).json({ message: verification.reason || "Transaction verification failed" });
+      }
+
+      // Verify participant exists
       const participantsList = await storage.getParticipants(poolId);
       const participant = participantsList.find(p => p.walletAddress === wallet);
-      
+
       if (!participant) {
         return res.status(404).json({ message: "Participant not found in this pool" });
       }
-      
-      if (participant.refundClaimed) {
-        return res.status(409).json({ message: "Refund already claimed" });
+
+      // 🔐 ATOMIC TRANSACTION: Mark tx as used + mark refund claimed
+      // This prevents race conditions - PostgreSQL UNIQUE constraint ensures atomicity
+      const client = await pgPool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        // Mark transaction as used (will throw if duplicate due to UNIQUE constraint)
+        await markTxHashUsed(txHash, poolId, wallet, "claim_refund");
+
+        // Atomic update: only marks if refundClaimed = 0
+        const result = await storage.markRefundClaimed(poolId, wallet);
+
+        if (!result) {
+          throw new Error("Refund already claimed or participant not found");
+        }
+
+        await client.query("COMMIT");
+        client.release();
+
+        console.log("[CLAIM] Refund marked as claimed (on-chain verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
+        res.json({ success: true });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        client.release();
+
+        if (err.message.includes("already used")) {
+          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: txHash.slice(0, 20) });
+          return res.status(409).json({ message: "Transaction already processed" });
+        }
+
+        if (err.message.includes("already claimed")) {
+          return res.status(409).json({ message: "Refund already claimed" });
+        }
+
+        throw err;
       }
-
-      const result = await storage.markRefundClaimed(poolId, wallet);
-
-      if (!result) {
-        return res.status(404).json({ message: "Participant not found" });
-      }
-
-      console.log("[CLAIM] Refund marked as claimed (on-chain verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
-      res.json({ success: true });
     } catch (error) {
       console.error("Error marking refund as claimed:", error);
       res.status(500).json({ message: "Failed to mark refund as claimed" });
@@ -474,25 +403,72 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Only pool creator can claim rent" });
       }
 
-      if (pool.rentClaimed) {
-        return res.status(409).json({ message: "Rent already claimed" });
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
+      const txAlreadyUsed = await isTxHashUsed(txHash);
+      if (txAlreadyUsed) {
+        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: txHash.slice(0, 20), poolId, wallet });
+        return res.status(409).json({ message: "Transaction hash already used" });
       }
 
-      // SECURITY: Verify transaction contains actual claim_rent instruction
-      const onChainVerification = await verifyOnChainClaimTransaction(txHash, wallet, "rent", pool.poolAddress || undefined);
-      if (!onChainVerification.valid) {
-        console.log("[SECURITY] Claim rent rejected - on-chain verification failed:", onChainVerification.error);
-        return res.status(400).json({ message: onChainVerification.error || "Transaction verification failed" });
+      // 🔐 SECURITY: Verify claim_rent transaction on-chain
+      if (!pool.poolAddress) {
+        return res.status(400).json({ message: "Pool has no on-chain address" });
       }
 
-      const result = await storage.markRentClaimed(poolId);
+      const verification = await verifyClaimRentTransaction(
+        txHash,
+        wallet,
+        pool.poolAddress
+      );
 
-      if (!result) {
-        return res.status(404).json({ message: "Pool not found" });
+      if (!verification.valid) {
+        console.log("[RENT_VERIFY] Transaction verification failed:", verification.reason);
+        return res.status(400).json({
+          message: verification.reason || "Transaction verification failed",
+        });
       }
 
-      console.log("[CLAIM] Rent marked as claimed (verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
-      res.json({ success: true });
+      console.log("[RENT_VERIFY] ✅ Verified rent claim transaction:", {
+        txHash: txHash.substring(0, 20) + "...",
+        wallet: wallet.substring(0, 16) + "...",
+      });
+
+      // 🔐 ATOMIC TRANSACTION: Mark tx as used + mark rent claimed
+      const client = await pgPool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        // Mark transaction as used (will throw if duplicate due to UNIQUE constraint)
+        await markTxHashUsed(txHash, poolId, wallet, "claim_rent");
+
+        // Atomic update: only marks if rentClaimed = 0
+        const result = await storage.markRentClaimed(poolId);
+
+        if (!result) {
+          throw new Error("Rent already claimed or pool not found");
+        }
+
+        await client.query("COMMIT");
+        client.release();
+
+        console.log("[CLAIM] Rent marked as claimed (verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
+        res.json({ success: true });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        client.release();
+
+        if (err.message.includes("already used")) {
+          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: txHash.slice(0, 20) });
+          return res.status(409).json({ message: "Transaction already processed" });
+        }
+
+        if (err.message.includes("already claimed")) {
+          return res.status(409).json({ message: "Rent already claimed" });
+        }
+
+        throw err;
+      }
     } catch (error) {
       console.error("Error marking rent as claimed:", error);
       res.status(500).json({ message: "Failed to mark rent as claimed" });
@@ -511,12 +487,12 @@ export async function registerRoutes(
   app.post(api.pools.create.path, async (req, res) => {
     console.log("=== BACKEND_POST_RECEIVED ===");
     console.log("RAW_BODY:", JSON.stringify(req.body, null, 2));
-    
+
     try {
       const input = api.pools.create.input.parse(req.body);
-      
-      console.log("PARSED_INPUT:", { txHash: input.txHash, poolAddress: input.poolAddress, creatorWallet: input.creatorWallet });
-      
+
+      console.log("PARSED_INPUT:", { txHash: input.txHash, poolAddress: input.poolAddress, creatorWallet: input.creatorWallet, allowMock: input.allowMock });
+
       // CRITICAL: Block pool creation without on-chain transaction proof
       // This prevents fake pools from cached frontend code
       if (!input.txHash || !input.poolAddress) {
@@ -530,7 +506,7 @@ export async function registerRoutes(
           field: "txHash"
         });
       }
-      
+
       // Validate txHash format (should be a Solana transaction signature)
       if (!input.txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
         console.log("[ANTI-FAKE] Rejected pool creation - invalid txHash format:", input.txHash);
@@ -539,7 +515,7 @@ export async function registerRoutes(
           field: "txHash"
         });
       }
-      
+
       // Validate poolAddress format (should be a Solana public key)
       if (!input.poolAddress.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
         console.log("[ANTI-FAKE] Rejected pool creation - invalid poolAddress format:", input.poolAddress);
@@ -548,32 +524,104 @@ export async function registerRoutes(
           field: "poolAddress"
         });
       }
-      
-      console.log("[POOL CREATE] Valid on-chain pool:", {
+
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
+      const txAlreadyUsed = await isTxHashUsed(input.txHash);
+      if (txAlreadyUsed) {
+        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), wallet: input.creatorWallet });
+        return res.status(409).json({
+          message: "Transaction hash already used",
+          field: "txHash"
+        });
+      }
+
+      // 🔐 SECURITY FIX: Verify transaction exists on-chain
+      // This prevents attackers from submitting fake pool creation requests
+      const verification = await verifyPoolCreationTransaction(
+        input.txHash,
+        input.poolAddress,
+        input.creatorWallet
+      );
+
+      if (!verification.valid) {
+        console.log("[ANTI-FAKE] Transaction verification failed:", verification.reason);
+        return res.status(400).json({
+          message: verification.reason || "Transaction verification failed",
+          field: "txHash"
+        });
+      }
+
+      // Check if pool already exists in database (prevent duplicate registrations)
+      const existingPoolByAddress = await storage.getPoolByAddress(input.poolAddress);
+      if (existingPoolByAddress) {
+        console.log("[ANTI-FAKE] Pool already registered:", input.poolAddress);
+        return res.status(409).json({
+          message: "Pool already registered in the system",
+          field: "poolAddress"
+        });
+      }
+
+      const existingPoolByTxHash = await storage.getPoolByTxHash(input.txHash);
+      if (existingPoolByTxHash) {
+        console.log("[ANTI-FAKE] Transaction already used:", input.txHash);
+        return res.status(409).json({
+          message: "Transaction already used to create a pool",
+          field: "txHash"
+        });
+      }
+
+      console.log("[POOL CREATE] ✅ Verified on-chain pool:", {
         txHash: input.txHash.substring(0, 20) + "...",
         poolAddress: input.poolAddress
       });
-      
-      const pool = await storage.createPool(input);
 
-      // A) CREATOR MUST ALWAYS BE FIRST PARTICIPANT
-      console.log("[POOL CREATE] Adding creator as first participant:", input.creatorWallet);
-      await storage.addParticipant({
-        poolId: pool.id,
-        walletAddress: input.creatorWallet,
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${input.creatorWallet}`
-      });
+      // 🔐 ATOMIC TRANSACTION: Create pool + mark tx as used
+      const client = await pgPool.connect();
 
-      // Add transaction record for creator (CREATE)
-      await storage.addTransaction({
-        poolId: pool.id,
-        walletAddress: input.creatorWallet,
-        type: 'CREATE',
-        amount: pool.entryAmount,
-        txHash: input.txHash
-      });
+      try {
+        await client.query("BEGIN");
 
-      res.status(201).json(pool);
+        // Create pool
+        const pool = await storage.createPool(input);
+
+        // Mark transaction as used
+        await markTxHashUsed(input.txHash, pool.id, input.creatorWallet, "create_pool");
+
+        // A) CREATOR MUST ALWAYS BE FIRST PARTICIPANT
+        console.log("[POOL CREATE] Adding creator as first participant:", input.creatorWallet);
+        await storage.addParticipant({
+          poolId: pool.id,
+          walletAddress: input.creatorWallet,
+          // Avatar will be fetched from profile when participants are retrieved
+        });
+
+        // Add transaction record for creator (CREATE)
+        await storage.addTransaction({
+          poolId: pool.id,
+          walletAddress: input.creatorWallet,
+          type: 'CREATE',
+          amount: pool.entryAmount,
+          txHash: input.txHash
+        });
+
+        await client.query("COMMIT");
+        client.release();
+
+        res.status(201).json(pool);
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        client.release();
+
+        if (err.message.includes("already used")) {
+          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
+          return res.status(409).json({
+            message: "Transaction already processed",
+            field: "txHash"
+          });
+        }
+
+        throw err;
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
@@ -613,36 +661,118 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid transaction signature format" });
       }
 
-      console.log("[JOIN] Valid join:", { txHash: input.txHash?.substring(0, 20) + "...", wallet: input.walletAddress });
-
-      let participant;
-      try {
-        participant = await storage.addParticipant({
-          poolId: id,
-          walletAddress: input.walletAddress,
-          avatar: input.avatar,
-          txHash: input.txHash // Save txHash to participant record
-        });
-      } catch (err: any) {
-        // SECURITY: Handle duplicate participant error
-        if (err.message?.includes("DUPLICATE_PARTICIPANT")) {
-          console.log("[SECURITY] Blocked duplicate join attempt:", input.walletAddress);
-          return res.status(409).json({ message: "You have already joined this pool" });
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used (for on-chain pools)
+      if (pool.poolAddress && input.txHash) {
+        const txAlreadyUsed = await isTxHashUsed(input.txHash);
+        if (txAlreadyUsed) {
+          console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), poolId: id, wallet: input.walletAddress });
+          return res.status(409).json({ message: "Transaction hash already used" });
         }
-        throw err;
       }
 
-      // Add join transaction
-      await storage.addTransaction({
-        poolId: id,
-        walletAddress: input.walletAddress,
-        type: 'JOIN',
-        amount: pool.entryAmount,
-        txHash: input.txHash
-      });
+      // 🔐 SECURITY FIX: Verify join transaction exists on-chain (for on-chain pools)
+      if (pool.poolAddress && input.txHash) {
+        const verification = await verifyJoinTransaction(
+          input.txHash,
+          pool.poolAddress,
+          input.walletAddress
+        );
 
-      // Return updated pool data
-      const updatedPool = await storage.getPool(id);
+        if (!verification.valid) {
+          console.log("[ANTI-FAKE] Join transaction verification failed:", verification.reason);
+          return res.status(400).json({
+            message: verification.reason || "Transaction verification failed"
+          });
+        }
+
+        console.log("[JOIN] ✅ Verified on-chain join:", {
+          txHash: input.txHash.substring(0, 20) + "...",
+          wallet: input.walletAddress
+        });
+      } else {
+        console.log("[JOIN] Local pool join (no verification required):", { wallet: input.walletAddress });
+      }
+
+      // 🔐 ATOMIC TRANSACTION: Add participant + mark tx as used (for on-chain pools)
+      let participant;
+      let updatedPool;
+
+      if (pool.poolAddress && input.txHash) {
+        const client = await pgPool.connect();
+
+        try {
+          await client.query("BEGIN");
+
+          // Mark transaction as used
+          await markTxHashUsed(input.txHash, id, input.walletAddress, "join");
+
+          // Add participant
+          participant = await storage.addParticipant({
+            poolId: id,
+            walletAddress: input.walletAddress,
+            // Avatar will be fetched from profile when participants are retrieved
+          });
+
+          // Add join transaction
+          await storage.addTransaction({
+            poolId: id,
+            walletAddress: input.walletAddress,
+            type: 'JOIN',
+            amount: pool.entryAmount,
+            txHash: input.txHash
+          });
+
+          await client.query("COMMIT");
+          client.release();
+
+          // Return updated pool data
+          updatedPool = await storage.getPool(id);
+        } catch (err: any) {
+          await client.query("ROLLBACK");
+          client.release();
+
+          // SECURITY: Handle duplicate participant error
+          if (err.message?.includes("DUPLICATE_PARTICIPANT")) {
+            console.log("[SECURITY] Blocked duplicate join attempt:", input.walletAddress);
+            return res.status(409).json({ message: "You have already joined this pool" });
+          }
+
+          if (err.message.includes("already used")) {
+            console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
+            return res.status(409).json({ message: "Transaction already processed" });
+          }
+
+          throw err;
+        }
+      } else {
+        // Local/mock pool - no replay protection needed
+        try {
+          participant = await storage.addParticipant({
+            poolId: id,
+            walletAddress: input.walletAddress,
+            // Avatar will be fetched from profile when participants are retrieved
+          });
+
+          // Add join transaction
+          await storage.addTransaction({
+            poolId: id,
+            walletAddress: input.walletAddress,
+            type: 'JOIN',
+            amount: pool.entryAmount,
+            txHash: input.txHash
+          });
+
+          updatedPool = await storage.getPool(id);
+        } catch (err: any) {
+          // SECURITY: Handle duplicate participant error
+          if (err.message?.includes("DUPLICATE_PARTICIPANT")) {
+            console.log("[SECURITY] Blocked duplicate join attempt:", input.walletAddress);
+            return res.status(409).json({ message: "You have already joined this pool" });
+          }
+          throw err;
+        }
+      }
+
       res.json({ participant, pool: updatedPool });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -656,18 +786,92 @@ export async function registerRoutes(
   app.post("/api/pools/:id/cancel", async (req, res) => {
     try {
       const poolId = parseInt(req.params.id);
-      const { walletAddress, txHash } = req.body;
+      const input = z.object({
+        walletAddress: z.string(),
+        txHash: z.string(),
+      }).parse(req.body);
 
-      await storage.addTransaction({
-        poolId,
-        walletAddress,
-        type: 'CANCEL',
-        amount: 0,
-        txHash
+      // Fetch pool to get poolAddress
+      const pool = await storage.getPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      if (!pool.poolAddress) {
+        return res.status(400).json({ message: "Pool has no on-chain address" });
+      }
+
+      // Validate txHash format
+      if (!input.txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
+        return res.status(400).json({ message: "Invalid transaction signature format" });
+      }
+
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
+      const txAlreadyUsed = await isTxHashUsed(input.txHash);
+      if (txAlreadyUsed) {
+        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), poolId, wallet: input.walletAddress });
+        return res.status(409).json({ message: "Transaction hash already used" });
+      }
+
+      // 🔐 SECURITY: Verify cancel_pool transaction on-chain
+      const verification = await verifyCancelPoolTransaction(
+        input.txHash,
+        input.walletAddress,
+        pool.poolAddress
+      );
+
+      if (!verification.valid) {
+        console.log("[CANCEL_VERIFY] Transaction verification failed:", verification.reason);
+        return res.status(400).json({
+          message: verification.reason || "Transaction verification failed",
+        });
+      }
+
+      console.log("[CANCEL_VERIFY] ✅ Verified cancel transaction:", {
+        txHash: input.txHash.substring(0, 20) + "...",
+        wallet: input.walletAddress.substring(0, 16) + "...",
       });
 
-      res.json({ success: true });
+      // 🔐 ATOMIC TRANSACTION: Update status + mark tx as used
+      const client = await pgPool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        // Mark transaction as used
+        await markTxHashUsed(input.txHash, poolId, input.walletAddress, "cancel");
+
+        // Update pool status to cancelled
+        await storage.updatePoolStatus(poolId, 'cancelled');
+
+        // Record transaction
+        await storage.addTransaction({
+          poolId,
+          walletAddress: input.walletAddress,
+          type: 'CANCEL',
+          amount: 0,
+          txHash: input.txHash,
+        });
+
+        await client.query("COMMIT");
+        client.release();
+
+        res.json({ success: true, message: "Pool cancelled successfully" });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        client.release();
+
+        if (err.message.includes("already used")) {
+          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
+          return res.status(409).json({ message: "Transaction already processed" });
+        }
+
+        throw err;
+      }
     } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
       res.status(400).json({ message: err.message });
     }
   });
@@ -676,18 +880,92 @@ export async function registerRoutes(
   app.post("/api/pools/:id/refund", async (req, res) => {
     try {
       const poolId = parseInt(req.params.id);
-      const { walletAddress, txHash } = req.body;
+      const input = z.object({
+        walletAddress: z.string(),
+        txHash: z.string(),
+      }).parse(req.body);
 
-      await storage.addTransaction({
-        poolId,
-        walletAddress,
-        type: 'REFUND',
-        amount: 0,
-        txHash
+      // Fetch pool to get poolAddress
+      const pool = await storage.getPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      if (!pool.poolAddress) {
+        return res.status(400).json({ message: "Pool has no on-chain address" });
+      }
+
+      // Validate txHash format
+      if (!input.txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
+        return res.status(400).json({ message: "Invalid transaction signature format" });
+      }
+
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
+      const txAlreadyUsed = await isTxHashUsed(input.txHash);
+      if (txAlreadyUsed) {
+        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), poolId, wallet: input.walletAddress });
+        return res.status(409).json({ message: "Transaction hash already used" });
+      }
+
+      // 🔐 SECURITY: Verify refund transaction on-chain
+      const verification = await verifyClaimRefundTransaction(
+        input.txHash,
+        input.walletAddress,
+        pool.poolAddress
+      );
+
+      if (!verification.valid) {
+        console.log("[REFUND_VERIFY] Transaction verification failed:", verification.reason);
+        return res.status(400).json({
+          message: verification.reason || "Transaction verification failed",
+        });
+      }
+
+      console.log("[REFUND_VERIFY] ✅ Verified refund transaction:", {
+        txHash: input.txHash.substring(0, 20) + "...",
+        wallet: input.walletAddress.substring(0, 16) + "...",
       });
 
-      res.json({ success: true });
+      // 🔐 ATOMIC TRANSACTION: Mark claimed + mark tx as used
+      const client = await pgPool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        // Mark transaction as used
+        await markTxHashUsed(input.txHash, poolId, input.walletAddress, "refund");
+
+        // Mark refund as claimed in database
+        await storage.markRefundClaimed(poolId, input.walletAddress);
+
+        // Record transaction
+        await storage.addTransaction({
+          poolId,
+          walletAddress: input.walletAddress,
+          type: 'REFUND',
+          amount: pool.entryAmount,
+          txHash: input.txHash,
+        });
+
+        await client.query("COMMIT");
+        client.release();
+
+        res.json({ success: true, message: "Refund claimed successfully" });
+      } catch (err: any) {
+        await client.query("ROLLBACK");
+        client.release();
+
+        if (err.message.includes("already used")) {
+          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
+          return res.status(409).json({ message: "Transaction already processed" });
+        }
+
+        throw err;
+      }
     } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
       res.status(400).json({ message: err.message });
     }
   });
@@ -719,18 +997,93 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid transaction signature format" });
       }
 
-      console.log("[DONATE] Valid donate:", { txHash: input.txHash?.substring(0, 20) + "...", amount: input.amount });
+      // 🔐 REPLAY PROTECTION: Check if transaction hash already used (for on-chain pools)
+      if (pool.poolAddress && input.txHash) {
+        const txAlreadyUsed = await isTxHashUsed(input.txHash);
+        if (txAlreadyUsed) {
+          console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), poolId: id, wallet: input.walletAddress });
+          return res.status(409).json({ message: "Transaction hash already used" });
+        }
+      }
 
-      const tx = await storage.addTransaction({
-        poolId: id,
-        walletAddress: input.walletAddress,
-        type: 'DONATE',
-        amount: input.amount,
-        txHash: input.txHash
-      });
+      // 🔐 SECURITY FIX: Verify donate transaction on-chain (for on-chain pools)
+      if (pool.poolAddress && input.txHash) {
+        const verification = await verifyDonateTransaction(
+          input.txHash,
+          input.walletAddress,
+          pool.poolAddress
+        );
 
-      // Return updated pool data
-      const updatedPool = await storage.getPool(id);
+        if (!verification.valid) {
+          console.log("[DONATE_VERIFY] Transaction verification failed:", verification.reason);
+          return res.status(400).json({
+            message: verification.reason || "Transaction verification failed"
+          });
+        }
+
+        console.log("[DONATE_VERIFY] ✅ Verified on-chain donate:", {
+          txHash: input.txHash.substring(0, 20) + "...",
+          wallet: input.walletAddress.substring(0, 16) + "...",
+          amount: input.amount
+        });
+      } else {
+        console.log("[DONATE] Local pool donate (no verification required):", {
+          wallet: input.walletAddress.substring(0, 16) + "...",
+          amount: input.amount
+        });
+      }
+
+      // 🔐 ATOMIC TRANSACTION: Add donation + mark tx as used (for on-chain pools)
+      let tx;
+      let updatedPool;
+
+      if (pool.poolAddress && input.txHash) {
+        const client = await pgPool.connect();
+
+        try {
+          await client.query("BEGIN");
+
+          // Mark transaction as used
+          await markTxHashUsed(input.txHash, id, input.walletAddress, "donate");
+
+          // Add transaction
+          tx = await storage.addTransaction({
+            poolId: id,
+            walletAddress: input.walletAddress,
+            type: 'DONATE',
+            amount: input.amount,
+            txHash: input.txHash
+          });
+
+          await client.query("COMMIT");
+          client.release();
+
+          // Return updated pool data
+          updatedPool = await storage.getPool(id);
+        } catch (err: any) {
+          await client.query("ROLLBACK");
+          client.release();
+
+          if (err.message.includes("already used")) {
+            console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
+            return res.status(409).json({ message: "Transaction already processed" });
+          }
+
+          throw err;
+        }
+      } else {
+        // Local/mock pool - no replay protection needed
+        tx = await storage.addTransaction({
+          poolId: id,
+          walletAddress: input.walletAddress,
+          type: 'DONATE',
+          amount: input.amount,
+          txHash: input.txHash
+        });
+
+        updatedPool = await storage.getPool(id);
+      }
+
       res.json({ transaction: tx, pool: updatedPool });
     } catch (err) {
       if (err instanceof z.ZodError) {

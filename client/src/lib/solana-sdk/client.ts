@@ -1,6 +1,12 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider } from "@coral-xyz/anchor";
-import { PublicKey, Connection, VersionedTransaction, TransactionMessage, ComputeBudgetProgram } from "@solana/web3.js";
+import {
+  PublicKey,
+  Connection,
+  VersionedTransaction,
+  TransactionMessage,
+  ComputeBudgetProgram,
+} from "@solana/web3.js";
 import { WalletContextState } from "@solana/wallet-adapter-react";
 
 import { getConnection, initConnection, getConnectionInfo } from "./connection";
@@ -72,11 +78,9 @@ export class MissoutClient {
     // Initialize Anchor Program when wallet is connected
     if (wallet.publicKey && wallet.signTransaction) {
       try {
-        const provider = new AnchorProvider(
-          this.connection,
-          wallet as any,
-          { commitment: "confirmed" }
-        );
+        const provider = new AnchorProvider(this.connection, wallet as any, {
+          commitment: "confirmed",
+        });
         this.program = new Program(IDL, provider);
         console.log("[MissoutClient] Anchor Program initialized");
       } catch (err) {
@@ -108,13 +112,14 @@ export class MissoutClient {
       // Use Anchor Program if available
       if (this.program && this.program.account && (this.program.account as any).pool) {
         try {
-          // Note: Anchor converts PascalCase account names to camelCase
-          // Use "confirmed" commitment to match transaction confirmation level
           const poolData = await (this.program.account as any).pool.fetch(pubkey, "confirmed");
           console.log("[MissoutClient] Successfully fetched pool via Anchor:", pubkey.toBase58());
           return poolData as PoolState;
         } catch (anchorErr) {
-          console.error("[MissoutClient] Anchor fetch failed, falling back to manual parsing:", anchorErr);
+          console.error(
+            "[MissoutClient] Anchor fetch failed, falling back to manual parsing:",
+            anchorErr
+          );
         }
       }
 
@@ -136,72 +141,140 @@ export class MissoutClient {
   }
 
   private decodePoolFromBuffer(dataView: DataView, data: Uint8Array): PoolState {
-    // Manual buffer parsing matching NEW Pool structure from IDL
-    // Based on field order at idl.ts lines 1744-1912
     console.log("[decodePoolFromBuffer] Parsing account, data length:", data.length);
 
     let offset = 8; // Skip discriminator
 
-    // Parse fields in IDL order:
-    const poolId = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const salt = data.slice(offset, offset + 32); offset += 32;
-    const mint = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
+    const poolId = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const salt = data.slice(offset, offset + 32);
+    offset += 32;
+    const mint = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
     console.log("[decodePoolFromBuffer] Parsed mint:", mint.toBase58());
 
-    const creator = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
-    const startTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const duration = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const expireTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const endTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const unlockTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const closeTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
+    const creator = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+    const startTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const duration = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const expireTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const endTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const unlockTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const closeTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
     const maxParticipants = data[offset++];
-    const lockDuration = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const lockStartTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const amount = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const totalAmount = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const totalVolume = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
-    const totalJoins = dataView.getUint32(offset, true); offset += 4;
-    const totalDonations = dataView.getUint32(offset, true); offset += 4;
-    const devWallet = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
-    const devFeeBps = dataView.getUint16(offset, true); offset += 2;
-    const burnFeeBps = dataView.getUint16(offset, true); offset += 2;
-    const treasuryWallet = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
-    const treasuryFeeBps = dataView.getUint16(offset, true); offset += 2;
-    const randomness = new anchor.BN(data.slice(offset, offset + 16), 'le'); offset += 16;
-    const randomnessAccount = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
-    const randomnessDeadlineSlot = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
+    const lockDuration = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const lockStartTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const amount = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const totalAmount = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const totalVolume = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
+    const totalJoins = dataView.getUint32(offset, true);
+    offset += 4;
+    const totalDonations = dataView.getUint32(offset, true);
+    offset += 4;
+    const devWallet = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+    const devFeeBps = dataView.getUint16(offset, true);
+    offset += 2;
+    const burnFeeBps = dataView.getUint16(offset, true);
+    offset += 2;
+    const treasuryWallet = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+    const treasuryFeeBps = dataView.getUint16(offset, true);
+    offset += 2;
+    const randomness = new anchor.BN(data.slice(offset, offset + 16), "le");
+    offset += 16;
+    const randomnessAccount = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+    const randomnessDeadlineSlot = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
     const bump = data[offset++];
     const statusByte = data[offset++];
     const status = this.decodeStatus(statusByte);
     const paused = data[offset++] === 1;
     const version = data[offset++];
     const schema = data[offset++];
-    const configHash = data.slice(offset, offset + 32); offset += 32;
+    const configHash = data.slice(offset, offset + 32);
+    offset += 32;
     const allowMock = data[offset++] === 1;
-    const randomnessCommitSlot = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
+    const randomnessCommitSlot = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
     const initialized = data[offset++] === 1;
-    const lastJoinTime = new anchor.BN(data.slice(offset, offset + 8), 'le'); offset += 8;
+    const lastJoinTime = new anchor.BN(data.slice(offset, offset + 8), "le");
+    offset += 8;
     const statusReason = data[offset++];
-    const participantsAccount = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
-    const winner = new PublicKey(data.slice(offset, offset + 32)); offset += 32;
+    const participantsAccount = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
+    const winner = new PublicKey(data.slice(offset, offset + 32));
+    offset += 32;
 
     console.log("[decodePoolFromBuffer] Parsing complete, final offset:", offset);
 
     return {
-      poolId, salt, mint, creator, startTime, duration, expireTime, endTime,
-      unlockTime, closeTime, maxParticipants, lockDuration, lockStartTime,
-      amount, totalAmount, totalVolume, totalJoins, totalDonations,
-      devWallet, devFeeBps, burnFeeBps, treasuryWallet, treasuryFeeBps,
-      randomness, randomnessAccount, randomnessDeadlineSlot, bump, status,
-      paused, version, schema, configHash, allowMock, randomnessCommitSlot,
-      initialized, lastJoinTime, statusReason, participantsAccount, winner
+      poolId,
+      salt,
+      mint,
+      creator,
+      startTime,
+      duration,
+      expireTime,
+      endTime,
+      unlockTime,
+      closeTime,
+      maxParticipants,
+      lockDuration,
+      lockStartTime,
+      amount,
+      totalAmount,
+      totalVolume,
+      totalJoins,
+      totalDonations,
+      devWallet,
+      devFeeBps,
+      burnFeeBps,
+      treasuryWallet,
+      treasuryFeeBps,
+      randomness,
+      randomnessAccount,
+      randomnessDeadlineSlot,
+      bump,
+      status,
+      paused,
+      version,
+      schema,
+      configHash,
+      allowMock,
+      randomnessCommitSlot,
+      initialized,
+      lastJoinTime,
+      statusReason,
+      participantsAccount,
+      winner,
     };
   }
 
   private decodeStatus(statusByte: number): any {
-    const statuses = ['open', 'locked', 'unlocked', 'randomnessRequested', 'winnerSelected', 'ended', 'cancelled', 'paused'];
-    const name = statuses[statusByte] || 'unknown';
+    const statuses = [
+      "open",
+      "locked",
+      "unlocked",
+      "randomnessRequested",
+      "winnerSelected",
+      "ended",
+      "cancelled",
+      "paused",
+    ];
+    const name = statuses[statusByte] || "unknown";
     return { [name]: {} };
   }
 
@@ -224,7 +297,10 @@ export class MissoutClient {
             list: filteredList,
           };
         } catch (anchorErr) {
-          console.error("[MissoutClient] Anchor fetch failed for Participants, falling back:", anchorErr);
+          console.error(
+            "[MissoutClient] Anchor fetch failed for Participants, falling back:",
+            anchorErr
+          );
         }
       }
 
@@ -241,10 +317,6 @@ export class MissoutClient {
   }
 
   private decodeParticipantsFromBuffer(data: Uint8Array): ParticipantsState {
-    // LEGACY: This method provides backward compatibility when Anchor Program is not available
-    // NOTE: This parsing is based on the OLD Participants structure (Vec<Pubkey>)
-    // The NEW IDL uses a fixed array [Pubkey; 20] - use Anchor Program for accurate parsing
-
     const MIN_PARTICIPANTS_SIZE = 8 + 32 + 2 + 4;
     if (data.length < MIN_PARTICIPANTS_SIZE) {
       throw new Error(`Participants account too short: ${data.length} < ${MIN_PARTICIPANTS_SIZE}`);
@@ -255,10 +327,12 @@ export class MissoutClient {
 
     // Skip pool field (not in new interface)
     offset += 32;
-    const count = dataView.getUint16(offset, true); offset += 2;
+    const count = dataView.getUint16(offset, true);
+    offset += 2;
 
     const list: PublicKey[] = [];
-    const vecLen = dataView.getUint32(offset, true); offset += 4;
+    const vecLen = dataView.getUint32(offset, true);
+    offset += 4;
 
     const expectedLen = offset + vecLen * 32;
     if (data.length < expectedLen) {
@@ -298,22 +372,11 @@ export class MissoutClient {
    * ANCHOR-LEVEL POOL WARM-UP
    *
    * Wait for Anchor to successfully deserialize the Pool account.
-   * This is NOT about RPC propagation - it's about Anchor's deserialization readiness.
-   *
-   * Why this is needed:
-   * - Transaction confirms ✅
-   * - getAccountInfo returns data ✅
-   * - BUT program.account.pool.fetch() FAILS for 1-3 slots ❌
-   *
-   * This function polls Anchor's fetch() until it succeeds.
-   * Only then is the pool ready for donate/cancel/join.
    */
-  async waitForAnchorPool(
-    poolPubkey: PublicKey,
-    maxRetries = 15,
-    delayMs = 1000
-  ): Promise<boolean> {
-    console.log(`[waitForAnchorPool] Waiting for Anchor to deserialize pool: ${poolPubkey.toBase58()}`);
+  async waitForAnchorPool(poolPubkey: PublicKey, maxRetries = 15, delayMs = 1000): Promise<boolean> {
+    console.log(
+      `[waitForAnchorPool] Waiting for Anchor to deserialize pool: ${poolPubkey.toBase58()}`
+    );
 
     if (!this.program || !this.program.account || !(this.program.account as any).pool) {
       console.error("[waitForAnchorPool] ❌ Anchor Program not initialized");
@@ -322,7 +385,6 @@ export class MissoutClient {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        // THE CRITICAL CHECK: Can Anchor deserialize the pool account?
         const poolData = await (this.program.account as any).pool.fetch(poolPubkey, "confirmed");
 
         if (poolData && poolData.initialized === true) {
@@ -330,41 +392,48 @@ export class MissoutClient {
           console.log(`[waitForAnchorPool] Pool status: ${JSON.stringify(poolData.status)}`);
           return true;
         } else if (poolData) {
-          console.warn(`[waitForAnchorPool] Pool fetched but initialized=${poolData.initialized}, retrying...`);
+          console.warn(
+            `[waitForAnchorPool] Pool fetched but initialized=${poolData.initialized}, retrying...`
+          );
         }
       } catch (err: any) {
-        // Expected errors during warm-up:
-        // - "Account does not exist" (not yet visible)
-        // - "Invalid account discriminator" (data not ready)
         const errMsg = err.message || String(err);
         console.log(`[waitForAnchorPool] Attempt ${i + 1}/${maxRetries}: ${errMsg.slice(0, 80)}`);
       }
 
       if (i < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
 
-    console.error(`[waitForAnchorPool] ❌ Timeout after ${maxRetries * delayMs / 1000}s - Anchor still cannot fetch pool`);
+    console.error(
+      `[waitForAnchorPool] ❌ Timeout after ${(maxRetries * delayMs) / 1000}s - Anchor still cannot fetch pool`
+    );
     return false;
   }
 
   /**
-   * REMOVED: Reactive retry logic
-   *
-   * We no longer retry on AccountNotInitialized errors.
-   * The preventive fix (waitForAnchorPool) ensures pool is ready BEFORE any operation.
-   *
-   * This method now just calls buildAndSendTransaction directly.
+   * NOTE: kept for API compatibility — it now just delegates to buildAndSendTransaction,
+   * which includes robust Phantom retry logic.
    */
   async buildAndSendTransactionWithRetry(
     instructions: anchor.web3.TransactionInstruction[],
     priorityFee = 5000
   ): Promise<string> {
-    // No retry logic - pool must be ready before calling this
     return await this.buildAndSendTransaction(instructions, priorityFee);
   }
 
+  /**
+   * ROBUST TRANSACTION BUILDER FOR PHANTOM WALLET
+   *
+   * Fixes the pattern:
+   * simulate OK -> wallet.sendTransaction() "Unexpected error" -> "Port disconnected" -> second try OK
+   *
+   * What we do:
+   * - Build a stable instruction list once (no reordering)
+   * - For each attempt: fetch fresh blockhash, build tx, simulate, then send
+   * - If Phantom returns "Unexpected error"/port issues, wait a bit and retry with a NEW blockhash
+   */
   async buildAndSendTransaction(
     instructions: anchor.web3.TransactionInstruction[],
     priorityFee = 5000
@@ -379,8 +448,8 @@ export class MissoutClient {
       hasWallet: !!this.wallet,
       hasPublicKey: !!this.wallet?.publicKey,
       publicKey: this.wallet?.publicKey?.toBase58() || "null",
-      hasSignTransaction: typeof this.wallet?.signTransaction === 'function',
-      hasSendTransaction: typeof this.wallet?.sendTransaction === 'function',
+      hasSignTransaction: typeof this.wallet?.signTransaction === "function",
+      hasSendTransaction: typeof this.wallet?.sendTransaction === "function",
       connected: this.wallet?.connected,
     });
 
@@ -389,9 +458,8 @@ export class MissoutClient {
       throw new Error("Wallet not connected");
     }
 
-    // Check for either sendTransaction OR signTransaction
-    const canSend = typeof this.wallet.sendTransaction === 'function';
-    const canSign = typeof this.wallet.signTransaction === 'function';
+    const canSend = typeof this.wallet.sendTransaction === "function";
+    const canSign = typeof this.wallet.signTransaction === "function";
 
     if (!canSend && !canSign) {
       console.error("SDK_ABORT: Wallet cannot sign or send transactions");
@@ -408,151 +476,195 @@ export class MissoutClient {
       throw new Error(`RPC connection failed: ${healthCheck.error}`);
     }
 
-    // Ensure we are on devnet
-    if (this.connection.rpcEndpoint.includes('mainnet')) {
+    // Ensure we are on devnet (your intentional guard)
+    if (this.connection.rpcEndpoint.includes("mainnet")) {
       throw new Error("CRITICAL: Mainnet RPC detected during transaction build");
     }
 
-    // Step 3: Get blockhash
-    console.log("FETCHING_BLOCKHASH...");
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash("finalized");
-    console.log("BLOCKHASH:", blockhash, "HEIGHT:", lastValidBlockHeight);
-
-    // Step 4: Build transaction
-    const ixs = [
+    // Step 3: Build a STABLE instruction list once (no reordering between attempts)
+    // Compute budget ix must be first.
+    const stableIxs: anchor.web3.TransactionInstruction[] = [
       ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee }),
       ...instructions,
     ];
 
-    console.log("BUILDING_TX_MESSAGE...");
-    const message = new TransactionMessage({
-      payerKey: this.wallet.publicKey,
-      recentBlockhash: blockhash,
-      instructions: ixs,
-    }).compileToV0Message();
+    const MAX_RETRIES = 3;
+    let lastErr: any = null;
 
-    const tx = new VersionedTransaction(message);
-    console.log("SDK_BUILD_TX_OK:", tx.message.recentBlockhash);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      console.log("==============================================");
+      console.log(`[TX] Attempt ${attempt}/${MAX_RETRIES}`);
 
-    // Step 5: Simulate transaction
-    console.log("SDK_SIMULATING...");
-    try {
-      const simulation = await this.connection.simulateTransaction(tx, {
-        commitment: 'confirmed',
-        replaceRecentBlockhash: false
-      });
-      if (simulation.value.err) {
-        const logs = simulation.value.logs ? simulation.value.logs.join("\n") : "No logs";
-        const errorMsg = `Simulation failed: ${JSON.stringify(simulation.value.err)}\nLogs:\n${logs}`;
-        console.error("SDK_SIMULATE_FAIL:", errorMsg);
-        throw new Error(errorMsg);
-      }
-      console.log("SDK_SIMULATE_OK: Units consumed:", simulation.value.unitsConsumed);
-    } catch (simErr: any) {
-      console.error("SDK_SIMULATE_ERROR:", simErr.message);
-      // If it's our thrown simulation error, re-throw it
-      if (simErr.message.includes("Simulation failed")) {
+      // Fresh blockhash each attempt (fixes staleness and gives user time)
+      console.log("[TX] FETCHING_BLOCKHASH...");
+      const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash(
+        "finalized"
+      );
+      console.log("[TX] BLOCKHASH:", blockhash, "HEIGHT:", lastValidBlockHeight);
+
+      // Build transaction (v0, no LUTs in your current code)
+      console.log("[TX] BUILDING_TX_MESSAGE...");
+      const message = new TransactionMessage({
+        payerKey: this.wallet.publicKey,
+        recentBlockhash: blockhash,
+        instructions: stableIxs,
+      }).compileToV0Message();
+
+      const tx = new VersionedTransaction(message);
+      console.log("[TX] SDK_BUILD_TX_OK:", tx.message.recentBlockhash);
+
+      // Simulate (if it fails with program error -> stop; if RPC glitch -> we can retry)
+      console.log("[TX] SDK_SIMULATING...");
+      try {
+        const simulation = await this.connection.simulateTransaction(tx, {
+          commitment: "confirmed",
+          replaceRecentBlockhash: false,
+        });
+
+        if (simulation.value.err) {
+          const logs = simulation.value.logs ? simulation.value.logs.join("\n") : "No logs";
+          const errorMsg = `Simulation failed: ${JSON.stringify(simulation.value.err)}\nLogs:\n${logs}`;
+          console.error("[TX] SDK_SIMULATE_FAIL:", errorMsg);
+          throw new Error(errorMsg); // program-level failure: don't auto-retry endlessly
+        }
+
+        console.log("[TX] SDK_SIMULATE_OK: Units consumed:", simulation.value.unitsConsumed);
+      } catch (simErr: any) {
+        // If it's a genuine program error (we threw it above), propagate immediately.
+        if ((simErr?.message || "").includes("Simulation failed")) {
+          throw simErr;
+        }
+
+        // Otherwise (RPC/transient), we can try again with a new blockhash.
+        console.warn("[TX] SDK_SIMULATE_WARN: Simulation RPC error, will retry if attempts remain.");
+        lastErr = simErr;
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
         throw simErr;
       }
-      // Otherwise warn and continue (fallback for unexpected RPC issues)
-      console.warn("SDK_SIMULATE_WARN: Continuing despite simulation error...");
-    }
 
-    // Step 6: Send to wallet - THIS IS WHERE PHANTOM POPUP SHOULD APPEAR
-    console.log("==============================================");
-    console.log("==> SDK_SENDING_TO_WALLET <==");
-    console.log("Phantom popup should appear NOW");
-    console.log("==============================================");
+      // Send to wallet
+      console.log("==============================================");
+      console.log("==> SDK_SENDING_TO_WALLET <==");
+      console.log("Phantom popup should appear NOW");
+      console.log("==============================================");
 
-    let sig: string;
-
-    try {
-      const sendOptions = {
-        maxRetries: 5,
-        skipPreflight: false,
-      };
-
-      if (canSend) {
-        console.log("=== CALLING_WALLET_SEND_TX ===");
-        sig = await this.wallet.sendTransaction(tx, this.connection, sendOptions);
-        console.log("=== WALLET_RETURNED_SIG ===", sig);
-      } else {
-        console.log("=== CALLING_WALLET_SIGN_TX ===");
-        const signedTx = await this.wallet.signTransaction!(tx);
-        console.log("=== WALLET_SIGNED_OK ===");
-
-        console.log("=== SENDING_RAW_TX ===");
-        sig = await this.connection.sendRawTransaction(signedTx.serialize(), sendOptions);
-        console.log("=== RAW_TX_SENT ===", sig);
-      }
-    } catch (walletErr: any) {
-      console.error("=== WALLET_ERROR ===", walletErr.message);
-      if (walletErr.message?.includes('User rejected') || walletErr.message?.includes('rejected')) {
-        throw new Error("Transaction cancelled by user");
-      }
-      throw walletErr;
-    }
-
-    console.log("SDK_TX_SENT:", sig);
-    console.log(`Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
-
-    // Step 7: Confirm and verify transaction success
-    console.log("SDK_CONFIRMING...");
-    try {
-      const confirmation = await this.connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        "confirmed"
-      );
-
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
-      }
-
-      // Final sanity check: get status to see if it actually succeeded
-      const status = await this.connection.getSignatureStatus(sig, { searchTransactionHistory: true });
-      if (status.value?.err) {
-        // Fetch logs for better error reporting
-        const txInfo = await this.connection.getTransaction(sig, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0
-        });
-        const logs = txInfo?.meta?.logMessages ? txInfo.meta.logMessages : [];
-        const logsStr = logs.join(" | ");
-
-        // Detect Anchor error 3012 (AccountNotInitialized)
-        if (logsStr.includes("0xbc4") || logsStr.includes("3012")) {
-          throw new Error("Your ATA for this mint is missing; create associated token account first.");
-        }
-
-        throw new Error(`On-chain failure: ${JSON.stringify(status.value.err)} | Logs: ${logsStr}`);
-      }
-
-      console.log("SDK_TX_CONFIRMED_SUCCESS:", sig);
-
-      // Post-confirmation balance diff detection
       try {
-        const txInfo = await this.connection.getTransaction(sig, {
-          commitment: "confirmed",
-          maxSupportedTransactionVersion: 0
-        });
-        if (txInfo?.meta) {
-          const preBalances = txInfo.meta.preTokenBalances || [];
-          const postBalances = txInfo.meta.postTokenBalances || [];
-          console.log("=== BALANCE_DIFF ===", { preBalances, postBalances });
-          // We can store this in a global state or return it
+        const sendOptions = {
+          maxRetries: 5,
+          skipPreflight: false,
+        };
+
+        // Important: on retries, give Phantom a short moment to re-establish its extension port
+        if (attempt > 1) {
+          console.log("[TX] Waiting 500ms before retry send (Phantom port stabilization)...");
+          await new Promise((r) => setTimeout(r, 500));
         }
-      } catch (e) {
-        console.warn("Failed to fetch balance diffs", e);
+
+        let sig: string;
+
+        if (canSend) {
+          console.log("=== CALLING_WALLET_SEND_TX ===");
+          sig = await this.wallet.sendTransaction(tx, this.connection, sendOptions);
+          console.log("=== WALLET_RETURNED_SIG ===", sig);
+        } else {
+          console.log("=== CALLING_WALLET_SIGN_TX ===");
+          const signedTx = await this.wallet.signTransaction!(tx);
+          console.log("=== WALLET_SIGNED_OK ===");
+
+          console.log("=== SENDING_RAW_TX ===");
+          sig = await this.connection.sendRawTransaction(signedTx.serialize(), sendOptions);
+          console.log("=== RAW_TX_SENT ===", sig);
+        }
+
+        console.log("SDK_TX_SENT:", sig);
+        console.log(`Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
+
+        // Confirm
+        console.log("SDK_CONFIRMING...");
+        const confirmation = await this.connection.confirmTransaction(
+          { signature: sig, blockhash, lastValidBlockHeight },
+          "confirmed"
+        );
+
+        if (confirmation.value.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+        }
+
+        // Extra status check (kept from your original)
+        const status = await this.connection.getSignatureStatus(sig, {
+          searchTransactionHistory: true,
+        });
+
+        if (status.value?.err) {
+          const txInfo = await this.connection.getTransaction(sig, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          });
+          const logs = txInfo?.meta?.logMessages ? txInfo.meta.logMessages : [];
+          const logsStr = logs.join(" | ");
+
+          if (logsStr.includes("0xbc4") || logsStr.includes("3012")) {
+            throw new Error("Your ATA for this mint is missing; create associated token account first.");
+          }
+
+          throw new Error(`On-chain failure: ${JSON.stringify(status.value.err)} | Logs: ${logsStr}`);
+        }
+
+        console.log("SDK_TX_CONFIRMED_SUCCESS:", sig);
+
+        // Optional balance diff debug (kept)
+        try {
+          const txInfo = await this.connection.getTransaction(sig, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          });
+          if (txInfo?.meta) {
+            const preBalances = txInfo.meta.preTokenBalances || [];
+            const postBalances = txInfo.meta.postTokenBalances || [];
+            console.log("=== BALANCE_DIFF ===", { preBalances, postBalances });
+          }
+        } catch (e) {
+          console.warn("Failed to fetch balance diffs", e);
+        }
+
+        console.log("=== BUILD_AND_SEND_TX_SUCCESS ===");
+        console.log("==============================================");
+        return sig;
+      } catch (walletErr: any) {
+        const msg = walletErr?.message || String(walletErr);
+        console.error("=== WALLET_ERROR ===", msg);
+
+        // User cancelled -> don't retry
+        if (
+          msg.includes("User rejected") ||
+          msg.includes("rejected the request") ||
+          msg.includes("cancelled")
+        ) {
+          throw new Error("Transaction cancelled by user");
+        }
+
+        // Phantom port / adapter weirdness -> retry
+        const isPhantomPortIssue =
+          msg.includes("Unexpected error") ||
+          msg.includes("Port disconnected") ||
+          msg.includes("Extension context invalidated");
+
+        lastErr = walletErr;
+
+        if (isPhantomPortIssue && attempt < MAX_RETRIES) {
+          console.warn("[TX] Phantom connection issue detected. Retrying with fresh blockhash...");
+          continue;
+        }
+
+        // otherwise: fail
+        throw walletErr;
       }
-    } catch (confirmErr: any) {
-      console.error("SDK_TX_FAILURE:", confirmErr.message);
-      throw confirmErr;
     }
 
-    console.log("=== BUILD_AND_SEND_TX_SUCCESS ===");
-    console.log("==============================================");
-
-    return sig;
+    throw lastErr || new Error("Transaction failed for unknown reason");
   }
 }
 

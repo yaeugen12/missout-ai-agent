@@ -13,6 +13,8 @@ export interface IStorage {
   // Pools
   getPools(): Promise<Pool[]>;
   getPool(id: number): Promise<Pool | undefined>;
+  getPoolByAddress(poolAddress: string): Promise<Pool | undefined>;
+  getPoolByTxHash(txHash: string): Promise<Pool | undefined>;
   createPool(pool: InsertPool): Promise<Pool>;
   updatePoolStatus(id: number, status: string, winner?: string): Promise<Pool>;
   
@@ -73,13 +75,26 @@ export class DatabaseStorage implements IStorage {
     return pool;
   }
 
+  async getPoolByAddress(poolAddress: string): Promise<Pool | undefined> {
+    const [pool] = await db.select().from(pools).where(eq(pools.poolAddress, poolAddress));
+    return pool;
+  }
+
+  async getPoolByTxHash(txHash: string): Promise<Pool | undefined> {
+    const [pool] = await db.select().from(pools).where(eq(pools.txHash, txHash));
+    return pool;
+  }
+
   async createPool(insertPool: InsertPool): Promise<Pool> {
+    console.log("[STORAGE] createPool called with allowMock:", insertPool.allowMock);
     const [pool] = await db.insert(pools).values({
       ...insertPool,
       participantsCount: 0,
       status: 'open',
       totalPot: 0,
+      allowMock: insertPool.allowMock ?? 0,
     }).returning();
+    console.log("[STORAGE] Pool created with allowMock:", pool.allowMock);
     return pool;
   }
 
@@ -165,22 +180,46 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  /**
+   * Mark refund as claimed - ATOMIC UPDATE
+   *
+   * Uses WHERE clause with refundClaimed = 0 to prevent race conditions.
+   * If the update affects 0 rows, it means:
+   * - Participant doesn't exist OR
+   * - Refund was already claimed
+   *
+   * @returns true if refund was successfully marked as claimed, false if already claimed
+   */
   async markRefundClaimed(poolId: number, wallet: string): Promise<boolean> {
     const result = await db.update(participants)
       .set({ refundClaimed: 1 })
       .where(and(
         eq(participants.poolId, poolId),
-        eq(participants.walletAddress, wallet)
+        eq(participants.walletAddress, wallet),
+        eq(participants.refundClaimed, 0) // ATOMIC: Only update if not already claimed
       ))
       .returning();
 
     return result.length > 0;
   }
 
+  /**
+   * Mark rent as claimed - ATOMIC UPDATE
+   *
+   * Uses WHERE clause with rentClaimed = 0 to prevent race conditions.
+   * If the update affects 0 rows, it means:
+   * - Pool doesn't exist OR
+   * - Rent was already claimed
+   *
+   * @returns true if rent was successfully marked as claimed, false if already claimed
+   */
   async markRentClaimed(poolId: number): Promise<boolean> {
     const result = await db.update(pools)
       .set({ rentClaimed: 1 })
-      .where(eq(pools.id, poolId))
+      .where(and(
+        eq(pools.id, poolId),
+        eq(pools.rentClaimed, 0) // ATOMIC: Only update if not already claimed
+      ))
       .returning();
 
     return result.length > 0;
