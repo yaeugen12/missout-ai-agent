@@ -3,14 +3,14 @@ import { readFile } from "fs/promises";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
+// NOTE: drizzle-orm and drizzle-zod are excluded from bundling
+// because they cause runtime errors when minified
 const allowlist = [
   "@google/generative-ai",
   "axios",
   "connect-pg-simple",
   "cors",
   "date-fns",
-  "drizzle-orm",
-  "drizzle-zod",
   "express",
   "express-rate-limit",
   "express-session",
