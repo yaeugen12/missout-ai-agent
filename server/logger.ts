@@ -116,5 +116,3 @@ export const logError = (error: Error, context?: string, sentryContext?: Record<
     }
   }
 };
-
-export default logger;
