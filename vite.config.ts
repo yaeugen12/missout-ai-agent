@@ -52,6 +52,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    sourcemap: true, // Enable source maps for Sentry error tracking
   },
   server: {
     allowedHosts: true,

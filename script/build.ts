@@ -56,6 +56,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
+    sourcemap: true, // Enable source maps for Sentry
     external: externals,
     logLevel: "info",
   });

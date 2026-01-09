@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { captureError } from "../sentry-helper";
 import { pools, transactions } from "@shared/schema";
 import { eq, not, inArray } from "drizzle-orm";
 import { storage } from "../storage";
@@ -75,7 +76,7 @@ export class PoolMonitor {
 
       for (const pool of activePools) {
         if (!processingPools.has(pool.id)) {
-          this.processPool(pool.id).catch(err => {
+          this.processPool(pool.id).catch(err => { captureError(err, { poolId: pool.id, poolAddress: pool.poolAddress });
             log(`Error processing pool ${pool.id}:`, err.message);
             this.handleRetry(pool.id, "process");
             processingPools.delete(pool.id);
