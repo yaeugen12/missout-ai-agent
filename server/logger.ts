@@ -97,11 +97,24 @@ export const logPoolMonitor = (message: string, meta?: any) => {
   logger.info(`[PoolMonitor] ${message}`, meta);
 };
 
-export const logError = (error: Error, context?: string) => {
+
+export default logger;
+
+export const logError = (error: Error, context?: string, sentryContext?: Record<string, any>) => {
   logger.error(context || 'Error', {
     message: error.message,
     stack: error.stack,
   });
+
+  // Also send to Sentry if configured
+  if (process.env.SENTRY_DSN) {
+    try {
+      const { captureError } = require('./sentry-helper');
+      captureError(error, { context, ...sentryContext });
+    } catch (err) {
+      console.error('[SENTRY] Failed to capture error:', err);
+    }
+  }
 };
 
 export default logger;

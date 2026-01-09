@@ -14,6 +14,7 @@ import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import * as Sentry from "@sentry/node";
 
+import { setupSentryErrorHandlers } from "./error-handlers-sentry";
 // ============================================================
 // FIX: Cross-platform support for ESM + CJS (Render compatible)
 // ============================================================
@@ -63,6 +64,8 @@ if (process.env.SENTRY_DSN) {
   console.log("[SENTRY] ✅ Error monitoring initialized");
 } else {
   console.log("[SENTRY] ⚠️  SENTRY_DSN not found - error monitoring disabled");
+  // Setup enhanced error handlers with Sentry capturing
+  setupSentryErrorHandlers(gracefulShutdown);
 }
 
 const app = express();
