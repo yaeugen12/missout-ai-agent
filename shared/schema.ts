@@ -2,52 +2,71 @@ import { pgTable, text, serial, integer, doublePrecision, timestamp, bigint, uni
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ============================================
+// POOLS
+// ============================================
+
 export const pools = pgTable("pools", {
   id: serial("id").primaryKey(),
-  poolAddress: text("pool_address"), // On-chain PDA / Pool ID
-  tokenSymbol: text("token_symbol").notNull(), // e.g. SOL, BONK
+  poolAddress: text("pool_address"),
+  tokenSymbol: text("token_symbol").notNull(),
   tokenName: text("token_name").notNull(),
-  tokenMint: text("token_mint"), // SPL token mint address
+  tokenMint: text("token_mint"),
   entryAmount: doublePrecision("entry_amount").notNull(),
   minParticipants: integer("min_participants").notNull(),
   maxParticipants: integer("max_participants").notNull(),
   participantsCount: integer("participants_count").default(0),
-  status: text("status").notNull(), // OPEN, LOCKED, UNLOCKED, RANDOMNESS_COMMITTED, RANDOMNESS_REVEALED, WINNER_SELECTED, ENDED, CANCELLED
+  status: text("status").notNull(),
   startTime: timestamp("start_time").defaultNow(),
-  lockDuration: integer("lock_duration").notNull(), // in minutes
-  lockStartTime: integer("lock_start_time"), // Unix timestamp when lock began
-  lockTime: timestamp("lock_time"), // calculated when pool fills or timer hits
+  lockDuration: integer("lock_duration").notNull(),
+  lockStartTime: integer("lock_start_time"),
+  lockTime: timestamp("lock_time"),
   endTime: timestamp("end_time"),
   winnerWallet: text("winner_wallet"),
   totalPot: doublePrecision("total_pot").default(0),
-  donatedAmount: doublePrecision("donated_amount").default(0), // Non-participatory donations
+  donatedAmount: doublePrecision("donated_amount").default(0),
   creatorWallet: text("creator_wallet").notNull(),
-  // Pool Monitor fields
-  randomnessAccount: text("randomness_account"), // On-chain randomness PDA
-  randomnessHex: text("randomness_hex"), // Revealed randomness value
-  txHash: text("tx_hash"), // Winner payout transaction hash
-  allowMock: integer("allow_mock").default(0), // 1 = use mock randomness for testing
-  rentClaimed: integer("rent_claimed").default(0), // 1 if creator claimed rent
+
+  // Randomness
+  randomnessAccount: text("randomness_account"),
+  randomnessHex: text("randomness_hex"),
+  txHash: text("tx_hash"),
+
+  // Flags
+  allowMock: integer("allow_mock").default(0),
+  rentClaimed: integer("rent_claimed").default(0),
 });
+
+// ============================================
+// PARTICIPANTS
+// ============================================
 
 export const participants = pgTable("participants", {
   id: serial("id").primaryKey(),
   poolId: integer("pool_id").notNull(),
   walletAddress: text("wallet_address").notNull(),
-  avatar: text("avatar"), // mock avatar url
+  avatar: text("avatar"),
   joinedAt: timestamp("joined_at").defaultNow(),
-  refundClaimed: integer("refund_claimed").default(0), // 1 if refund was claimed
+  refundClaimed: integer("refund_claimed").default(0),
 });
+
+// ============================================
+// TRANSACTIONS
+// ============================================
 
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   poolId: integer("pool_id").notNull(),
   walletAddress: text("wallet_address").notNull(),
-  type: text("type").notNull(), // JOIN, DONATE
+  type: text("type").notNull(),
   amount: doublePrecision("amount").notNull(),
   txHash: text("tx_hash"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
+
+// ============================================
+// PROFILES
+// ============================================
 
 export const profiles = pgTable("profiles", {
   id: serial("id").primaryKey(),
@@ -62,61 +81,19 @@ export const profiles = pgTable("profiles", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Schemas
-export const insertPoolSchema = createInsertSchema(pools).omit({ 
-  id: true, 
-  participantsCount: true, 
-  status: true, 
-  startTime: true, 
-  lockTime: true, 
-  endTime: true, 
-  winnerWallet: true, 
-  totalPot: true,
-  donatedAmount: true
+// ============================================
+// USED TRANSACTIONS (Anti-Replay)
+// ============================================
+
+export const usedTransactions = pgTable("used_transactions", {
+  id: serial("id").primaryKey(),
+  txHash: text("tx_hash").notNull().unique(),
+  walletAddress: text("wallet_address").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
-
-export const insertParticipantSchema = createInsertSchema(participants).omit({ 
-  id: true, 
-  joinedAt: true 
-});
-
-export const insertTransactionSchema = createInsertSchema(transactions).omit({ 
-  id: true, 
-  timestamp: true 
-});
-
-export const insertProfileSchema = createInsertSchema(profiles).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-  nonce: true,
-  lastNicknameChange: true
-});
-
-export const updateProfileSchema = z.object({
-  nickname: z.string().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores allowed").optional(),
-  avatarUrl: z.string().optional().nullable(),
-  avatarStyle: z.enum(["bottts", "identicon", "shapes", "thumbs", "pixel-art"]).optional(),
-});
-
-// Types
-export type Pool = typeof pools.$inferSelect;
-export type InsertPool = z.infer<typeof insertPoolSchema>;
-export type Participant = typeof participants.$inferSelect;
-export type InsertParticipant = z.infer<typeof insertParticipantSchema>;
-export type Transaction = typeof transactions.$inferSelect;
-export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
-export type Profile = typeof profiles.$inferSelect;
-export type InsertProfile = z.infer<typeof insertProfileSchema>;
-export type UpdateProfile = z.infer<typeof updateProfileSchema>;
-
-// API Request Types
-export type CreatePoolRequest = InsertPool;
-export type JoinPoolRequest = { walletAddress: string; avatar?: string };
-export type DonateRequest = { walletAddress: string; amount: number };
 
 // ============================================
-// REFERRAL SYSTEM TABLES
+// REFERRALS
 // ============================================
 
 export const referralRelations = pgTable("referral_relations", {
@@ -158,15 +135,68 @@ export const referralClaims = pgTable("referral_claims", {
   claimedAt: timestamp("claimed_at").defaultNow(),
 });
 
-// Referral Schemas
-export const insertReferralRelationSchema = createInsertSchema(referralRelations).omit({
+// ============================================
+// DRIZZLE SCHEMAS
+// ============================================
+
+export const insertPoolSchema = createInsertSchema(pools).omit({
   id: true,
-  createdAt: true,
+  participantsCount: true,
+  status: true,
+  startTime: true,
+  lockTime: true,
+  endTime: true,
+  winnerWallet: true,
+  totalPot: true,
+  donatedAmount: true
 });
 
-// Referral Types
+export const insertParticipantSchema = createInsertSchema(participants).omit({
+  id: true,
+  joinedAt: true
+});
+
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  timestamp: true
+});
+
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  nonce: true,
+  lastNicknameChange: true
+});
+
+export const updateProfileSchema = z.object({
+  nickname: z.string().min(3).max(20).regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores allowed").optional(),
+  avatarUrl: z.string().optional().nullable(),
+  avatarStyle: z.enum(["bottts", "identicon", "shapes", "thumbs", "pixel-art"]).optional(),
+});
+
+// ============================================
+// TYPES
+// ============================================
+
+export type Pool = typeof pools.$inferSelect;
+export type InsertPool = z.infer<typeof insertPoolSchema>;
+
+export type Participant = typeof participants.$inferSelect;
+export type InsertParticipant = z.infer<typeof insertParticipantSchema>;
+
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+
+export type Profile = typeof profiles.$inferSelect;
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type UpdateProfile = z.infer<typeof updateProfileSchema>;
+
+export type UsedTransaction = typeof usedTransactions.$inferSelect;
+
 export type ReferralRelation = typeof referralRelations.$inferSelect;
-export type InsertReferralRelation = z.infer<typeof insertReferralRelationSchema>;
+export type InsertReferralRelation = typeof referralRelations.$inferInsert;
+
 export type ReferralReward = typeof referralRewards.$inferSelect;
 export type ReferralRewardEvent = typeof referralRewardEvents.$inferSelect;
 export type ReferralClaim = typeof referralClaims.$inferSelect;

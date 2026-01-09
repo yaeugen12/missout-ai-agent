@@ -25,6 +25,22 @@ import {
   isTxHashUsed,
   markTxHashUsed
 } from "./transactionHashTracker";
+import { cacheMiddleware, invalidateCache } from "./cache-middleware";
+import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination";
+import rateLimit from "express-rate-limit";
+
+// ===========================================
+// SECURITY: Rate Limiting
+// ===========================================
+
+// Strict rate limiter for upload endpoint (10 uploads per 5 minutes)
+const strictLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10, // 10 requests per windowMs
+  message: "Too many uploads. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ===========================================
 // SECURITY: File Upload Hardening
@@ -148,8 +164,8 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Upload Endpoint with security validation
-  app.post("/api/upload", upload.single('file'), async (req, res) => {
+  // Upload Endpoint with security validation + strict rate limiting (10 uploads per 5 minutes)
+  app.post("/api/upload", strictLimiter, upload.single('file'), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
@@ -170,61 +186,57 @@ export async function registerRoutes(
     res.json({ url: publicUrl });
   });
   // Pools
-  app.get(api.pools.list.path, async (req, res) => {
-    const allPools = await storage.getPools();
+  app.get(api.pools.list.path, cacheMiddleware({ ttl: 30 }), async (req, res) => {
+    const pagination = parsePaginationParams(req);
+    const { pools: allPools, total: totalPools } = await storage.getPools(pagination.limit, pagination.offset);
 
     // Filter out cancelled pools with refunds returned
     // Keep only active, pending, ended pools (but not cancelled ones)
     const activePools = allPools.filter(pool => pool.status !== 'cancelled');
 
-    res.json(activePools);
+    // Create paginated response
+    const response = createPaginatedResponse(activePools, totalPools, pagination);
+
+    res.json(response);
   });
 
+  // OPTIMIZED: Get claimable pools using single query (fixes N+1 problem)
   app.get("/api/pools/claimable", async (req, res) => {
     try {
       const wallet = req.query.wallet as string;
       if (!wallet) {
         return res.status(400).json({ message: "Wallet address required" });
       }
-      
-      const allPools = await storage.getPools();
-      
-      const refunds: any[] = [];
-      const rents: any[] = [];
-      
-      for (const pool of allPools) {
-        const participants = await storage.getParticipants(pool.id);
 
-        const poolData = {
-          id: pool.id,
-          onChainAddress: pool.poolAddress, // Map poolAddress from DB to onChainAddress for frontend
-          status: pool.status,
-          tokenMint: pool.tokenMint,
-          tokenSymbol: pool.tokenSymbol,
-          tokenLogoUrl: undefined, // Token logo can be fetched from token metadata if needed
-          entryFee: pool.entryAmount.toString(), // Use entryAmount from DB, convert to string for frontend
-          creatorWallet: pool.creatorWallet,
-          participants: participants.map(p => p.walletAddress),
-        };
+      // OPTIMIZED: Use new getClaimablePools method - 2 queries instead of N+1
+      const { refunds: refundPools, rents: rentPools } = await storage.getClaimablePools(wallet);
 
-        // Check if user can claim refund (pool cancelled, user is participant, refund not yet claimed)
-        if (pool.status === "cancelled") {
-          const userParticipant = participants.find(p => p.walletAddress === wallet);
-          if (userParticipant && !userParticipant.refundClaimed) {
-            refunds.push(poolData);
-          }
-        }
+      // Format refunds for frontend
+      const refunds = refundPools.map(pool => ({
+        id: pool.id,
+        onChainAddress: pool.poolAddress,
+        status: pool.status,
+        tokenMint: pool.tokenMint,
+        tokenSymbol: pool.tokenSymbol,
+        tokenLogoUrl: undefined,
+        entryFee: pool.entryAmount.toString(),
+        creatorWallet: pool.creatorWallet,
+        participants: pool.participants.map(p => p.walletAddress),
+      }));
 
-        // Check if creator can claim rent (pool ended/cancelled, rent not yet claimed)
-        if (
-          pool.creatorWallet === wallet &&
-          ["ended", "cancelled"].includes(pool.status) &&
-          !pool.rentClaimed
-        ) {
-          rents.push(poolData);
-        }
-      }
-      
+      // Format rents for frontend
+      const rents = rentPools.map(pool => ({
+        id: pool.id,
+        onChainAddress: pool.poolAddress,
+        status: pool.status,
+        tokenMint: pool.tokenMint,
+        tokenSymbol: pool.tokenSymbol,
+        tokenLogoUrl: undefined,
+        entryFee: pool.entryAmount.toString(),
+        creatorWallet: pool.creatorWallet,
+        participants: [], // No participants needed for rent claims
+      }));
+
       res.json({ refunds, rents });
     } catch (error) {
       console.error("Error fetching claimable pools:", error);
@@ -475,11 +487,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.pools.get.path, async (req, res) => {
+  app.get(api.pools.get.path, cacheMiddleware({ ttl: 20 }), async (req, res) => {
     const id = Number(req.params.id);
     const pool = await storage.getPool(id);
     if (!pool) return res.status(404).json({ message: "Pool not found" });
-    
+
     const participants = await storage.getParticipantsWithProfiles(id);
     res.json({ ...pool, participants });
   });
@@ -607,6 +619,9 @@ export async function registerRoutes(
         await client.query("COMMIT");
         client.release();
 
+        // Invalidate pools cache
+        await invalidateCache("api:GET:/api/pools*");
+
         res.status(201).json(pool);
       } catch (err: any) {
         await client.query("ROLLBACK");
@@ -724,6 +739,10 @@ export async function registerRoutes(
 
           await client.query("COMMIT");
           client.release();
+
+          // Invalidate pools cache
+          await invalidateCache(`api:GET:/api/pools/${id}*`);
+          await invalidateCache("api:GET:/api/pools*");
 
           // Return updated pool data
           updatedPool = await storage.getPool(id);
@@ -1109,35 +1128,49 @@ export async function registerRoutes(
   });
 
   // Leaderboard
-  app.get(api.leaderboard.get.path, async (req, res) => {
+  app.get(api.leaderboard.get.path, cacheMiddleware({ ttl: 60 }), async (req, res) => {
     const data = await storage.getLeaderboard();
     res.json(data);
   });
 
   // Detailed leaderboard endpoints
-  app.get(api.leaderboard.winners.path, async (req, res) => {
+  app.get(api.leaderboard.winners.path, cacheMiddleware({ ttl: 60 }), async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
-      const winners = await storage.getTopWinners(Math.min(limit, 100));
-      res.json(winners.map(w => ({
-        ...w,
-        lastWinAt: w.lastWinAt ? (typeof w.lastWinAt === 'string' ? w.lastWinAt : new Date(w.lastWinAt).toISOString()) : null,
-      })));
+      const pagination = parsePaginationParams(req);
+      const { winners, total } = await storage.getTopWinners(pagination.limit, pagination.offset);
+
+      const response = createPaginatedResponse(
+        winners.map(w => ({
+          ...w,
+          lastWinAt: w.lastWinAt ? (typeof w.lastWinAt === 'string' ? w.lastWinAt : new Date(w.lastWinAt).toISOString()) : null,
+        })),
+        total,
+        pagination
+      );
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching top winners:", error);
       res.status(500).json({ message: "Failed to fetch leaderboard" });
     }
   });
 
-  app.get(api.leaderboard.referrers.path, async (req, res) => {
+  app.get(api.leaderboard.referrers.path, cacheMiddleware({ ttl: 60 }), async (req, res) => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
-      const referrers = await storage.getTopReferrers(Math.min(limit, 100));
-      res.json(referrers.map(r => ({
-        ...r,
-        firstReferralAt: r.firstReferralAt ? (typeof r.firstReferralAt === 'string' ? r.firstReferralAt : new Date(r.firstReferralAt).toISOString()) : null,
-        lastReferralAt: r.lastReferralAt ? (typeof r.lastReferralAt === 'string' ? r.lastReferralAt : new Date(r.lastReferralAt).toISOString()) : null,
-      })));
+      const pagination = parsePaginationParams(req);
+      const { referrers, total } = await storage.getTopReferrers(pagination.limit, pagination.offset);
+
+      const response = createPaginatedResponse(
+        referrers.map(r => ({
+          ...r,
+          firstReferralAt: r.firstReferralAt ? (typeof r.firstReferralAt === 'string' ? r.firstReferralAt : new Date(r.firstReferralAt).toISOString()) : null,
+          lastReferralAt: r.lastReferralAt ? (typeof r.lastReferralAt === 'string' ? r.lastReferralAt : new Date(r.lastReferralAt).toISOString()) : null,
+        })),
+        total,
+        pagination
+      );
+
+      res.json(response);
     } catch (error) {
       console.error("Error fetching top referrers:", error);
       res.status(500).json({ message: "Failed to fetch leaderboard" });
@@ -1145,12 +1178,17 @@ export async function registerRoutes(
   });
 
   // Token Discovery API
-  app.get("/api/discovery/tokens", async (req, res) => {
+  app.get("/api/discovery/tokens", cacheMiddleware({ ttl: 120 }), async (req, res) => {
     try {
-      const tokens = await tokenDiscoveryService.getTokens();
+      const pagination = parsePaginationParams(req);
+      const allTokens = await tokenDiscoveryService.getTokens();
       const stats = tokenDiscoveryService.getCacheStats();
+
+      // Apply pagination to tokens
+      const paginatedTokens = paginateArray(allTokens, pagination);
+
       res.json({
-        tokens,
+        ...paginatedTokens,
         lastRefresh: stats.lastRefresh,
         isRefreshing: stats.isRefreshing,
         tokenCount: stats.tokenCount
@@ -1178,7 +1216,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/discovery/stats", (req, res) => {
+  app.get("/api/discovery/stats", cacheMiddleware({ ttl: 30 }), (req, res) => {
     const stats = tokenDiscoveryService.getCacheStats();
     res.json(stats);
   });
@@ -1221,15 +1259,15 @@ export async function registerRoutes(
   const generateDicebearAvatar = (wallet: string, style: string = "bottts") => 
     `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
 
-  app.get(api.profiles.get.path, async (req, res) => {
+  app.get(api.profiles.get.path, cacheMiddleware({ ttl: 300 }), async (req, res) => {
     const wallet = req.params.wallet;
-    
+
     try {
       const profile = await storage.getProfile(wallet);
-      
+
       const displayName = profile?.nickname || shortenWallet(wallet);
       const displayAvatar = profile?.avatarUrl || generateDicebearAvatar(wallet, profile?.avatarStyle || "bottts");
-      
+
       res.json({
         walletAddress: wallet,
         nickname: profile?.nickname || null,
@@ -1287,10 +1325,13 @@ export async function registerRoutes(
       
       const updated = await storage.updateProfile(wallet, {
         nickname: input.nickname,
-        avatarUrl: input.avatarUrl,
-        avatarStyle: input.avatarStyle
+        avatarUrl: input.avatarUrl ?? undefined,
+        avatarStyle: input.avatarStyle ?? undefined
       });
-      
+
+      // Invalidate profile cache
+      await invalidateCache(`api:GET:/api/profiles/${wallet}*`);
+
       res.json(updated);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1304,8 +1345,13 @@ export async function registerRoutes(
   app.get(api.profiles.transactions.path, async (req, res) => {
     const wallet = req.params.wallet;
     try {
-      const txs = await storage.getWalletTransactions(wallet);
-      res.json(txs);
+      const pagination = parsePaginationParams(req);
+      const allTxs = await storage.getWalletTransactions(wallet);
+
+      // Apply pagination
+      const paginatedTxs = paginateArray(allTxs, pagination);
+
+      res.json(paginatedTxs);
     } catch (err) {
       console.error("[Profile] Transactions error:", err);
       res.status(500).json({ message: "Failed to fetch transactions" });
@@ -1373,7 +1419,45 @@ export async function registerRoutes(
     try {
       const wallet = req.params.wallet;
       const stats = await storage.getReferralStats(wallet);
-      res.json(stats);
+
+      // Get detailed rewards breakdown by token
+      const allRewards = await storage.getReferralRewards(wallet);
+
+      // Group rewards by token and calculate claimable amounts
+      const rewardsByToken = allRewards.map(reward => {
+        const pendingBigInt = BigInt(reward.amountPending || "0");
+        const claimedBigInt = BigInt(reward.amountClaimed || "0");
+        const totalBigInt = pendingBigInt + claimedBigInt;
+
+        // IMPORTANT: Amounts are stored in lamports (smallest unit, 10^9 for SOL)
+        // Convert to human-readable format (assumes 9 decimals for all tokens)
+        const DECIMALS = 9;
+        const DECIMAL_DIVISOR = BigInt(10 ** DECIMALS);
+
+        return {
+          tokenMint: reward.tokenMint,
+          // Raw amounts in lamports (for contract interaction)
+          amountPending: reward.amountPending || "0",
+          amountClaimed: reward.amountClaimed || "0",
+          totalEarned: totalBigInt.toString(),
+          // Human-readable amounts (for display)
+          amountPendingDisplay: (Number(pendingBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          amountClaimedDisplay: (Number(claimedBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          totalEarnedDisplay: (Number(totalBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          // Metadata
+          decimals: DECIMALS,
+          isClaimable: pendingBigInt > BigInt(0),
+        };
+      });
+
+      // Add rewards breakdown to stats
+      const enhancedStats = {
+        ...stats,
+        rewardsByToken, // Array of rewards per token with claimable amounts
+        totalPendingRewards: allRewards.reduce((sum, r) => sum + BigInt(r.amountPending || "0"), BigInt(0)).toString(),
+      };
+
+      res.json(enhancedStats);
     } catch (err) {
       console.error("[Referral] Summary error:", err);
       res.status(500).json({ message: "Failed to fetch referral summary" });
@@ -1383,8 +1467,44 @@ export async function registerRoutes(
   app.get("/api/referrals/rewards/:wallet", async (req, res) => {
     try {
       const wallet = req.params.wallet;
-      const rewards = await storage.getReferralRewards(wallet);
-      res.json(rewards);
+      const pagination = parsePaginationParams(req);
+      const allRewards = await storage.getReferralRewards(wallet);
+
+      // Format rewards with proper numeric values and claimable status
+      const formattedRewards = allRewards.map(reward => {
+        const pendingBigInt = BigInt(reward.amountPending || "0");
+        const claimedBigInt = BigInt(reward.amountClaimed || "0");
+        const totalBigInt = pendingBigInt + claimedBigInt;
+
+        // IMPORTANT: Amounts are stored in lamports (smallest unit, 10^9 for SOL)
+        // Convert to human-readable format (assumes 9 decimals for all tokens)
+        const DECIMALS = 9;
+        const DECIMAL_DIVISOR = BigInt(10 ** DECIMALS);
+
+        return {
+          id: reward.id,
+          referrerWallet: reward.referrerWallet,
+          tokenMint: reward.tokenMint,
+          // Raw amounts in lamports (for contract interaction)
+          amountPending: reward.amountPending || "0",
+          amountClaimed: reward.amountClaimed || "0",
+          totalEarned: totalBigInt.toString(),
+          // Human-readable amounts (for display)
+          amountPendingDisplay: (Number(pendingBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          amountClaimedDisplay: (Number(claimedBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          totalEarnedDisplay: (Number(totalBigInt) / Number(DECIMAL_DIVISOR)).toFixed(DECIMALS),
+          // Metadata
+          decimals: DECIMALS,
+          isClaimable: pendingBigInt > BigInt(0),
+          lastUpdated: reward.lastUpdated,
+          lastClaimTimestamp: reward.lastClaimTimestamp,
+        };
+      });
+
+      // Apply pagination
+      const paginatedRewards = paginateArray(formattedRewards, pagination);
+
+      res.json(paginatedRewards);
     } catch (err) {
       console.error("[Referral] Rewards error:", err);
       res.status(500).json({ message: "Failed to fetch rewards" });
@@ -1394,8 +1514,13 @@ export async function registerRoutes(
   app.get("/api/referrals/invited/:wallet", async (req, res) => {
     try {
       const wallet = req.params.wallet;
-      const invited = await storage.getInvitedUsers(wallet);
-      res.json(invited);
+      const pagination = parsePaginationParams(req);
+      const allInvited = await storage.getInvitedUsers(wallet);
+
+      // Apply pagination
+      const paginatedInvited = paginateArray(allInvited, pagination);
+
+      res.json(paginatedInvited);
     } catch (err) {
       console.error("[Referral] Invited error:", err);
       res.status(500).json({ message: "Failed to fetch invited users" });

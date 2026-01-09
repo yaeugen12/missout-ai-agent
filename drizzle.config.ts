@@ -33,6 +33,9 @@ export default defineConfig({
   dialect: "postgresql",
   dbCredentials: {
     url: migrationUrl,
+    ssl: {
+      rejectUnauthorized: false, // Accept self-signed certificates from Supabase
+    },
   },
   verbose: true,
   strict: true,

@@ -11,7 +11,7 @@ import { randomBytes } from "crypto";
 
 export interface IStorage {
   // Pools
-  getPools(): Promise<Pool[]>;
+  getPools(limit?: number, offset?: number): Promise<{ pools: Pool[]; total: number }>;
   getPool(id: number): Promise<Pool | undefined>;
   getPoolByAddress(poolAddress: string): Promise<Pool | undefined>;
   getPoolByTxHash(txHash: string): Promise<Pool | undefined>;
@@ -24,6 +24,12 @@ export interface IStorage {
   markRefundClaimed(poolId: number, wallet: string): Promise<boolean>;
   markRentClaimed(poolId: number): Promise<boolean>;
 
+  // Claimable pools (optimized single query)
+  getClaimablePools(wallet: string): Promise<{
+    refunds: Array<Pool & { participants: Participant[] }>;
+    rents: Pool[];
+  }>;
+
   // Transactions
   addTransaction(transaction: InsertTransaction): Promise<Transaction>;
   getPoolTransactions(poolId: number): Promise<Transaction[]>;
@@ -35,27 +41,33 @@ export interface IStorage {
   }>;
 
   // New detailed leaderboard endpoints
-  getTopWinners(limit?: number): Promise<Array<{
-    wallet: string;
-    winsCount: number;
-    totalTokensWon: number;
-    totalUsdWon: number;
-    biggestWinTokens: number;
-    biggestWinUsd: number;
-    lastWinAt: Date | null;
-    tokenMint: string | null;
-    tokenSymbol: string | null;
-  }>>;
+  getTopWinners(limit?: number, offset?: number): Promise<{
+    winners: Array<{
+      wallet: string;
+      winsCount: number;
+      totalTokensWon: number;
+      totalUsdWon: number;
+      biggestWinTokens: number;
+      biggestWinUsd: number;
+      lastWinAt: Date | null;
+      tokenMint: string | null;
+      tokenSymbol: string | null;
+    }>;
+    total: number;
+  }>;
 
-  getTopReferrers(limit?: number): Promise<Array<{
-    wallet: string;
-    referralsCount: number;
-    totalTokensEarned: number;
-    totalUsdEarned: number;
-    activeReferrals: number;
-    firstReferralAt: Date | null;
-    lastReferralAt: Date | null;
-  }>>;
+  getTopReferrers(limit?: number, offset?: number): Promise<{
+    referrers: Array<{
+      wallet: string;
+      referralsCount: number;
+      totalTokensEarned: number;
+      totalUsdEarned: number;
+      activeReferrals: number;
+      firstReferralAt: Date | null;
+      lastReferralAt: Date | null;
+    }>;
+    total: number;
+  }>;
 
   // Profiles
   getProfile(walletAddress: string): Promise<Profile | undefined>;
@@ -66,8 +78,23 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getPools(): Promise<Pool[]> {
-    return await db.select().from(pools).orderBy(desc(pools.startTime));
+  async getPools(limit?: number, offset?: number): Promise<{ pools: Pool[]; total: number }> {
+    // Get total count
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(pools);
+
+    // Get paginated results
+    const query = db.select().from(pools).orderBy(desc(pools.startTime));
+
+    // Apply pagination if specified
+    const poolsList = await (limit !== undefined && offset !== undefined
+      ? query.limit(limit).offset(offset)
+      : limit !== undefined
+        ? query.limit(limit)
+        : query);
+
+    return { pools: poolsList, total: count };
   }
 
   async getPool(id: number): Promise<Pool | undefined> {
@@ -117,23 +144,31 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(participants).where(eq(participants.poolId, poolId));
   }
 
+  /**
+   * OPTIMIZED: Get participants with profiles using single JOIN query
+   * Fixes N+1 query problem - previously called getProfile() for each participant
+   */
   async getParticipantsWithProfiles(poolId: number): Promise<Array<Participant & { displayName?: string; displayAvatar?: string }>> {
-    const participantsList = await db.select().from(participants).where(eq(participants.poolId, poolId));
-    
-    const generateDicebearAvatar = (wallet: string, style: string = "bottts") => 
+    const generateDicebearAvatar = (wallet: string, style: string = "bottts") =>
       `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
-    
-    const enrichedParticipants = await Promise.all(
-      participantsList.map(async (p) => {
-        const profile = await this.getProfile(p.walletAddress);
-        return {
-          ...p,
-          displayName: profile?.nickname || undefined,
-          displayAvatar: profile?.avatarUrl || generateDicebearAvatar(p.walletAddress, profile?.avatarStyle || "bottts"),
-        };
+
+    // OPTIMIZED: Single query with LEFT JOIN - 1 query instead of N+1
+    const results = await db
+      .select({
+        participant: participants,
+        profile: profiles
       })
-    );
-    
+      .from(participants)
+      .leftJoin(profiles, eq(profiles.walletAddress, participants.walletAddress))
+      .where(eq(participants.poolId, poolId));
+
+    // Map results and enrich with display data
+    const enrichedParticipants = results.map(({ participant, profile }) => ({
+      ...participant,
+      displayName: profile?.nickname || undefined,
+      displayAvatar: profile?.avatarUrl || generateDicebearAvatar(participant.walletAddress, profile?.avatarStyle || "bottts"),
+    }));
+
     return enrichedParticipants;
   }
 
@@ -225,6 +260,62 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  /**
+   * OPTIMIZED: Get claimable pools for a wallet in a single query
+   * Fixes N+1 query problem - previously looped through all pools calling getParticipants()
+   * Now uses JOINs to fetch everything in 2 queries total
+   */
+  async getClaimablePools(wallet: string): Promise<{
+    refunds: Array<Pool & { participants: Participant[] }>;
+    rents: Pool[];
+  }> {
+    // Query 1: Get cancelled pools where user can claim refund
+    // Uses JOIN to get pool + participant data in one query
+    const refundResults = await db
+      .select({
+        pool: pools,
+        participant: participants
+      })
+      .from(pools)
+      .innerJoin(participants, eq(participants.poolId, pools.id))
+      .where(
+        and(
+          eq(pools.status, 'cancelled'),
+          eq(participants.walletAddress, wallet),
+          eq(participants.refundClaimed, 0)
+        )
+      );
+
+    // Group participants by pool ID
+    const refundPoolsMap = new Map<number, Pool & { participants: Participant[] }>();
+
+    for (const row of refundResults) {
+      if (!refundPoolsMap.has(row.pool.id)) {
+        refundPoolsMap.set(row.pool.id, {
+          ...row.pool,
+          participants: []
+        });
+      }
+      refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
+    }
+
+    const refunds = Array.from(refundPoolsMap.values());
+
+    // Query 2: Get ended/cancelled pools where user is creator and can claim rent
+    const rents = await db
+      .select()
+      .from(pools)
+      .where(
+        and(
+          eq(pools.creatorWallet, wallet),
+          sql`${pools.status} IN ('ended', 'cancelled')`,
+          eq(pools.rentClaimed, 0)
+        )
+      );
+
+    return { refunds, rents };
+  }
+
   async addTransaction(transaction: InsertTransaction): Promise<Transaction> {
     const [newTx] = await db.insert(transactions).values(transaction).returning();
     
@@ -275,19 +366,27 @@ export class DatabaseStorage implements IStorage {
 
   async getLeaderboard() {
     // Use real data from new methods
-    const topWinners = await this.getTopWinners(10);
-    const topReferrers = await this.getTopReferrers(10);
+    const { winners: topWinners } = await this.getTopWinners(10, 0);
+    const { referrers: topReferrers } = await this.getTopReferrers(10, 0);
 
-    return { 
+    return {
       topWinners: topWinners.map(w => ({ wallet: w.wallet, totalWon: w.totalTokensWon })),
       topReferrers: topReferrers.map(r => ({ wallet: r.wallet, referrals: r.referralsCount }))
     };
   }
 
-  async getTopWinners(limit: number = 20) {
+  async getTopWinners(limit: number = 20, offset: number = 0) {
+    // Get total count of winners
+    const countResult = await db.execute(sql`
+      SELECT COUNT(DISTINCT winner_wallet)::int as total
+      FROM pools
+      WHERE winner_wallet IS NOT NULL AND status = 'ended'
+    `);
+    const total = (countResult.rows[0] as any)?.total || 0;
+
     // Query pools with winners, aggregate by wallet
     const result = await db.execute(sql`
-      SELECT 
+      SELECT
         winner_wallet as wallet,
         COUNT(*)::int as wins_count,
         COALESCE(SUM(total_pot), 0)::float as total_tokens_won,
@@ -296,14 +395,15 @@ export class DatabaseStorage implements IStorage {
         token_mint,
         token_symbol
       FROM pools
-      WHERE winner_wallet IS NOT NULL 
+      WHERE winner_wallet IS NOT NULL
         AND status = 'ended'
       GROUP BY winner_wallet, token_mint, token_symbol
       ORDER BY total_tokens_won DESC
       LIMIT ${limit}
+      OFFSET ${offset}
     `);
 
-    return (result.rows as any[]).map(row => ({
+    const winners = (result.rows as any[]).map(row => ({
       wallet: row.wallet as string,
       winsCount: row.wins_count as number,
       totalTokensWon: row.total_tokens_won as number,
@@ -314,12 +414,21 @@ export class DatabaseStorage implements IStorage {
       tokenMint: row.token_mint as string | null,
       tokenSymbol: row.token_symbol as string | null,
     }));
+
+    return { winners, total };
   }
 
-  async getTopReferrers(limit: number = 20) {
+  async getTopReferrers(limit: number = 20, offset: number = 0) {
+    // Get total count of referrers
+    const countResult = await db.execute(sql`
+      SELECT COUNT(DISTINCT referrer_wallet)::int as total
+      FROM referral_relations
+    `);
+    const total = (countResult.rows[0] as any)?.total || 0;
+
     // Query referral_relations and referral_rewards
     const result = await db.execute(sql`
-      SELECT 
+      SELECT
         rr.referrer_wallet as wallet,
         COUNT(DISTINCT rr.referred_wallet)::int as referrals_count,
         COALESCE(SUM(
@@ -332,9 +441,10 @@ export class DatabaseStorage implements IStorage {
       GROUP BY rr.referrer_wallet
       ORDER BY referrals_count DESC
       LIMIT ${limit}
+      OFFSET ${offset}
     `);
 
-    return (result.rows as any[]).map(row => ({
+    const referrers = (result.rows as any[]).map(row => ({
       wallet: row.wallet as string,
       referralsCount: row.referrals_count as number,
       totalTokensEarned: row.total_tokens_earned as number,
@@ -343,6 +453,8 @@ export class DatabaseStorage implements IStorage {
       firstReferralAt: row.first_referral_at as Date | null,
       lastReferralAt: row.last_referral_at as Date | null,
     }));
+
+    return { referrers, total };
   }
 
   // Profile methods

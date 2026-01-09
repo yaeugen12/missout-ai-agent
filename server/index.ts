@@ -1,5 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import cors from "cors";
+import helmet from "helmet";
 import { registerRoutes, seedDatabase } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -64,15 +66,36 @@ if (process.env.SENTRY_DSN) {
   console.log("[SENTRY] ✅ Error monitoring initialized");
 } else {
   console.log("[SENTRY] ⚠️  SENTRY_DSN not found - error monitoring disabled");
-  // Setup enhanced error handlers with Sentry capturing
-  setupSentryErrorHandlers(gracefulShutdown);
 }
 
 const app = express();
 const httpServer = createServer(app);
 
 // ============================================
-// SECURITY & RATE LIMITING
+// SECURITY MIDDLEWARE (CORS + Helmet)
+// ============================================
+
+// CORS Configuration - Allow frontend to access API
+app.use(cors({
+  origin: process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['X-Request-ID'],
+}));
+
+console.log("[SECURITY] ✅ CORS enabled for origin:", process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173');
+
+// Helmet Security Headers - Protection against common web vulnerabilities
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for API-only server
+  crossOriginEmbedderPolicy: false, // Allow embedding resources
+}));
+
+console.log("[SECURITY] ✅ Helmet security headers enabled");
+
+// ============================================
+// RATE LIMITING
 // ============================================
 
 const apiLimiter = rateLimit({
@@ -121,6 +144,24 @@ app.use(
     limit: "1mb",
   })
 );
+
+// ============================================
+// JSON ERROR HANDLER (malformed JSON protection)
+// ============================================
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    console.error('[Security] Invalid JSON received:', {
+      path: req.path,
+      method: req.method,
+      error: err.message,
+    });
+    return res.status(400).json({
+      message: 'Invalid JSON format in request body',
+      error: 'Bad Request'
+    });
+  }
+  next(err);
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -185,12 +226,46 @@ app.use((req, res, next) => {
       await dbPool.query("SELECT 1");
 
       const monitorStatus = poolMonitor.getStatus();
+      const { getRedisStats } = await import("./redis");
+      const redisStats = await getRedisStats();
+      const { rpcManager } = await import("./rpc-manager");
+      const rpcStats = rpcManager.getStats();
+
+      // RPC connectivity test - actually check if we can reach Solana
+      let solanaConnected = false;
+      let solanaSlot = null;
+      let solanaLatency = null;
+      try {
+        const startRpc = Date.now();
+        const connection = rpcManager.getConnection();
+        solanaSlot = await connection.getSlot();
+        solanaLatency = Date.now() - startRpc;
+        solanaConnected = solanaSlot > 0;
+      } catch (err: any) {
+        logger.warn('RPC health check failed:', err.message);
+        solanaConnected = false;
+      }
 
       res.status(200).json({
         status: "healthy",
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         database: "connected",
+        redis: redisStats.enabled
+          ? {
+              connected: redisStats.connected,
+              dbSize: redisStats.dbSize,
+              status: redisStats.status,
+            }
+          : "disabled",
+        rpc: {
+          connected: solanaConnected,
+          currentSlot: solanaSlot,
+          latency: solanaLatency,
+          totalEndpoints: rpcStats.totalEndpoints,
+          healthyEndpoints: rpcStats.healthyEndpoints,
+          endpoints: rpcStats.endpoints,
+        },
         poolMonitor: {
           running: monitorStatus.running,
           processingCount: monitorStatus.processingCount,
@@ -217,7 +292,7 @@ app.use((req, res, next) => {
     app.use(Sentry.setupExpressErrorHandler(app));
   }
 
-  app.use((err: any, _req, res) => {
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
@@ -283,6 +358,12 @@ app.use((req, res, next) => {
       process.exit(1);
     }, 30000);
   };
+
+  // Setup enhanced error handlers with Sentry capturing (only if Sentry is enabled)
+  if (process.env.SENTRY_DSN) {
+    setupSentryErrorHandlers(gracefulShutdown);
+    console.log("[SENTRY] ✅ Error handlers connected to Sentry");
+  }
 
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));

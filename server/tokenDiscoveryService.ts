@@ -1,4 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
+import { rpcManager } from "./rpc-manager";
 
 const HELIUS_RPC_URL = process.env.VITE_SOLANA_RPC_PRIMARY || process.env.VITE_SOLANA_RPC_FALLBACK || "";
 
@@ -128,9 +129,9 @@ async function refreshTokens(): Promise<void> {
   isRefreshing = true;
   
   console.log("[tokenDiscoveryService] Refreshing tokens from Helius...");
-  
+
   try {
-    const connection = new Connection(HELIUS_RPC_URL);
+    const connection = rpcManager.getConnection();
     // Use getLatestBlockhash to check connectivity instead of relying on specific DAS methods if URL is just RPC
     try {
       await connection.getLatestBlockhash();

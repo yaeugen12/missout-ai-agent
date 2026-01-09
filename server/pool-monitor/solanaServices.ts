@@ -5,6 +5,7 @@ import bs58 from "bs58";
 import { IDL } from "../../client/src/lib/solana-sdk/idl.js";
 import { AnchorUtils, Randomness } from "@switchboard-xyz/on-demand";
 import { pool as dbPool } from "../db.js";
+import { rpcManager } from "../rpc-manager";
 
 const log = (...args: any[]) => console.log("[MONITOR]", ...args);
 
@@ -57,14 +58,15 @@ export async function initializeSolanaServices(): Promise<void> {
     treasuryWallet = new PublicKey(treasuryPublicKey);
     log("✅ Treasury wallet loaded:", treasuryWallet.toBase58());
 
-    // Initialize connection and Anchor program
-    connection = new Connection(rpcUrl, "confirmed");
+    // Initialize connection and Anchor program using RPC failover manager
+    connection = rpcManager.getConnection();
 
     const wallet = new Wallet(devWallet);
     const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
     program = new Program(IDL as any, provider);
 
-    log("✅ Anchor program initialized");
+    log("✅ Anchor program initialized with RPC failover");
+    log("✅ RPC endpoints:", rpcManager.getStats().totalEndpoints);
   } catch (err: any) {
     log("❌ Failed to initialize Solana services:", err.message);
     throw err;

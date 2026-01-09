@@ -49,41 +49,77 @@ export const pool = new Pool({
   // Connection lifecycle
   maxUses: isPgBouncer ? 50000 : 7500, // pgBouncer handles rotation, so higher limit
   
-  // SSL configuration (required for production databases)
-  ssl: process.env.NODE_ENV === 'production' 
-    ? { rejectUnauthorized: false } // Most hosting providers use self-signed certs
-    : undefined,
+  // SSL configuration (required for Supabase in both dev and production)
+  ssl: process.env.DATABASE_URL?.includes('supabase.co')
+    ? { rejectUnauthorized: false } // Supabase uses self-signed certs
+    : process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : undefined,
 });
 
-// Pool event handlers for monitoring
-pool.on('error', (err, client) => {
-  console.error('[PostgreSQL] Unexpected error on idle client:', {
+// Pool event handlers for monitoring and error tracking
+pool.on('error', (err: any) => {
+  console.error('[PostgreSQL] ❌ Unexpected error on idle client:', {
     error: err.message,
     code: err.code,
     detail: err.detail,
   });
+
+  // Send critical database errors to Sentry
+  if (process.env.SENTRY_DSN) {
+    import('./sentry-helper').then(({ captureError }) => {
+      captureError(err, {
+        context: 'database_pool_error',
+        extra: {
+          code: err.code,
+          detail: err.detail,
+        },
+      });
+    });
+  }
   // Don't exit process - pool will recover automatically
 });
 
-pool.on('connect', (client) => {
-  const clientInfo = {
-    database: client.database,
-    port: client.port,
-    host: client.host,
-  };
-  console.log('[PostgreSQL] ✅ New client connected to pool:', clientInfo);
+pool.on('connect', () => {
+  console.log('[PostgreSQL] ✅ New client connected to pool');
 });
 
-pool.on('remove', (client) => {
-  console.log('[PostgreSQL] 🔄 Client removed from pool (rotation or timeout)');
+pool.on('remove', () => {
+  console.log('[PostgreSQL] 🔄 Client removed from pool');
 });
 
+// Track pool exhaustion (only log when pool is full)
+let lastPoolWarning = 0;
 pool.on('acquire', () => {
-  console.log('[PostgreSQL] 📤 Client acquired from pool');
-});
+  const now = Date.now();
+  // Warn if pool is near capacity (>80% used)
+  const usedConnections = pool.totalCount - pool.idleCount;
+  const maxConnections = pool.options.max || 20;
+  const usagePercent = (usedConnections / maxConnections) * 100;
 
-pool.on('release', () => {
-  console.log('[PostgreSQL] 📥 Client released back to pool');
+  if (usagePercent > 80 && now - lastPoolWarning > 60000) { // Warn max once per minute
+    console.warn('[PostgreSQL] ⚠️  Pool near capacity:', {
+      used: usedConnections,
+      max: maxConnections,
+      usage: `${usagePercent.toFixed(1)}%`,
+      waiting: pool.waitingCount,
+    });
+    lastPoolWarning = now;
+
+    // Alert via Sentry if pool is exhausted
+    if (process.env.SENTRY_DSN && usagePercent >= 90) {
+      import('./sentry-helper').then(({ captureMessage }) => {
+        captureMessage('Database pool near exhaustion', 'warning', {
+          extra: {
+            used: usedConnections,
+            max: maxConnections,
+            usage: usagePercent,
+            waiting: pool.waitingCount,
+          },
+        });
+      });
+    }
+  }
 });
 
 // Test connection on startup

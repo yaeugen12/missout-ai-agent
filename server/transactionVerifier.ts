@@ -1,7 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { logger, logError } from "./logger";
+import { rpcManager, withRPCFailover } from "./rpc-manager";
 
-const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 const PROGRAM_ID = new PublicKey("53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw");
 
 // Instruction discriminators (first 8 bytes of instruction data)
@@ -13,17 +13,9 @@ const INSTRUCTION_DISCRIMINATORS = {
   DONATE: [121, 186, 218, 211, 73, 70, 196, 180],
 };
 
-// RPC connection with retry logic
-let connection: Connection | null = null;
-
+// Get connection from RPC manager with failover support
 function getConnection(): Connection {
-  if (!connection) {
-    connection = new Connection(RPC_URL, {
-      commitment: "confirmed",
-      confirmTransactionInitialTimeout: 60000,
-    });
-  }
-  return connection;
+  return rpcManager.getConnection();
 }
 
 /**
