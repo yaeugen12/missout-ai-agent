@@ -6,7 +6,6 @@
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "outDir": "./dist",
-    "rootDir": "./src",
 
     "strict": true,
     "skipLibCheck": true,
@@ -16,6 +15,7 @@
 
     "types": ["node"],
 
+    "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"]
     }

@@ -53,7 +53,7 @@ export async function verifyTransactionExists(txHash: string): Promise<{
     return {
       exists: true,
       succeeded,
-      blockTime: tx.blockTime,
+      blockTime: tx.blockTime ?? null,
     };
   } catch (err: any) {
     logError(err, `[TX_VERIFY] Error checking transaction ${txHash.slice(0, 16)}`);

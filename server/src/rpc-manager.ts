@@ -227,7 +227,7 @@ class RPCManager {
       // All retries failed for this endpoint
       this.recordFailure(endpoint, lastError);
       logger.error(
-        new Error(`${operationName} failed after ${this.retryConfig.maxRetries} retries`),
+        `${operationName} failed after ${this.retryConfig.maxRetries} retries`,
         `RPC Manager - ${this.maskUrl(endpoint.url)}`,
         { error: lastError?.message }
       );

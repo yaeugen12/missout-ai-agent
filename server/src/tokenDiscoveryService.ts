@@ -68,17 +68,17 @@ async function fetchTokenMetadata(mintAddress: string): Promise<{name: string; s
     
     const data = await response.json();
     
-    if (data.result?.content?.metadata) {
-      const meta = data.result.content.metadata;
-      const files = data.result.content.files || [];
+    if ((data as any).result?.content?.metadata) {
+      const meta = (data as any).result.content.metadata;
+      const files = (data as any).result.content.files || [];
       const logoUrl = files[0]?.cdn_uri || files[0]?.uri;
       
       return {
         name: meta.name || "Unknown Token",
         symbol: meta.symbol || mintAddress.slice(0, 6).toUpperCase(),
-        decimals: data.result.token_info?.decimals || 9,
+        decimals: (data as any).result.token_info?.decimals || 9,
         logoUrl,
-        supply: data.result.token_info?.supply
+        supply: (data as any).result.token_info?.supply
       };
     }
     
