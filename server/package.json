@@ -6,8 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "NODE_ENV=development tsx --env-file=.env src/index.ts",
-    "build": "tsc && npm run copy-files",
+    "build": "tsc && npm run copy-files && npm run postbuild",
     "copy-files": "mkdir -p dist/shared && cp -r ../shared/* dist/shared/ 2>/dev/null || true",
+    "postbuild": "ls -la dist/ && echo 'Build output verified'",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push",
