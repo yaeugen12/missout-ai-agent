@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
-import { tokenDiscoveryService, type DiscoveredToken } from "./tokenDiscoveryService";
-import { poolMonitor } from "./pool-monitor";
-import { db, pool as pgPool } from "./db";
+import { tokenDiscoveryService, type DiscoveredToken } from "./tokenDiscoveryService.js";
+import { poolMonitor } from "./pool-monitor/index.js";
+import { db, pool as pgPool } from "./db.js";
 import { pools, updateProfileSchema } from "@shared/schema";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
@@ -20,13 +20,13 @@ import {
   verifyJoinTransaction,
   verifyCancelPoolTransaction,
   verifyDonateTransaction
-} from "./transactionVerifier";
+} from "./transactionVerifier.js";
 import {
   isTxHashUsed,
   markTxHashUsed
-} from "./transactionHashTracker";
-import { cacheMiddleware, invalidateCache } from "./cache-middleware";
-import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination";
+} from "./transactionHashTracker.js";
+import { cacheMiddleware, invalidateCache } from "./cache-middleware.js";
+import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination.js";
 import rateLimit from "express-rate-limit";
 
 // ===========================================

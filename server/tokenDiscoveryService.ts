@@ -270,7 +270,22 @@ function updateAges(tokens: DiscoveredToken[]): DiscoveredToken[] {
   }));
 }
 
-export const tokenDiscoveryService = {
+export interface TokenDiscoveryService {
+  getTokens(): Promise<DiscoveredToken[]>;
+  getTokensSync(): DiscoveredToken[];
+  searchToken(mintAddress: string): Promise<DiscoveredToken | null>;
+  startBackgroundRefresh(intervalMs?: number): void;
+  stop(): void;
+  getLastRefreshTime(): number;
+  getCacheStats(): {
+    tokenCount: number;
+    lastRefresh: number;
+    isRefreshing: boolean;
+  };
+  refreshIntervalId: NodeJS.Timeout | null;
+}
+
+export const tokenDiscoveryService: TokenDiscoveryService = {
   async getTokens(): Promise<DiscoveredToken[]> {
     const now = Date.now();
     

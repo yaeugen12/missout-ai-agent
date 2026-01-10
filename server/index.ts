@@ -2,22 +2,22 @@ import express, { type Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
 import helmet from "helmet";
-import { registerRoutes, seedDatabase } from "./routes";
-import { serveStatic } from "./static";
-import { setupVite } from "./vite";
+import { registerRoutes, seedDatabase } from "./routes.js";
+import { serveStatic } from "./static.js";
+import { setupVite } from "./vite.js";
 import { createServer } from "http";
-import { initializeSolanaServices } from "./pool-monitor/solanaServices";
-import { poolMonitor } from "./pool-monitor/poolMonitor";
-import { pool as dbPool } from "./db";
-import { initRedis } from "./cache";
-import { logger, logError } from "./logger";
-import { startCleanupJob, stopCleanupJob } from "./transactionCleanup";
+import { initializeSolanaServices } from "./pool-monitor/solanaServices.js";
+import { poolMonitor } from "./pool-monitor/poolMonitor.js";
+import { pool as dbPool } from "./db.js";
+import { initRedis } from "./cache.js";
+import { logger, logError } from "./logger.js";
+import { startCleanupJob, stopCleanupJob } from "./transactionCleanup.js";
 import { readFileSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import * as Sentry from "@sentry/node";
 
-import { setupSentryErrorHandlers } from "./error-handlers-sentry";
+import { setupSentryErrorHandlers } from "./error-handlers-sentry.js";
 // ============================================================
 // FIX: Cross-platform support for ESM + CJS (Render compatible)
 // ============================================================
@@ -232,9 +232,9 @@ app.use((req, res, next) => {
       await dbPool.query("SELECT 1");
 
       const monitorStatus = poolMonitor.getStatus();
-      const { getRedisStats } = await import("./redis");
+      const { getRedisStats } = await import("./redis.js");
       const redisStats = await getRedisStats();
-      const { rpcManager } = await import("./rpc-manager");
+      const { rpcManager } = await import("./rpc-manager.js");
       const rpcStats = rpcManager.getStats();
 
       // RPC connectivity test - actually check if we can reach Solana
@@ -291,33 +291,17 @@ app.use((req, res, next) => {
     }
   });
 
-  console.log("[DEBUG] Registering routes...");
   await registerRoutes(httpServer, app);
-  console.log("[DEBUG] ✅ Routes registered");
-
-  console.log("[DEBUG] Seeding database...");
   await seedDatabase();
-  console.log("[DEBUG] ✅ Database seeded");
 
   // Setup frontend serving (BEFORE error handlers so Vite can handle requests)
-  console.log("[DEBUG] Checking NODE_ENV:", process.env.NODE_ENV);
   if (process.env.NODE_ENV === "production") {
-    console.log("[DEBUG] Production mode - serving static files");
     serveStatic(app);
   } else {
-    console.log("[DEBUG] Development mode - setting up Vite");
     console.log("[VITE] Setting up Vite dev server middleware...");
-    try {
-      console.log("[DEBUG] About to call setupVite...");
-      await setupVite(httpServer, app);
-      console.log("[VITE] ✅ Vite dev server middleware configured");
-    } catch (error: any) {
-      console.error("[VITE] ❌ Failed to setup Vite:", error.message);
-      console.error(error.stack);
-      throw error;
-    }
+    await setupVite(httpServer, app);
+    console.log("[VITE] ✅ Vite dev server middleware configured");
   }
-  console.log("[DEBUG] Frontend setup complete");
 
   // Sentry error handler (must be after all routes and Vite middleware)
   if (process.env.SENTRY_DSN) {
@@ -335,6 +319,17 @@ app.use((req, res, next) => {
   });
 
   const port = parseInt(process.env.PORT || "5000", 10);
+
+  // Track active connections for graceful shutdown
+  const connections = new Set<any>();
+
+  httpServer.on('connection', (connection) => {
+    connections.add(connection);
+    connection.on('close', () => {
+      connections.delete(connection);
+    });
+  });
+
   httpServer.listen(
     { port, host: "0.0.0.0", reusePort: true },
     () => {
@@ -361,18 +356,23 @@ app.use((req, res, next) => {
       uptime: process.uptime(),
     });
 
-    // Set a hard timeout for forced shutdown (2 minutes for production)
+    // Set a hard timeout for forced shutdown (30s should be enough with connection forcing)
     const forceShutdownTimeout = setTimeout(() => {
-      logger.error("Graceful shutdown timeout (120s), forcing exit", {
+      logger.error("Graceful shutdown timeout (30s), forcing exit", {
         signal,
         pid: process.pid,
       });
       process.exit(1);
-    }, 120000); // 2 minutes for production
+    }, 30000); // 30 seconds (connections are force-closed after 5s)
 
     try {
-      // Step 1: Stop accepting new connections
-      await new Promise<void>((resolve, reject) => {
+      // Step 1: Stop accepting new connections and destroy active ones
+      logger.info("Closing HTTP server...", {
+        activeConnections: connections.size,
+      });
+
+      // Close server (stops accepting new connections)
+      const serverClosePromise = new Promise<void>((resolve, reject) => {
         httpServer.close((err) => {
           if (err) {
             logger.error("Error closing HTTP server", { error: err.message });
@@ -383,6 +383,25 @@ app.use((req, res, next) => {
           }
         });
       });
+
+      // Force close active connections after 5 seconds
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn(`Forcefully closing ${connections.size} active connections`);
+        connections.forEach((connection) => {
+          connection.destroy();
+        });
+        connections.clear();
+      }, 5000);
+
+      // Wait for server to close or timeout
+      await Promise.race([
+        serverClosePromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Server close timeout")), 10000)
+        ),
+      ]);
+
+      clearTimeout(forceCloseTimeout);
 
       // Step 2: Stop background jobs
       logger.info("Stopping background jobs...");
@@ -395,7 +414,7 @@ app.use((req, res, next) => {
 
       // Stop token discovery service
       try {
-        const { tokenDiscoveryService } = await import("./tokenDiscoveryService");
+        const { tokenDiscoveryService } = await import("./tokenDiscoveryService.js");
         if (tokenDiscoveryService && typeof tokenDiscoveryService.stop === 'function') {
           tokenDiscoveryService.stop();
           logger.info("✅ Token discovery service stopped");
@@ -407,7 +426,7 @@ app.use((req, res, next) => {
       // Step 3: Close Redis connection with timeout
       logger.info("Closing Redis connection...");
       try {
-        const { redis } = await import("./cache");
+        const { redis } = await import("./cache.js");
         if (redis) {
           // Use disconnect() instead of quit() for faster shutdown
           await Promise.race([
