@@ -37,22 +37,27 @@ try {
   __dirname = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 }
 
-const envPath = resolve(__dirname, "../.env");
+// Load .env file only in development (production uses Render environment variables)
+if (process.env.NODE_ENV !== "production") {
+  const envPath = resolve(__dirname, "../.env");
 
-try {
-  const envFile = readFileSync(envPath, "utf8");
-  envFile.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) {
-      const [key, ...values] = trimmed.split("=");
-      if (key && values.length) {
-        process.env[key.trim()] = values.join("=").trim();
+  try {
+    const envFile = readFileSync(envPath, "utf8");
+    envFile.split("\n").forEach((line) => {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        const [key, ...values] = trimmed.split("=");
+        if (key && values.length) {
+          process.env[key.trim()] = values.join("=").trim();
+        }
       }
-    }
-  });
-  console.log("[ENV] ✅ Loaded .env file from:", envPath);
-} catch (err: any) {
-  console.log("[ENV] ⚠️  No .env file found at:", envPath);
+    });
+    console.log("[ENV] ✅ Loaded .env file from:", envPath);
+  } catch (err: any) {
+    console.log("[ENV] ⚠️  No .env file found at:", envPath, "- using system environment variables");
+  }
+} else {
+  console.log("[ENV] ✅ Production mode - using system environment variables");
 }
 
 // ============================================
@@ -342,42 +347,118 @@ app.use((req, res, next) => {
     }
   );
 
+  let isShuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
-    logger.info(`${signal} received, starting graceful shutdown...`);
+    // Prevent multiple shutdown calls
+    if (isShuttingDown) {
+      logger.warn(`Shutdown already in progress, ignoring ${signal}`);
+      return;
+    }
+    isShuttingDown = true;
 
-    httpServer.close(async () => {
-      logger.info("HTTP server closed, no new connections accepted");
-
-      try {
-        stopCleanupJob();
-        logger.info("Transaction cleanup job stopped");
-
-        await poolMonitor.stop();
-        logger.info("Pool Monitor stopped");
-
-        const { redis } = await import("./cache");
-        if (redis) {
-          await redis.quit();
-          logger.info("Redis connection closed");
-        }
-
-        await dbPool.end();
-        logger.info("Database connections closed");
-
-        logger.info("Graceful shutdown completed successfully");
-        process.exit(0);
-      } catch (err: any) {
-        logger.error("Error during graceful shutdown", {
-          error: err.message,
-        });
-        process.exit(1);
-      }
+    logger.info(`${signal} received, starting graceful shutdown...`, {
+      pid: process.pid,
+      uptime: process.uptime(),
     });
 
-    setTimeout(() => {
-      logger.error("Graceful shutdown timeout, forcing exit");
+    // Set a hard timeout for forced shutdown (2 minutes for production)
+    const forceShutdownTimeout = setTimeout(() => {
+      logger.error("Graceful shutdown timeout (120s), forcing exit", {
+        signal,
+        pid: process.pid,
+      });
       process.exit(1);
-    }, 30000);
+    }, 120000); // 2 minutes for production
+
+    try {
+      // Step 1: Stop accepting new connections
+      await new Promise<void>((resolve, reject) => {
+        httpServer.close((err) => {
+          if (err) {
+            logger.error("Error closing HTTP server", { error: err.message });
+            reject(err);
+          } else {
+            logger.info("✅ HTTP server closed, no new connections accepted");
+            resolve();
+          }
+        });
+      });
+
+      // Step 2: Stop background jobs
+      logger.info("Stopping background jobs...");
+
+      stopCleanupJob();
+      logger.info("✅ Transaction cleanup job stopped");
+
+      await poolMonitor.stop();
+      logger.info("✅ Pool Monitor stopped");
+
+      // Stop token discovery service
+      try {
+        const { tokenDiscoveryService } = await import("./tokenDiscoveryService");
+        if (tokenDiscoveryService && typeof tokenDiscoveryService.stop === 'function') {
+          tokenDiscoveryService.stop();
+          logger.info("✅ Token discovery service stopped");
+        }
+      } catch (err) {
+        logger.warn("Token discovery service not stoppable or not found");
+      }
+
+      // Step 3: Close Redis connection with timeout
+      logger.info("Closing Redis connection...");
+      try {
+        const { redis } = await import("./cache");
+        if (redis) {
+          // Use disconnect() instead of quit() for faster shutdown
+          await Promise.race([
+            redis.disconnect(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Redis disconnect timeout")), 5000)
+            ),
+          ]);
+          logger.info("✅ Redis connection closed");
+        }
+      } catch (err: any) {
+        logger.warn("Redis disconnect failed or timed out", { error: err.message });
+      }
+
+      // Step 4: Close database connections
+      logger.info("Closing database connections...");
+      await Promise.race([
+        dbPool.end(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Database pool end timeout")), 10000)
+        ),
+      ]);
+      logger.info("✅ Database connections closed");
+
+      // Step 5: Flush Sentry events if enabled
+      if (process.env.SENTRY_DSN) {
+        logger.info("Flushing Sentry events...");
+        await Sentry.close(2000);
+        logger.info("✅ Sentry events flushed");
+      }
+
+      // Clear the force shutdown timeout
+      clearTimeout(forceShutdownTimeout);
+
+      logger.info("🎉 Graceful shutdown completed successfully", {
+        signal,
+        pid: process.pid,
+        uptime: process.uptime(),
+      });
+
+      process.exit(0);
+    } catch (err: any) {
+      logger.error("❌ Error during graceful shutdown", {
+        error: err.message,
+        stack: err.stack,
+        signal,
+      });
+
+      clearTimeout(forceShutdownTimeout);
+      process.exit(1);
+    }
   };
 
   // Setup enhanced error handlers with Sentry capturing (only if Sentry is enabled)

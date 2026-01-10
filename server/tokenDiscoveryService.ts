@@ -311,14 +311,24 @@ export const tokenDiscoveryService = {
     }
   },
   
+  refreshIntervalId: null as NodeJS.Timeout | null,
+
   startBackgroundRefresh(intervalMs: number = 10000) {
     console.log("[tokenDiscoveryService] Starting background refresh every", intervalMs, "ms");
-    
+
     refreshTokens();
-    
-    setInterval(() => {
+
+    this.refreshIntervalId = setInterval(() => {
       refreshTokens();
     }, intervalMs);
+  },
+
+  stop() {
+    if (this.refreshIntervalId) {
+      clearInterval(this.refreshIntervalId);
+      this.refreshIntervalId = null;
+      console.log("[tokenDiscoveryService] ✅ Background refresh stopped");
+    }
   },
   
   getLastRefreshTime(): number {
