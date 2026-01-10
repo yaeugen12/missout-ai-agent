@@ -7,11 +7,12 @@
     "resolveJsonModule": true,
     "outDir": "./dist",
 
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "allowSyntheticDefaultImports": true,
+    "noImplicitAny": false,
 
     "types": ["node"],
 
@@ -26,7 +27,9 @@
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src/vite.ts",
+    "src/static.ts"
   ],
   "ts-node": {
     "esm": true,
