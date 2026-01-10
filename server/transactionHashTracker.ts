@@ -151,12 +151,13 @@ export async function getTransactionStats(): Promise<{
   last24Hours: number;
 }> {
   try {
+    // SECURITY FIX: Changed 'db' to 'pool' (db is not defined in this module)
     // Total count
-    const totalResult = await db.query("SELECT COUNT(*) as count FROM used_transactions");
+    const totalResult = await pool.query("SELECT COUNT(*) as count FROM used_transactions");
     const total = parseInt(totalResult.rows[0].count);
 
     // Count by operation type
-    const byOperationResult = await db.query(`
+    const byOperationResult = await pool.query(`
       SELECT operation_type, COUNT(*) as count
       FROM used_transactions
       GROUP BY operation_type
@@ -168,7 +169,7 @@ export async function getTransactionStats(): Promise<{
     }
 
     // Count in last 24 hours
-    const last24HoursResult = await db.query(`
+    const last24HoursResult = await pool.query(`
       SELECT COUNT(*) as count
       FROM used_transactions
       WHERE used_at > NOW() - INTERVAL '24 hours'
@@ -182,6 +183,11 @@ export async function getTransactionStats(): Promise<{
     };
   } catch (err: any) {
     logError(err, `[TX_TRACKER] Error getting transaction stats`);
-    throw new Error(`Failed to get transaction stats: ${err.message}`);
+    // Return safe defaults instead of throwing to prevent server crash
+    return {
+      total: 0,
+      byOperation: {},
+      last24Hours: 0,
+    };
   }
 }

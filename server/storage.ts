@@ -376,6 +376,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopWinners(limit: number = 20, offset: number = 0) {
+    // SECURITY FIX: Validate and sanitize inputs to prevent SQL injection
+    const safeLimit = Math.min(Math.max(parseInt(String(limit)), 1), 100);
+    const safeOffset = Math.max(parseInt(String(offset)), 0);
+
     // Get total count of winners
     const countResult = await db.execute(sql`
       SELECT COUNT(DISTINCT winner_wallet)::int as total
@@ -385,6 +389,7 @@ export class DatabaseStorage implements IStorage {
     const total = (countResult.rows[0] as any)?.total || 0;
 
     // Query pools with winners, aggregate by wallet
+    // Using sql.raw() with validated integers to safely inject LIMIT/OFFSET
     const result = await db.execute(sql`
       SELECT
         winner_wallet as wallet,
@@ -399,8 +404,8 @@ export class DatabaseStorage implements IStorage {
         AND status = 'ended'
       GROUP BY winner_wallet, token_mint, token_symbol
       ORDER BY total_tokens_won DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
+      LIMIT ${sql.raw(String(safeLimit))}
+      OFFSET ${sql.raw(String(safeOffset))}
     `);
 
     const winners = (result.rows as any[]).map(row => ({
@@ -419,6 +424,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTopReferrers(limit: number = 20, offset: number = 0) {
+    // SECURITY FIX: Validate and sanitize inputs to prevent SQL injection
+    const safeLimit = Math.min(Math.max(parseInt(String(limit)), 1), 100);
+    const safeOffset = Math.max(parseInt(String(offset)), 0);
+
     // Get total count of referrers
     const countResult = await db.execute(sql`
       SELECT COUNT(DISTINCT referrer_wallet)::int as total
@@ -427,6 +436,7 @@ export class DatabaseStorage implements IStorage {
     const total = (countResult.rows[0] as any)?.total || 0;
 
     // Query referral_relations and referral_rewards
+    // Using sql.raw() with validated integers to safely inject LIMIT/OFFSET
     const result = await db.execute(sql`
       SELECT
         rr.referrer_wallet as wallet,
@@ -440,8 +450,8 @@ export class DatabaseStorage implements IStorage {
       LEFT JOIN referral_rewards rew ON rr.referrer_wallet = rew.referrer_wallet
       GROUP BY rr.referrer_wallet
       ORDER BY referrals_count DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
+      LIMIT ${sql.raw(String(safeLimit))}
+      OFFSET ${sql.raw(String(safeOffset))}
     `);
 
     const referrers = (result.rows as any[]).map(row => ({

@@ -84,19 +84,9 @@ async function validateImageContent(filePath: string, claimedMimeType: string): 
   }
 }
 
-// Sanitize filename to prevent path traversal and injection attacks
-function sanitizeFilename(originalName: string): string {
-  // Remove path components
-  const basename = path.basename(originalName);
-  // Remove dangerous characters, keep only alphanumeric, dots, underscores, hyphens
-  const sanitized = basename.replace(/[^a-zA-Z0-9._-]/g, '');
-  // Ensure extension is valid
-  const ext = path.extname(sanitized).toLowerCase();
-  if (!ALLOWED_IMAGE_TYPES[ext]) {
-    return ''; // Invalid extension
-  }
-  return sanitized;
-}
+// SECURITY NOTE: We don't sanitize user-provided filenames. Instead, we generate
+// cryptographically secure random filenames using crypto.randomBytes(16).
+// This completely eliminates path traversal risks and filename-based attacks.
 
 // Setup upload directory
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
