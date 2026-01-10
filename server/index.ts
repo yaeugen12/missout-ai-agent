@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { registerRoutes, seedDatabase } from "./routes";
 import { serveStatic } from "./static";
+import { setupVite } from "./vite";
 import { createServer } from "http";
 import { initializeSolanaServices } from "./pool-monitor/solanaServices";
 import { poolMonitor } from "./pool-monitor/poolMonitor";
@@ -285,13 +286,40 @@ app.use((req, res, next) => {
     }
   });
 
+  console.log("[DEBUG] Registering routes...");
   await registerRoutes(httpServer, app);
-  await seedDatabase();
+  console.log("[DEBUG] ✅ Routes registered");
 
+  console.log("[DEBUG] Seeding database...");
+  await seedDatabase();
+  console.log("[DEBUG] ✅ Database seeded");
+
+  // Setup frontend serving (BEFORE error handlers so Vite can handle requests)
+  console.log("[DEBUG] Checking NODE_ENV:", process.env.NODE_ENV);
+  if (process.env.NODE_ENV === "production") {
+    console.log("[DEBUG] Production mode - serving static files");
+    serveStatic(app);
+  } else {
+    console.log("[DEBUG] Development mode - setting up Vite");
+    console.log("[VITE] Setting up Vite dev server middleware...");
+    try {
+      console.log("[DEBUG] About to call setupVite...");
+      await setupVite(httpServer, app);
+      console.log("[VITE] ✅ Vite dev server middleware configured");
+    } catch (error: any) {
+      console.error("[VITE] ❌ Failed to setup Vite:", error.message);
+      console.error(error.stack);
+      throw error;
+    }
+  }
+  console.log("[DEBUG] Frontend setup complete");
+
+  // Sentry error handler (must be after all routes and Vite middleware)
   if (process.env.SENTRY_DSN) {
-    app.use(Sentry.setupExpressErrorHandler(app));
+    Sentry.setupExpressErrorHandler(app);
   }
 
+  // Custom error handler (must be last)
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -300,13 +328,6 @@ app.use((req, res, next) => {
 
     res.status(status).json({ message });
   });
-
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
-  }
 
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
