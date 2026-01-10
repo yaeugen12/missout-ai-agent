@@ -32,7 +32,7 @@ export function useProfile(walletAddress?: string) {
     queryKey: ["profile", walletAddress],
     queryFn: async () => {
       if (!walletAddress) throw new Error("No wallet address");
-      const res = await fetch(`/api/profile/${walletAddress}`);
+      const res = await apiFetch(`/api/profile/${walletAddress}`);
       if (!res.ok) throw new Error("Failed to fetch profile");
       return res.json();
     },
@@ -53,7 +53,7 @@ export function useProfileNonce() {
     queryKey: ["profile-nonce", publicKey?.toBase58()],
     queryFn: async () => {
       if (!publicKey) throw new Error("No wallet connected");
-      const res = await fetch(`/api/profile/${publicKey.toBase58()}/nonce`);
+      const res = await apiFetch(`/api/profile/${publicKey.toBase58()}/nonce`);
       if (!res.ok) throw new Error("Failed to get nonce");
       return res.json();
     },
@@ -74,7 +74,7 @@ export function useUpdateProfile() {
       
       const wallet = publicKey.toBase58();
       
-      const res = await fetch(`/api/profile/${wallet}`, {
+      const res = await apiFetch(`/api/profile/${wallet}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

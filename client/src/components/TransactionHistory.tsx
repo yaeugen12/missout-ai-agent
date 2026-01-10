@@ -4,6 +4,7 @@ import { ExternalLink, History, ArrowUpRight, ArrowDownLeft, PlusCircle, Trophy 
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
+import { apiFetch } from "@/lib/api";
 
 interface TransactionHistoryProps {
   walletAddress: string;
@@ -14,12 +15,17 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
     queryKey: [api.profiles.transactions.path.replace(":wallet", walletAddress)],
     queryFn: async () => {
       console.log("[TransactionHistory] Fetching for:", walletAddress);
-      const res = await fetch(api.profiles.transactions.path.replace(":wallet", walletAddress));
+
+      const res = await apiFetch(
+        api.profiles.transactions.path.replace(":wallet", walletAddress)
+      );
+
       if (!res.ok) {
         const errData = await res.json();
         console.error("[TransactionHistory] Fetch failed:", errData);
         throw new Error(errData.message || "Failed to fetch transactions");
       }
+
       const response = await res.json();
       console.log("[TransactionHistory] Received:", response.data?.length || 0, "txs");
       return response.data || [];
@@ -51,14 +57,30 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
 
   const getTypeStyles = (type: string) => {
     switch (type) {
-      case 'CREATE':
-        return { icon: <PlusCircle className="w-5 h-5" />, label: 'Opened Void', color: 'bg-green-500/10 text-green-400' };
-      case 'PAYOUT':
-        return { icon: <Trophy className="w-5 h-5" />, label: 'Escaped with Loot', color: 'bg-yellow-500/10 text-yellow-400' };
-      case 'JOIN':
-        return { icon: <ArrowUpRight className="w-5 h-5" />, label: 'Get Pulled In', color: 'bg-primary/10 text-primary' };
+      case "CREATE":
+        return {
+          icon: <PlusCircle className="w-5 h-5" />,
+          label: "Opened Void",
+          color: "bg-green-500/10 text-green-400",
+        };
+      case "PAYOUT":
+        return {
+          icon: <Trophy className="w-5 h-5" />,
+          label: "Escaped with Loot",
+          color: "bg-yellow-500/10 text-yellow-400",
+        };
+      case "JOIN":
+        return {
+          icon: <ArrowUpRight className="w-5 h-5" />,
+          label: "Get Pulled In",
+          color: "bg-primary/10 text-primary",
+        };
       default:
-        return { icon: <ArrowDownLeft className="w-5 h-5" />, label: 'Feed the Void', color: 'bg-purple-500/10 text-purple-400' };
+        return {
+          icon: <ArrowDownLeft className="w-5 h-5" />,
+          label: "Feed the Void",
+          color: "bg-purple-500/10 text-purple-400",
+        };
     }
   };
 
@@ -67,8 +89,8 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
       {transactions.map((tx: any) => {
         const styles = getTypeStyles(tx.type);
         return (
-          <div 
-            key={tx.id} 
+          <div
+            key={tx.id}
             className="flex items-center justify-between p-4 bg-white/5 border border-white/5 hover:border-primary/30 rounded-xl transition-all group"
           >
             <div className="flex items-center gap-4">
@@ -91,12 +113,21 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
             </div>
 
             <div className="flex flex-col items-end gap-1">
-              <div className={`font-mono font-bold ${tx.type === 'PAYOUT' ? 'text-yellow-400' : 'text-white'}`}>
-                {tx.type === 'PAYOUT' ? '+' : ''}{tx.amount.toFixed(2)}
+              <div
+                className={`font-mono font-bold ${
+                  tx.type === "PAYOUT" ? "text-yellow-400" : "text-white"
+                }`}
+              >
+                {tx.type === "PAYOUT" ? "+" : ""}
+                {tx.amount.toFixed(2)}
               </div>
-              <a 
-                href={tx.txHash ? getSolscanTxUrl(tx.txHash) : `https://solscan.io/account/${walletAddress}?cluster=devnet`} 
-                target="_blank" 
+              <a
+                href={
+                  tx.txHash
+                    ? getSolscanTxUrl(tx.txHash)
+                    : `https://solscan.io/account/${walletAddress}?cluster=devnet`
+                }
+                target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1 text-[10px] text-primary hover:text-white transition-colors uppercase font-tech bg-primary/5 px-2 py-0.5 rounded border border-primary/20 hover:border-primary/50"
               >

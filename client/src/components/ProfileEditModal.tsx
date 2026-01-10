@@ -8,6 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useMyProfile, useUpdateProfile, AVATAR_STYLES, generateDicebearUrl, type AvatarStyle } from "@/hooks/use-profile";
 import { Loader2, Check, Upload, Trash2 } from "lucide-react";
 import clsx from "clsx";
+import { apiFetch } from "@/lib/api";
 
 interface ProfileEditModalProps {
   open: boolean;
@@ -78,7 +79,7 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/upload', {
+      const res = await apiFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });

@@ -1,4 +1,6 @@
 import { protocolAdapter } from "./protocolAdapter";
+import { apiFetch } from "@/lib/api";
+
 
 export type TokenCategory = "new_pairs" | "final_stretch" | "migrated";
 
@@ -41,7 +43,7 @@ export const heliusTokenDiscovery = {
     console.log("[heliusTokenDiscovery] Fetching from backend API...");
     
     try {
-      const response = await fetch("/api/discovery/tokens");
+      const response = await apiFetch("/api/discovery/tokens");
       
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
@@ -75,7 +77,7 @@ export const heliusTokenDiscovery = {
     }
     
     try {
-      const response = await fetch(`/api/discovery/tokens/search?mint=${encodeURIComponent(mintAddress)}`);
+      const response = await apiFetch(`/api/discovery/tokens/search?mint=${encodeURIComponent(mintAddress)}`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -110,7 +112,7 @@ export const heliusTokenDiscovery = {
 
   async getStats(): Promise<{tokenCount: number; lastRefresh: number; isRefreshing: boolean} | null> {
     try {
-      const response = await fetch("/api/discovery/stats");
+      const response = await apiFetch("/api/discovery/stats");
       if (!response.ok) return null;
       return await response.json();
     } catch {

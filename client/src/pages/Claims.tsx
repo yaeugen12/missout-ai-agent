@@ -10,6 +10,8 @@ import { Loader2, Wallet, RefreshCw, ArrowUpFromLine, Coins, Sparkles, Zap } fro
 import { cn } from "@/lib/utils";
 import type { BatchClaimProgress } from "@/lib/solana-sdk";
 import bs58 from "bs58";
+import { apiFetch } from "@/lib/api";
+
 
 interface PoolForClaim {
   id: number;
@@ -40,7 +42,7 @@ export default function Claims() {
     queryKey: ["/api/pools/claimable", walletAddress],
     queryFn: async () => {
       if (!walletAddress) return { refunds: [], rents: [] };
-      const res = await fetch(`/api/pools/claimable?wallet=${walletAddress}`);
+      const res = await apiFetch(`/api/pools/claimable?wallet=${walletAddress}`);
       if (!res.ok) throw new Error("Failed to fetch claimable pools");
       return res.json();
     },
@@ -67,7 +69,7 @@ export default function Claims() {
       const signature = bs58.encode(signatureBytes);
 
       // Mark as claimed in database
-      const response = await fetch(`/api/pools/${pool.id}/claim-refund`, {
+      const response = await apiFetch(`/api/pools/${pool.id}/claim-refund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +121,7 @@ export default function Claims() {
       const signature = bs58.encode(signatureBytes);
 
       // Mark as claimed in database
-      const response = await fetch(`/api/pools/${pool.id}/claim-rent`, {
+      const response = await apiFetch(`/api/pools/${pool.id}/claim-rent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

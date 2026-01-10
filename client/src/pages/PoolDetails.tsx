@@ -26,12 +26,13 @@ import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGR
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
 import { DevnetReadiness } from "@/components/DevnetReadiness";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { apiFetch } from "@/lib/api";
 
 function ParticipantRow({ walletAddress }: { walletAddress: string }) {
   const { data: profile, isLoading } = useQueries({
     queries: [{
       queryKey: [api.profiles.get.path.replace(":wallet", walletAddress)],
-      queryFn: () => fetch(api.profiles.get.path.replace(":wallet", walletAddress)).then(res => res.json()),
+      queryFn: () => apiFetch(api.profiles.get.path.replace(":wallet", walletAddress)).then(res => res.json()),
       staleTime: 60000,
     }]
   })[0];

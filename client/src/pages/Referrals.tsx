@@ -6,6 +6,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import bs58 from "bs58";
+import { apiFetch } from "@/lib/api";
+
 
 interface ReferralStats {
   totalInvited: number;
@@ -42,7 +44,7 @@ export default function Referrals() {
     queryKey: ["referralLink", walletAddress],
     queryFn: async () => {
       if (!walletAddress) return null;
-      const res = await fetch(`/api/referrals/link/${walletAddress}`);
+      const res = await apiFetch(`/api/referrals/link/${walletAddress}`);
       return res.json();
     },
     enabled: !!walletAddress,
@@ -51,7 +53,7 @@ export default function Referrals() {
   const { data: stats, isLoading: statsLoading } = useQuery<ReferralStats>({
     queryKey: ["referralStats", walletAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/referrals/summary/${walletAddress}`);
+      const res = await apiFetch(`/api/referrals/summary/${walletAddress}`);
       return res.json();
     },
     enabled: !!walletAddress,
@@ -60,7 +62,7 @@ export default function Referrals() {
   const { data: rewards, isLoading: rewardsLoading } = useQuery<ReferralReward[]>({
     queryKey: ["referralRewards", walletAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/referrals/rewards/${walletAddress}`);
+      const res = await apiFetch(`/api/referrals/rewards/${walletAddress}`);
       const response = await res.json();
       return response.data || [];
     },
@@ -70,7 +72,7 @@ export default function Referrals() {
   const { data: invitedUsers } = useQuery<InvitedUser[]>({
     queryKey: ["invitedUsers", walletAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/referrals/invited/${walletAddress}`);
+      const res = await apiFetch(`/api/referrals/invited/${walletAddress}`);
       const response = await res.json();
       return response.data || [];
     },
@@ -92,7 +94,7 @@ export default function Referrals() {
       const signatureBytes = await signMessage(messageBytes);
       const signature = bs58.encode(signatureBytes);
       
-      const res = await fetch("/api/referrals/claim", {
+      const res = await apiFetch("/api/referrals/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet: walletAddress, tokenMint, signature, message }),

@@ -32,7 +32,7 @@ export function useReferralCapture() {
       if (referrerWallet && referrerWallet !== walletAddress) {
         hasRegistered.current = true;
 
-        fetch("/api/referrals/register", {
+        apiFetch("/api/referrals/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

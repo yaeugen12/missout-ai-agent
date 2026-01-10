@@ -7,7 +7,7 @@ export function usePools() {
   return useQuery({
     queryKey: ["/api/pools"],
     queryFn: async () => {
-      const res = await fetch("/api/pools", { credentials: "include" });
+      const res = await apiFetch("/api/pools", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch pools");
       const response = await res.json();
       return (response.data || []) as Pool[];
@@ -21,7 +21,7 @@ export function usePool(id: number) {
   return useQuery({
     queryKey: ["/api/pools", id],
     queryFn: async () => {
-      const res = await fetch(`/api/pools/${id}`, { credentials: "include" });
+      const res = await apiFetch(`/api/pools/${id}`, { credentials: "include" });
       if (res.status === 404) throw new Error("Pool not found");
       if (!res.ok) throw new Error("Failed to fetch pool");
       return await res.json() as Pool;

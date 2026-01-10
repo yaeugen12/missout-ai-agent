@@ -1,5 +1,6 @@
 // Local copy of shared types to avoid build issues
 // This file duplicates types from ../../../shared/ to avoid Vite build errors
+import { getApiUrl } from '@/lib/api';
 
 export interface Pool {
   id: number;
@@ -27,7 +28,7 @@ export interface Participant {
   refundClaimed: number;
 }
 
-// API routes
+// API routes - paths will be prefixed with backend URL automatically
 export const api = {
   pools: { path: '/api/pools' },
   transactions: { path: '/api/transactions' },
@@ -39,7 +40,8 @@ export const api = {
 } as const;
 
 export function buildUrl(path: string, params?: Record<string, any>): string {
-  if (!params) return path;
+  const fullPath = getApiUrl(path);
+  if (!params) return fullPath;
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -47,7 +49,7 @@ export function buildUrl(path: string, params?: Record<string, any>): string {
     }
   });
   const queryString = query.toString();
-  return queryString ? `${path}?${queryString}` : path;
+  return queryString ? `${fullPath}?${queryString}` : fullPath;
 }
 
 export interface CreatePoolRequest {
