@@ -24,6 +24,7 @@ export default defineConfig({
       '@coral-xyz/anchor',
     ],
     force: true,
+    exclude: ['@shared/routes', '@shared/schema']
   },
   resolve: {
     alias: {
@@ -34,13 +35,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'solana-vendor': ['@solana/web3.js', '@solana/wallet-adapter-react'],
-        },
-      },
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
     },
   },
   server: {
