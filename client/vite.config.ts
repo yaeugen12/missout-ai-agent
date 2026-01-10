@@ -24,7 +24,6 @@ export default defineConfig({
       '@coral-xyz/anchor',
     ],
     force: true,
-    exclude: ['@shared/routes', '@shared/schema']
   },
   resolve: {
     alias: {
@@ -35,9 +34,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    commonjsOptions: {
-      include: [/node_modules/],
-      transformMixedEsModules: true,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Ignore warnings about unresolved imports from shared
+        if (warning.code === 'UNRESOLVED_IMPORT' && warning.id?.includes('/shared/')) {
+          return;
+        }
+        warn(warning);
+      },
     },
   },
   server: {
