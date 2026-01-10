@@ -88,7 +88,10 @@ export const profiles = pgTable("profiles", {
 export const usedTransactions = pgTable("used_transactions", {
   id: serial("id").primaryKey(),
   txHash: text("tx_hash").notNull().unique(),
+  poolId: integer("pool_id"),
   walletAddress: text("wallet_address").notNull(),
+  operationType: text("operation_type"),
+  usedAt: timestamp("used_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

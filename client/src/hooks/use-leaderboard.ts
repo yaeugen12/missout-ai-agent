@@ -29,9 +29,10 @@ export type TopReferrer = {
   referralsCount: number;
   totalTokensEarned: number;
   totalUsdEarned: number;
-  activeReferrals: number;
-  firstReferralAt: string | null;
-  lastReferralAt: string | null;
+  avgRewardPerReferral: number;
+  lastRewardAt: string | null;
+  tokenMint: string | null;
+  tokenSymbol: string | null;
 };
 
 export function useTopWinners(limit: number = 20) {
@@ -40,7 +41,8 @@ export function useTopWinners(limit: number = 20) {
     queryFn: async () => {
       const res = await fetch(`${api.leaderboard.winners.path}?limit=${limit}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch top winners");
-      return res.json();
+      const response = await res.json();
+      return response.data || [];
     },
   });
 }
@@ -51,7 +53,8 @@ export function useTopReferrers(limit: number = 20) {
     queryFn: async () => {
       const res = await fetch(`${api.leaderboard.referrers.path}?limit=${limit}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch top referrers");
-      return res.json();
+      const response = await res.json();
+      return response.data || [];
     },
   });
 }

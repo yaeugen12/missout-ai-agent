@@ -61,7 +61,8 @@ export default function Referrals() {
     queryKey: ["referralRewards", walletAddress],
     queryFn: async () => {
       const res = await fetch(`/api/referrals/rewards/${walletAddress}`);
-      return res.json();
+      const response = await res.json();
+      return response.data || [];
     },
     enabled: !!walletAddress,
   });
@@ -70,7 +71,8 @@ export default function Referrals() {
     queryKey: ["invitedUsers", walletAddress],
     queryFn: async () => {
       const res = await fetch(`/api/referrals/invited/${walletAddress}`);
-      return res.json();
+      const response = await res.json();
+      return response.data || [];
     },
     enabled: !!walletAddress,
   });

@@ -20,9 +20,9 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
         console.error("[TransactionHistory] Fetch failed:", errData);
         throw new Error(errData.message || "Failed to fetch transactions");
       }
-      const data = await res.json();
-      console.log("[TransactionHistory] Received:", data.length, "txs");
-      return data;
+      const response = await res.json();
+      console.log("[TransactionHistory] Received:", response.data?.length || 0, "txs");
+      return response.data || [];
     },
     enabled: !!walletAddress,
     refetchInterval: 10000,

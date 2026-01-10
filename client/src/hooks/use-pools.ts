@@ -9,7 +9,8 @@ export function usePools() {
     queryFn: async () => {
       const res = await fetch("/api/pools", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch pools");
-      return await res.json() as Pool[];
+      const response = await res.json();
+      return (response.data || []) as Pool[];
     },
     refetchInterval: 5000,
   });

@@ -14,6 +14,17 @@ export default defineConfig({
       },
     }),
   ],
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      '@sentry/react',
+      '@solana/web3.js',
+      '@solana/wallet-adapter-react',
+      '@coral-xyz/anchor',
+    ],
+    force: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

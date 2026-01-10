@@ -46,6 +46,7 @@ interface TokenInfo {
 
 export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: CreatePoolWizardProps) {
   const [step, setStep] = useState(1);
+  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
 
   // Debug: Log step changes
   useEffect(() => {
@@ -68,7 +69,6 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
   const [entryAmount, setEntryAmount] = useState("1");
   const [participants, setParticipants] = useState(10);
   const [lockDuration, setLockDuration] = useState(5);
-  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
   

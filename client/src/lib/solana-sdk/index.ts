@@ -2,7 +2,7 @@ export { PROGRAM_ID, SWITCHBOARD_PROGRAM_ID, SWITCHBOARD_QUEUE } from "./program
 export { derivePoolPda, deriveParticipantsPda, derivePoolTokenAddress } from "./pda/derive";
 export { getConnection, resetConnection, checkConnection } from "./connection";
 export { TokenAmount, getTokenDecimals } from "./utils/token";
-export { IDL, type MissoutLotteryIDL } from "./idl";
+export { IDL, type MissoutLotteryIDL } from "@shared/idl";
 export {
   MissoutClient,
   getMissoutClient,

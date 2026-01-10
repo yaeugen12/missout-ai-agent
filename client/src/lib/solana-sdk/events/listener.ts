@@ -1,6 +1,6 @@
 import { Connection, PublicKey, Logs } from "@solana/web3.js";
 import { BorshCoder, EventParser, Event } from "@coral-xyz/anchor";
-import { IDL } from "../idl";
+import { IDL } from "@shared/idl";
 import { PROGRAM_ID } from "../programs/program-id";
 import {
   MissoutEvent,
