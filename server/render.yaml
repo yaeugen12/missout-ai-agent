@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: missout-backend
+    runtime: node
+    region: frankfurt
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SOLANA_RPC_URL
+        sync: false
+      - key: DEV_WALLET_PRIVATE_KEY
+        sync: false
+      - key: TREASURY_WALLET_PUBKEY
+        sync: false
+      - key: SWITCHBOARD_PROGRAM_ID
+        sync: false
+      - key: SWITCHBOARD_QUEUE
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: PGSSLMODE
+        value: require
+      - key: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
