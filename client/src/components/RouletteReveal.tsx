@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { type Participant } from "@shared/schema";
+import { type Participant } from "@/types/shared";
 import { motion, useAnimation } from "framer-motion";
 import { cn } from "@/lib/utils";
 

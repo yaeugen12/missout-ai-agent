@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { api } from "@shared/routes";
+import { api } from "@/types/shared";
 
 const SOLSCAN_BASE_URL = "https://solscan.io/tx";
 

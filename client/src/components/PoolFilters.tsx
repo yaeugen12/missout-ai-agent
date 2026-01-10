@@ -15,7 +15,7 @@ import {
   ArrowUpDown,
   RotateCcw
 } from "lucide-react";
-import type { Pool } from "@shared/schema";
+import type { Pool } from "@/types/shared";
 
 export type SortOption = "newest" | "largest" | "almost_full" | "lowest_entry" | "highest_entry";
 

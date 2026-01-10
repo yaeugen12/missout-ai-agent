@@ -16,7 +16,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQueries } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { api } from "@shared/routes";
+import { api } from "@/types/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";

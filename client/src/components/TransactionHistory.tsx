@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@shared/routes";
+import { api } from "@/types/shared";
 import { ExternalLink, History, ArrowUpRight, ArrowDownLeft, PlusCircle, Trophy } from "lucide-react";
 import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";

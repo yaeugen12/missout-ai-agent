@@ -1,6 +1,6 @@
-import type { Pool } from "@shared/schema";
+import type { Pool } from "@/types/shared";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type CreatePoolRequest, type JoinPoolRequest, type DonateRequest } from "@shared/routes";
+import { api, buildUrl, type CreatePoolRequest, type JoinPoolRequest, type DonateRequest } from "@/types/shared";
 
 // GET /api/pools
 export function usePools() {

@@ -5,7 +5,7 @@ import { PoolFilters } from "@/components/PoolFilters";
 import { Button } from "@/components/ui/button";
 import { Loader2, LayoutGrid, Atom } from "lucide-react";
 import { Link } from "wouter";
-import type { Pool } from "@shared/schema";
+import type { Pool } from "@/types/shared";
 import { DevnetReadiness } from "@/components/DevnetReadiness";
 
 export default function Home() {

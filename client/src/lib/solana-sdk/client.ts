@@ -12,7 +12,7 @@ import { WalletContextState } from "@solana/wallet-adapter-react";
 import { getConnection, initConnection, getConnectionInfo } from "./connection";
 import { PROGRAM_ID } from "./programs/program-id";
 import { deriveParticipantsPda } from "./pda/derive";
-import { IDL } from "@shared/idl";
+import { IDL } from "@/lib/solana-sdk/idl";
 
 export interface PoolState {
   version: number;

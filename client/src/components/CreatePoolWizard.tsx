@@ -28,7 +28,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { PublicKey } from "@solana/web3.js";
 import { protocolAdapter } from "@/lib/protocolAdapter";
-import type { Pool } from "@shared/schema";
+import type { Pool } from "@/types/shared";
 
 interface CreatePoolWizardProps {
   open: boolean;

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@shared/routes";
+import { api } from "@/types/shared";
 
 export function useLeaderboard() {
   return useQuery({

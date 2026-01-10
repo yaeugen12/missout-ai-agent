@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import { Link } from "wouter";
-import { type Pool } from "@shared/schema";
+import { type Pool } from "@/types/shared";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
