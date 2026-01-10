@@ -5,7 +5,7 @@
   "description": "Missout Frontend - Solana Lottery Platform",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit"
   },
