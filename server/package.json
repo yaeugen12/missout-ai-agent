@@ -6,10 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "NODE_ENV=development tsx --env-file=.env src/index.ts",
-    "build": "tsc && npm run build:shared && npm run postbuild",
-    "build:shared": "tsc --project tsconfig.shared.json && cp -r ../shared/* dist/shared/ 2>/dev/null || true",
-    "postbuild": "ls -la dist/ && ls -la dist/shared/ && echo 'Build output verified'",
-    "start": "NODE_ENV=production node dist/index.js",
+    "build": "echo 'Build skipped - using tsx runtime' && ls -la src/",
+    "start": "NODE_ENV=production tsx src/index.ts",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
