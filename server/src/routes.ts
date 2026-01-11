@@ -28,6 +28,7 @@ import {
 import { cacheMiddleware, invalidateCache } from "./cache-middleware.js";
 import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination.js";
 import rateLimit from "express-rate-limit";
+import { faucetRouter } from "./routes/faucet.js";
 
 // ===========================================
 // SECURITY: Rate Limiting
@@ -154,6 +155,10 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+    // === FAUCET FOR HNCZ ===
+  app.use("/api/faucet", faucetRouter);
+
   // Upload Endpoint with security validation + strict rate limiting (10 uploads per 5 minutes)
   app.post("/api/upload", strictLimiter, upload.single('file'), async (req, res) => {
     if (!req.file) {
@@ -190,6 +195,35 @@ export async function registerRoutes(
     res.json(response);
   });
 
+  // Helper function to fetch token logo from Helius DAS API
+  async function getTokenLogo(mintAddress: string): Promise<string | undefined> {
+    try {
+      const HELIUS_RPC = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+      const response = await fetch(HELIUS_RPC, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "get-asset",
+          method: "getAsset",
+          params: { id: mintAddress }
+        })
+      });
+
+      const data = await response.json();
+      if (data.result?.content?.files && data.result.content.files.length > 0) {
+        return data.result.content.files[0]?.cdn_uri || data.result.content.files[0]?.uri;
+      }
+
+      if (data.result?.content?.links?.image) {
+        return data.result.content.links.image;
+      }
+    } catch (error) {
+      console.warn(`Failed to fetch logo for ${mintAddress}:`, error);
+    }
+    return undefined;
+  }
+
   // OPTIMIZED: Get claimable pools using single query (fixes N+1 problem)
   app.get("/api/pools/claimable", async (req, res) => {
     try {
@@ -201,6 +235,20 @@ export async function registerRoutes(
       // OPTIMIZED: Use new getClaimablePools method - 2 queries instead of N+1
       const { refunds: refundPools, rents: rentPools } = await storage.getClaimablePools(wallet);
 
+      // Fetch logos for all unique token mints
+      const uniqueMints = [...new Set([
+        ...refundPools.map(p => p.tokenMint),
+        ...rentPools.map(p => p.tokenMint)
+      ])];
+
+      const logoMap = new Map<string, string | undefined>();
+      await Promise.all(
+        uniqueMints.map(async (mint) => {
+          const logo = await getTokenLogo(mint);
+          logoMap.set(mint, logo);
+        })
+      );
+
       // Format refunds for frontend
       const refunds = refundPools.map(pool => ({
         id: pool.id,
@@ -208,7 +256,7 @@ export async function registerRoutes(
         status: pool.status,
         tokenMint: pool.tokenMint,
         tokenSymbol: pool.tokenSymbol,
-        tokenLogoUrl: undefined,
+        tokenLogoUrl: logoMap.get(pool.tokenMint),
         entryFee: pool.entryAmount.toString(),
         creatorWallet: pool.creatorWallet,
         participants: pool.participants.map(p => p.walletAddress),
@@ -221,7 +269,7 @@ export async function registerRoutes(
         status: pool.status,
         tokenMint: pool.tokenMint,
         tokenSymbol: pool.tokenSymbol,
-        tokenLogoUrl: undefined,
+        tokenLogoUrl: logoMap.get(pool.tokenMint),
         entryFee: pool.entryAmount.toString(),
         creatorWallet: pool.creatorWallet,
         participants: [], // No participants needed for rent claims
