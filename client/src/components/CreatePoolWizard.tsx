@@ -193,10 +193,10 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         maxParticipants: participants,
         lockDurationSeconds,
         devWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        devFeeBps: 0,
-        burnFeeBps: 0,
+        devFeeBps: 500,  // 5% to dev wallet
+        burnFeeBps: 350,  // 3.5% burn
         treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        treasuryFeeBps: 0,
+        treasuryFeeBps: 150,  // 1.5% to treasury, winner gets 90% (remainder)
         allowMock: useMockRandomness, // Use mock randomness if enabled
       });
 

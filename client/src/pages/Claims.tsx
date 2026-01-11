@@ -23,6 +23,7 @@ interface PoolForClaim {
   entryFee: string;
   creatorWallet: string;
   participants: string[];
+  participantsCount?: number;
 }
 
 export default function Claims() {
@@ -104,6 +105,16 @@ export default function Claims() {
 
   const handleClaimRent = useCallback(async (pool: PoolForClaim) => {
     if (!pool.onChainAddress || !publicKey || !walletAddress || !signMessage) return;
+
+    // Check if pool is cancelled and still has participants
+    if (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0) {
+      toast({
+        title: "Cannot Claim Rent Yet",
+        description: `All ${pool.participantsCount} participant${pool.participantsCount > 1 ? 's' : ''} must claim their refunds first before you can claim rent from this cancelled pool.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setClaimingRent(pool.onChainAddress);
     try {
@@ -202,8 +213,29 @@ export default function Claims() {
 
   const handleClaimAllRents = useCallback(async (pools: PoolForClaim[]) => {
     if (pools.length === 0 || !publicKey) return;
-    
-    const poolIds = pools.map(p => p.onChainAddress).filter(Boolean);
+
+    // Filter out cancelled pools that still have participants
+    const claimablePools = pools.filter(pool => {
+      if (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0) {
+        return false;
+      }
+      return true;
+    });
+
+    const skippedCount = pools.length - claimablePools.length;
+
+    if (claimablePools.length === 0) {
+      toast({
+        title: "No Claimable Rent",
+        description: skippedCount > 0
+          ? `All ${skippedCount} cancelled pool${skippedCount > 1 ? 's' : ''} have pending refunds. Participants must claim their refunds first.`
+          : "No pools available to claim rent from.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const poolIds = claimablePools.map(p => p.onChainAddress).filter(Boolean);
     if (poolIds.length === 0) return;
 
     setClaimingAllRents(true);
@@ -220,14 +252,14 @@ export default function Claims() {
       if (successful > 0) {
         toast({
           title: "Batch Rent Claim Complete!",
-          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}`,
+          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}${skippedCount > 0 ? `. ${skippedCount} skipped (pending refunds)` : ''}`,
         });
       }
 
       if (failed > 0 && successful === 0) {
         toast({
           title: "Batch Rent Claim Failed",
-          description: `All ${failed} claims failed`,
+          description: `All ${failed} claims failed${skippedCount > 0 ? `. ${skippedCount} skipped (pending refunds)` : ''}`,
           variant: "destructive",
         });
       }
@@ -490,17 +522,22 @@ export default function Claims() {
                         <div className="flex items-center gap-3">
                           <span className={cn(
                             "px-2 py-1 text-[10px] font-tech uppercase border rounded",
-                            pool.status === "ended" 
+                            pool.status === "ended"
                               ? "bg-green-500/10 text-green-400 border-green-500/30"
                               : "bg-red-500/10 text-red-400 border-red-500/30"
                           )}>
                             {pool.status}
                           </span>
+                          {pool.status === 'cancelled' && (pool.participantsCount || 0) > 0 && (
+                            <span className="px-2 py-1 text-[10px] font-tech uppercase bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded">
+                              {pool.participantsCount} REFUND{pool.participantsCount > 1 ? 'S' : ''} PENDING
+                            </span>
+                          )}
                           <Button
                             size="sm"
                             onClick={() => handleClaimRent(pool)}
-                            disabled={claimingRent === pool.onChainAddress}
-                            className="bg-amber-500/10 text-amber-400 border border-amber-500/50 hover:bg-amber-500 hover:text-black transition-all font-tech uppercase text-xs"
+                            disabled={claimingRent === pool.onChainAddress || (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0)}
+                            className="bg-amber-500/10 text-amber-400 border border-amber-500/50 hover:bg-amber-500 hover:text-black transition-all font-tech uppercase text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {claimingRent === pool.onChainAddress ? (
                               <Loader2 className="w-4 h-4 animate-spin" />

@@ -225,6 +225,7 @@ export async function registerRoutes(
         entryFee: pool.entryAmount.toString(),
         creatorWallet: pool.creatorWallet,
         participants: [], // No participants needed for rent claims
+        participantsCount: pool.participantsCount || 0, // Include participants count for validation
       }));
 
       res.json({ refunds, rents });
