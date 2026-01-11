@@ -82,16 +82,16 @@ const httpServer = createServer(app);
 // CORS Configuration - Allow frontend to access API
 app.use(cors({
   origin: [
+    "https://www.missout.fun",
     process.env.FRONTEND_URL,
     process.env.CLIENT_URL,
-    'http://localhost:5173'
+    "http://localhost:5173"
   ].filter(Boolean),
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  exposedHeaders: ['X-Request-ID'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["X-Request-ID"],
 }));
-
 
 console.log("[SECURITY] ✅ CORS enabled for origin:", process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173');
 
