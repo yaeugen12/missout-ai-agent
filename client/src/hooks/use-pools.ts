@@ -1,6 +1,6 @@
 import type { Pool } from "@/types/shared";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type CreatePoolRequest, type JoinPoolRequest, type DonateRequest } from "@/types/shared";
+import { api, buildApiUrl, type CreatePoolRequest, type JoinPoolRequest, type DonateRequest } from "@/types/shared";
 import { apiFetch } from "@/lib/api";
 
 // GET /api/pools
@@ -37,7 +37,7 @@ export function useCreatePool() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: CreatePoolRequest) => {
-      const res = await fetch(api.pools.create.path, {
+      const res = await apiFetch(api.pools.create.path, {
         method: api.pools.create.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -61,8 +61,8 @@ export function useJoinPool() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...data }: JoinPoolRequest & { id: number }) => {
-      const url = buildUrl(api.pools.join.path, { id });
-      const res = await fetch(url, {
+      const url = buildApiUrl(api.pools.join.path, { id });
+      const res = await apiFetch(url, {
         method: api.pools.join.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -83,8 +83,8 @@ export function useDonateToPool() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...data }: DonateRequest & { id: number }) => {
-      const url = buildUrl(api.pools.donate.path, { id });
-      const res = await fetch(url, {
+      const url = buildApiUrl(api.pools.donate.path, { id });
+      const res = await apiFetch(url, {
         method: api.pools.donate.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -104,8 +104,8 @@ export function useTriggerWinner() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const url = buildUrl(api.pools.triggerWinner.path, { id });
-      const res = await fetch(url, {
+      const url = buildApiUrl(api.pools.triggerWinner.path, { id });
+      const res = await apiFetch(url, {
         method: api.pools.triggerWinner.method,
         credentials: "include",
       });
