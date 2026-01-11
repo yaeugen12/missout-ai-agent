@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import type { UppyFile } from "@uppy/core";
+import { apiFetch } from "@/lib/api"; // <-- OBLIGATORIU
 
 interface UploadMetadata {
   name: string;
@@ -20,36 +21,6 @@ interface UseUploadOptions {
 
 /**
  * React hook for handling file uploads with presigned URLs.
- *
- * This hook implements the two-step presigned URL upload flow:
- * 1. Request a presigned URL from your backend (sends JSON metadata, NOT the file)
- * 2. Upload the file directly to the presigned URL
- *
- * @example
- * ```tsx
- * function FileUploader() {
- *   const { uploadFile, isUploading, error } = useUpload({
- *     onSuccess: (response) => {
- *       console.log("Uploaded to:", response.objectPath);
- *     },
- *   });
- *
- *   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
- *     const file = e.target.files?.[0];
- *     if (file) {
- *       await uploadFile(file);
- *     }
- *   };
- *
- *   return (
- *     <div>
- *       <input type="file" onChange={handleFileChange} disabled={isUploading} />
- *       {isUploading && <p>Uploading...</p>}
- *       {error && <p>Error: {error.message}</p>}
- *     </div>
- *   );
- * }
- * ```
  */
 export function useUpload(options: UseUploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false);
@@ -57,8 +28,7 @@ export function useUpload(options: UseUploadOptions = {}) {
   const [progress, setProgress] = useState(0);
 
   /**
-   * Request a presigned URL from the backend.
-   * IMPORTANT: Send JSON metadata, NOT the file itself.
+   * Step 1: Request a presigned URL (send ONLY metadata)
    */
   const requestUploadUrl = useCallback(
     async (file: File): Promise<UploadResponse> => {
@@ -85,7 +55,7 @@ export function useUpload(options: UseUploadOptions = {}) {
   );
 
   /**
-   * Upload a file directly to the presigned URL.
+   * Step 2: Upload directly to storage
    */
   const uploadToPresignedUrl = useCallback(
     async (file: File, uploadURL: string): Promise<void> => {
@@ -105,10 +75,7 @@ export function useUpload(options: UseUploadOptions = {}) {
   );
 
   /**
-   * Upload a file using the presigned URL flow.
-   *
-   * @param file - The file to upload
-   * @returns The upload response containing the object path
+   * Full upload process (request URL + upload file)
    */
   const uploadFile = useCallback(
     async (file: File): Promise<UploadResponse | null> => {
@@ -117,11 +84,9 @@ export function useUpload(options: UseUploadOptions = {}) {
       setProgress(0);
 
       try {
-        // Step 1: Request presigned URL (send metadata as JSON)
         setProgress(10);
         const uploadResponse = await requestUploadUrl(file);
 
-        // Step 2: Upload file directly to presigned URL
         setProgress(30);
         await uploadToPresignedUrl(file, uploadResponse.uploadURL);
 
@@ -141,27 +106,12 @@ export function useUpload(options: UseUploadOptions = {}) {
   );
 
   /**
-   * Get upload parameters for Uppy's AWS S3 plugin.
-   *
-   * IMPORTANT: This function receives the UppyFile object from Uppy.
-   * Use file.name, file.size, file.type to request per-file presigned URLs.
-   *
-   * Use this with the ObjectUploader component:
-   * ```tsx
-   * <ObjectUploader onGetUploadParameters={getUploadParameters}>
-   *   Upload
-   * </ObjectUploader>
-   * ```
+   * Uppy integration
    */
   const getUploadParameters = useCallback(
     async (
       file: UppyFile<Record<string, unknown>, Record<string, unknown>>
-    ): Promise<{
-      method: "PUT";
-      url: string;
-      headers?: Record<string, string>;
-    }> => {
-      // Use the actual file properties to request a per-file presigned URL
+    ) => {
       const response = await apiFetch("/api/uploads/request-url", {
         method: "POST",
         headers: {
@@ -182,7 +132,9 @@ export function useUpload(options: UseUploadOptions = {}) {
       return {
         method: "PUT",
         url: data.uploadURL,
-        headers: { "Content-Type": file.type || "application/octet-stream" },
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
       };
     },
     []
@@ -196,4 +148,3 @@ export function useUpload(options: UseUploadOptions = {}) {
     progress,
   };
 }
-

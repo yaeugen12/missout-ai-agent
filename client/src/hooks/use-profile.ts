@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useToast } from "./use-toast";
 import bs58 from "bs58";
+import { apiFetch } from "@/lib/api";
 
 export interface ProfileData {
   walletAddress: string;

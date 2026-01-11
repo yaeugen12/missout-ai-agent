@@ -1,6 +1,7 @@
 import type { Pool } from "@/types/shared";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type CreatePoolRequest, type JoinPoolRequest, type DonateRequest } from "@/types/shared";
+import { apiFetch } from "@/lib/api";
 
 // GET /api/pools
 export function usePools() {

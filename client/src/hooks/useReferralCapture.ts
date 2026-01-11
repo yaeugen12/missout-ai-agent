@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { apiFetch } from "@/lib/api";
 
 const REFERRAL_STORAGE_KEY = "missout_referrer";
 
