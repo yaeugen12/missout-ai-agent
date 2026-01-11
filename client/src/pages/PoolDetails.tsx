@@ -15,7 +15,6 @@ import { Loader2, Trophy, Clock, Users, Coins, AlertTriangle, Ban, RefreshCw, Za
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQueries } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { api } from "@/types/shared";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
@@ -143,9 +142,14 @@ export default function PoolDetails() {
       console.log("Join tx:", getSolscanTxUrl(result.tx));
       
       // 3. Notify backend
-      await apiRequest('POST', `/api/pools/${pool.id}/join`, {
-        walletAddress: address,
-        txHash: result.tx
+      await apiFetch(`/api/pools/${pool.id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: address,
+          txHash: result.tx
+        }),
+        credentials: 'include'
       });
       console.log("=== BACKEND_JOIN_SUCCESS ===");
 
@@ -242,10 +246,15 @@ export default function PoolDetails() {
       
       // POST to backend with txHash
       console.log("=== POSTING_DONATE_TO_BACKEND ===");
-      await apiRequest("POST", `/api/pools/${poolId}/donate`, {
-        walletAddress: address,
-        amount: amount,
-        txHash: result.tx,
+      await apiFetch(`/api/pools/${poolId}/donate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: address,
+          amount: amount,
+          txHash: result.tx,
+        }),
+        credentials: 'include'
       });
       console.log("=== BACKEND_DONATE_SUCCESS ===");
       
@@ -298,9 +307,14 @@ export default function PoolDetails() {
       
       // Notify backend about cancellation (optional but good for tracking)
       try {
-        await apiRequest("POST", `/api/pools/${poolId}/cancel`, {
-          walletAddress: address,
-          txHash: result.tx,
+        await apiFetch(`/api/pools/${poolId}/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            walletAddress: address,
+            txHash: result.tx,
+          }),
+          credentials: 'include'
         });
       } catch (err) {
         console.warn("Backend notification failed", err);
@@ -346,9 +360,14 @@ export default function PoolDetails() {
       
       // Notify backend about refund
       try {
-        await apiRequest("POST", `/api/pools/${poolId}/refund`, {
-          walletAddress: address,
-          txHash: result.tx,
+        await apiFetch(`/api/pools/${poolId}/refund`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            walletAddress: address,
+            txHash: result.tx,
+          }),
+          credentials: 'include'
         });
       } catch (err) {
         console.warn("Backend notification failed", err);

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DonateModal } from "@/components/DonateModal";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 
@@ -361,9 +361,14 @@ function PoolCardComponent({ pool }: PoolCardProps) {
       }
 
       // 2. Notify Backend
-      await apiRequest('POST', `/api/pools/${pool.id}/join`, {
-        walletAddress: walletAddress,
-        txHash: result.tx
+      await apiFetch(`/api/pools/${pool.id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: walletAddress,
+          txHash: result.tx
+        }),
+        credentials: 'include'
       });
 
       toast({

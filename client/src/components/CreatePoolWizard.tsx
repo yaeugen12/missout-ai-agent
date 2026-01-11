@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
 const DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
-import { apiRequest } from "@/lib/queryClient";
+import { apiFetch } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useWallet } from "@/hooks/use-wallet";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
@@ -82,7 +82,12 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
     mutationFn: async (data: any) => {
       console.log("=== POST_TO_BACKEND ===");
       console.log("POST_BODY:", JSON.stringify(data, null, 2));
-      const res = await apiRequest("POST", "/api/pools", data);
+      const res = await apiFetch("/api/pools", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'include'
+      });
       return res.json();
     },
     onSuccess: () => {
