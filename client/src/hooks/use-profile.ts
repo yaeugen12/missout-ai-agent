@@ -28,6 +28,7 @@ export const AVATAR_STYLES = [
 
 export type AvatarStyle = typeof AVATAR_STYLES[number]["id"];
 
+
 export function useProfile(walletAddress?: string) {
   return useQuery<ProfileData>({
     queryKey: ["profile", walletAddress],
@@ -35,7 +36,17 @@ export function useProfile(walletAddress?: string) {
       if (!walletAddress) throw new Error("No wallet address");
       const res = await apiFetch(`/api/profile/${walletAddress}`);
       if (!res.ok) throw new Error("Failed to fetch profile");
-      return res.json();
+      const data = await res.json();
+
+      // Transform relative URLs to full URLs for uploaded avatars
+      if (data.avatarUrl && !data.avatarUrl.startsWith('http')) {
+        data.avatarUrl = `${import.meta.env.VITE_BACKEND_URL}${data.avatarUrl}`;
+      }
+      if (data.displayAvatar && !data.displayAvatar.startsWith('http')) {
+        data.displayAvatar = `${import.meta.env.VITE_BACKEND_URL}${data.displayAvatar}`;
+      }
+
+      return data;
     },
     enabled: !!walletAddress,
     staleTime: 30000,
@@ -104,4 +115,15 @@ export function generateDicebearUrl(seed: string, style: AvatarStyle = "bottts")
 
 export function shortenWallet(wallet: string) {
   return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+}
+
+/**
+ * Convert relative avatar URL to full URL
+ * Backend returns: "/uploads/abc.png"
+ * Convert to: "https://missout.onrender.com/uploads/abc.png"
+ */
+export function getFullAvatarUrl(avatarUrl: string | null | undefined): string | null {
+  if (!avatarUrl) return null;
+  if (avatarUrl.startsWith('http')) return avatarUrl; // Already full URL
+  return `${import.meta.env.VITE_BACKEND_URL}${avatarUrl}`;
 }
