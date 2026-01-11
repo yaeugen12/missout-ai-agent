@@ -3,7 +3,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useMyProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, RefreshCw, LogOut, Copy, Check, UserCircle, History } from "lucide-react";
+import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, LogOut, Copy, Check, UserCircle, History, Droplets } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
 import { ProfileEditModal } from "@/components/ProfileEditModal";
@@ -20,6 +20,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export function Navbar() {
   const [location] = useLocation();
@@ -51,6 +52,31 @@ export function Navbar() {
     return balance.toFixed(6);
   };
 
+  // 🚀 Faucet HNCZ — adăugat fără să schimb nimic altceva
+  const handleFaucet = async () => {
+    if (!publicKey) return toast.error("Connect your wallet first!");
+
+    try {
+      toast.loading("Requesting HNCZ...");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/faucet/hncz?wallet=${publicKey.toString()}`,
+        { method: "POST" }
+      );
+
+      const data = await res.json();
+      toast.dismiss();
+
+      if (!res.ok) return toast.error(data.message || "Faucet failed");
+
+      toast.success(data.message || "HNCZ sent!");
+      refresh();
+    } catch {
+      toast.dismiss();
+      toast.error("Network error");
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-background/80 backdrop-blur-md">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -75,12 +101,16 @@ export function Navbar() {
               const Icon = item.icon;
               const isActive = location === item.href;
               return (
-                <Link key={item.href} href={item.href} className={cn(
-                  "px-4 py-2 flex items-center gap-2 font-tech font-bold uppercase tracking-wide text-sm transition-all duration-300",
-                  isActive 
-                    ? "text-primary border-b-2 border-primary bg-primary/5" 
-                    : "text-muted-foreground hover:text-white hover:bg-white/5"
-                )}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "px-4 py-2 flex items-center gap-2 font-tech font-bold uppercase tracking-wide text-sm transition-all duration-300",
+                    isActive
+                      ? "text-primary border-b-2 border-primary bg-primary/5"
+                      : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  )}
+                >
                   <Icon className="w-4 h-4" />
                   {item.label}
                 </Link>
@@ -90,16 +120,31 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* ⭐ Faucet button added — no other UI changes */}
+          {isConnected && (
+            <Button
+              onClick={handleFaucet}
+              className="bg-primary/10 text-primary border border-primary/50 hover:bg-primary hover:text-black transition-all font-tech font-bold uppercase tracking-wider flex items-center gap-2"
+            >
+              <Droplets className="w-4 h-4" />
+              Get HNCZ
+            </Button>
+          )}
+
           {isConnected && address ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
+                <Button
                   variant="ghost"
                   className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-sm hover:bg-white/10"
                   data-testid="button-wallet-dropdown"
                 >
                   <Avatar className="h-6 w-6">
-                    <AvatarImage src={profile?.avatarUrl || profile?.displayAvatar} alt={profile?.displayName} className="object-cover" />
+                    <AvatarImage
+                      src={profile?.avatarUrl || profile?.displayAvatar}
+                      alt={profile?.displayName}
+                      className="object-cover"
+                    />
                     <AvatarFallback className="bg-green-500/20 text-green-500 text-[10px]">
                       {address.slice(0, 2)}
                     </AvatarFallback>
@@ -115,8 +160,8 @@ export function Navbar() {
                   <ChevronDown className="w-3 h-3 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
+              <DropdownMenuContent
+                align="end"
                 className="w-80 bg-black/95 border-white/10 p-0 overflow-hidden"
                 data-testid="dropdown-wallet-content"
               >
@@ -131,10 +176,12 @@ export function Navbar() {
                       </Avatar>
                       <div className="flex flex-col min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium truncate text-white">{profile?.displayName || "Anonymous User"}</span>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <span className="text-sm font-medium truncate text-white">
+                            {profile?.displayName || "Anonymous User"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-5 w-5 text-muted-foreground hover:text-primary shrink-0"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -150,14 +197,14 @@ export function Navbar() {
                   </div>
 
                   <TabsList className="grid w-full grid-cols-2 bg-black/50 rounded-none h-10 border-b border-white/10 p-0">
-                    <TabsTrigger 
-                      value="wallet" 
+                    <TabsTrigger
+                      value="wallet"
                       className="rounded-none data-[state=active]:bg-white/5 data-[state=active]:text-primary text-[10px] font-tech uppercase tracking-wider"
                     >
                       <Wallet className="w-3 h-3 mr-2" /> Wallet
                     </TabsTrigger>
-                    <TabsTrigger 
-                      value="history" 
+                    <TabsTrigger
+                      value="history"
                       className="rounded-none data-[state=active]:bg-white/5 data-[state=active]:text-primary text-[10px] font-tech uppercase tracking-wider"
                     >
                       <History className="w-3 h-3 mr-2" /> Void History
@@ -167,7 +214,9 @@ export function Navbar() {
                   <TabsContent value="wallet" className="mt-0 outline-none">
                     <div className="p-3">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">SOL Balance</span>
+                        <span className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">
+                          SOL Balance
+                        </span>
                         <span className="text-lg font-mono font-bold text-white" data-testid="text-sol-balance">
                           {solBalance !== null ? `${solBalance.toFixed(4)} SOL` : "—"}
                         </span>
@@ -189,25 +238,23 @@ export function Navbar() {
                       ) : (
                         <div className="p-2 space-y-1">
                           {tokens.map((token) => (
-                            <div 
+                            <div
                               key={token.mint}
                               className="flex items-center gap-3 p-2 rounded-md hover:bg-white/5 transition-colors group"
                               data-testid={`token-item-${token.mint}`}
                             >
                               {token.logoUrl ? (
-                                <img 
-                                  src={token.logoUrl} 
-                                  alt={token.symbol} 
+                                <img
+                                  src={token.logoUrl}
+                                  alt={token.symbol}
                                   className="w-6 h-6 rounded-full border border-white/10"
                                   onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    (e.target as HTMLImageElement).style.display = "none";
                                   }}
                                 />
                               ) : (
                                 <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                                  <span className="text-[10px] font-bold text-primary uppercase">
-                                    {token.symbol.slice(0, 2)}
-                                  </span>
+                                  <span className="text-[10px] font-bold text-primary uppercase">{token.symbol.slice(0, 2)}</span>
                                 </div>
                               )}
                               <div className="flex-1 min-w-0">
@@ -219,9 +266,7 @@ export function Navbar() {
                                 </div>
                               </div>
                               <div className="text-right">
-                                <div className="text-sm font-mono text-white">
-                                  {formatBalance(token.balance)}
-                                </div>
+                                <div className="text-sm font-mono text-white">{formatBalance(token.balance)}</div>
                               </div>
                             </div>
                           ))}
@@ -240,7 +285,7 @@ export function Navbar() {
                 <DropdownMenuSeparator className="bg-white/10 m-0" />
 
                 <div className="p-1">
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => setProfileModalOpen(true)}
                     className="cursor-pointer hover:bg-primary/10 focus:bg-primary/10 focus:text-primary transition-colors py-2"
                     data-testid="button-edit-profile"
@@ -249,7 +294,7 @@ export function Navbar() {
                     <span className="font-tech uppercase text-[10px] tracking-widest">Edit Profile</span>
                   </DropdownMenuItem>
 
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={disconnect}
                     className="text-red-400 focus:text-red-400 focus:bg-red-400/10 cursor-pointer py-2"
                     data-testid="button-disconnect"
@@ -261,27 +306,20 @@ export function Navbar() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button 
+            <Button
               onClick={connect}
               disabled={isConnecting}
               className="bg-primary/10 text-primary border border-primary/50 hover:bg-primary hover:text-black hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all font-tech font-bold uppercase tracking-wider"
               data-testid="button-connect-wallet"
             >
-              {isConnecting ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Wallet className="w-4 h-4 mr-2" />
-              )}
+              {isConnecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wallet className="w-4 h-4 mr-2" />}
               Connect Wallet
             </Button>
           )}
         </div>
       </div>
 
-      <ProfileEditModal 
-        open={profileModalOpen} 
-        onOpenChange={setProfileModalOpen} 
-      />
+      <ProfileEditModal open={profileModalOpen} onOpenChange={setProfileModalOpen} />
     </header>
   );
 }
