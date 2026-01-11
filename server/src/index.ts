@@ -74,6 +74,13 @@ if (process.env.SENTRY_DSN) {
 
 const app = express();
 const httpServer = createServer(app);
+// ============================================
+// TRUST PROXY (Required for Render deployment)
+// ============================================
+// Enable trust proxy to properly handle X-Forwarded-For headers from Render
+app.set('trust proxy', 1);
+console.log("[SECURITY] ✅ Trust proxy enabled for production deployment");
+
 
 // ============================================
 // SECURITY MIDDLEWARE (CORS + Helmet)
@@ -99,6 +106,7 @@ console.log("[SECURITY] ✅ CORS enabled for origin:", process.env.FRONTEND_URL 
 app.use(helmet({
   contentSecurityPolicy: false, // Disable CSP for API-only server
   crossOriginEmbedderPolicy: false, // Allow embedding resources
+  crossOriginResourcePolicy: false, // Allow loading images from frontend
 }));
 
 console.log("[SECURITY] ✅ Helmet security headers enabled");
