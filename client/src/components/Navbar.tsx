@@ -80,7 +80,9 @@ export function Navbar() {
       toast.dismiss(loadingToast);
 
       if (!res.ok) {
-        toast.error(data.error || "Faucet request failed");
+        const errorMessage = data.error || "Faucet request failed";
+        const retryInfo = data.retryAfter ? ` (Wait ${data.retryAfter}h)` : "";
+        toast.error(errorMessage + retryInfo, { duration: 5000 });
         return;
       }
 

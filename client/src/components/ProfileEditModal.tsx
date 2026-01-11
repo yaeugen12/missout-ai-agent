@@ -87,7 +87,10 @@ export function ProfileEditModal({ open, onOpenChange }: ProfileEditModalProps) 
       if (!res.ok) throw new Error('Upload failed');
       
       const { url } = await res.json();
-      setCustomAvatarUrl(url);
+      // Backend returns relative path like "/uploads/filename.jpg"
+      // Convert to full URL: https://missout.onrender.com/uploads/filename.jpg
+      const fullUrl = url.startsWith('http') ? url : `${import.meta.env.VITE_BACKEND_URL}${url}`;
+      setCustomAvatarUrl(fullUrl);
     } catch (err) {
       console.error('Upload error:', err);
     } finally {
