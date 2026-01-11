@@ -52,28 +52,58 @@ export function Navbar() {
     return balance.toFixed(6);
   };
 
-  // 🚀 Faucet HNCZ — adăugat fără să schimb nimic altceva
+  // 🚀 Faucet HNCZ — rebuilt with clean API
   const handleFaucet = async () => {
-    if (!publicKey) return toast.error("Connect your wallet first!");
+    if (!address) {
+      toast.error("Connect your wallet first!");
+      return;
+    }
 
     try {
-      toast.loading("Requesting HNCZ...");
+      const loadingToast = toast.loading("Requesting HNCZ tokens...");
 
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/faucet/hncz?wallet=${publicKey.toString()}`,
-        { method: "POST" }
+        `${import.meta.env.VITE_BACKEND_URL}/api/faucet/request`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            walletAddress: address,
+          }),
+          credentials: "include",
+        }
       );
 
       const data = await res.json();
-      toast.dismiss();
+      toast.dismiss(loadingToast);
 
-      if (!res.ok) return toast.error(data.message || "Faucet failed");
+      if (!res.ok) {
+        toast.error(data.error || "Faucet request failed");
+        return;
+      }
 
-      toast.success(data.message || "HNCZ sent!");
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <div className="font-bold">🎉 {data.amount?.toLocaleString()} HNCZ Received!</div>
+          {data.explorerUrl && (
+            <a
+              href={data.explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline text-xs"
+            >
+              View on Explorer →
+            </a>
+          )}
+        </div>
+      );
+
+      // Refresh balances after successful claim
       refresh();
-    } catch {
-      toast.dismiss();
-      toast.error("Network error");
+    } catch (error: any) {
+      toast.error(error.message || "Network error");
     }
   };
 
