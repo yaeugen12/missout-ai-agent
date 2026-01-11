@@ -11,24 +11,57 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-// The object storage client is used to interact with the object storage service.
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: "replit",
-    subject_token_type: "access_token",
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: "external_account",
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: "json",
-        subject_token_field_name: "access_token",
+// Initialize Google Cloud Storage client
+// Supports 3 authentication methods (in order of priority):
+// 1. GOOGLE_APPLICATION_CREDENTIALS_JSON env var (for Render/production)
+// 2. GOOGLE_APPLICATION_CREDENTIALS file path (for local development)
+// 3. Replit sidecar authentication (for Replit deployments)
+function initializeStorageClient(): Storage {
+  // Method 1: JSON credentials from environment variable (Render, Vercel, etc.)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      console.log("[GCS] Using credentials from GOOGLE_APPLICATION_CREDENTIALS_JSON");
+      return new Storage({
+        projectId: process.env.GCLOUD_PROJECT_ID || credentials.project_id,
+        credentials,
+      });
+    } catch (error) {
+      console.error("[GCS] Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:", error);
+    }
+  }
+
+  // Method 2: File path (local development)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    console.log("[GCS] Using credentials from file:", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    return new Storage({
+      projectId: process.env.GCLOUD_PROJECT_ID,
+      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    });
+  }
+
+  // Method 3: Replit sidecar (fallback for Replit deployments)
+  console.log("[GCS] Using Replit sidecar authentication");
+  return new Storage({
+    credentials: {
+      audience: "replit",
+      subject_token_type: "access_token",
+      token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+      type: "external_account",
+      credential_source: {
+        url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+        format: {
+          type: "json",
+          subject_token_field_name: "access_token",
+        },
       },
+      universe_domain: "googleapis.com",
     },
-    universe_domain: "googleapis.com",
-  },
-  projectId: "",
-});
+    projectId: "",
+  });
+}
+
+export const objectStorageClient = initializeStorageClient();
 
 export class ObjectNotFoundError extends Error {
   constructor() {

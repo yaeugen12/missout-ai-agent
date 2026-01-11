@@ -16,7 +16,8 @@
     "db:test": "psql $DATABASE_URL -c 'SELECT NOW();'",
     "db:backup": "pg_dump $DIRECT_DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql",
     "health": "curl -s http://localhost:5000/health | jq",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "gcs:get-credentials": "node scripts/get-service-account-json.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
