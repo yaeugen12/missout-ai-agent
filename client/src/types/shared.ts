@@ -97,18 +97,36 @@ export const api = {
       path: '/api/leaderboard/referrers',
     },
   },
-  profile: {
+  profiles: {
     get: {
       method: 'GET' as const,
       path: '/api/profile/:wallet',
+      responses: {
+        200: { parse: (data: any) => data },
+      },
+    },
+    getNonce: {
+      method: 'GET' as const,
+      path: '/api/profile/:wallet/nonce',
+      responses: {
+        200: { parse: (data: any) => data },
+      },
     },
     update: {
-      method: 'PUT' as const,
+      method: 'POST' as const,
       path: '/api/profile/:wallet',
       responses: {
         200: { parse: (data: any) => data },
         400: { parse: (data: any) => data },
-        404: { parse: (data: any) => data },
+        401: { parse: (data: any) => data },
+        429: { parse: (data: any) => data },
+      },
+    },
+    transactions: {
+      method: 'GET' as const,
+      path: '/api/profile/:wallet/transactions',
+      responses: {
+        200: { parse: (data: any) => data },
       },
     },
   },
