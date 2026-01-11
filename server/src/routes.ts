@@ -29,6 +29,7 @@ import { cacheMiddleware, invalidateCache } from "./cache-middleware.js";
 import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination.js";
 import rateLimit from "express-rate-limit";
 import { faucetRouter } from "./routes/faucet.js";
+import { objectStorageClient } from "./replit_integrations/object_storage/objectStorage.js";
 
 // ===========================================
 // SECURITY: Rate Limiting
@@ -176,9 +177,36 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Invalid file content. File does not appear to be a valid image." });
     }
 
-    const publicUrl = `/uploads/${req.file.filename}`;
-    console.log("[UPLOAD] Accepted file:", req.file.filename);
-    res.json({ url: publicUrl });
+    try {
+      // Upload to Google Cloud Storage for persistence across deployments
+      const bucket = objectStorageClient.bucket(process.env.GCLOUD_BUCKET || 'missout-storage');
+      const gcsFileName = `avatars/${req.file.filename}`;
+      const file = bucket.file(gcsFileName);
+
+      // Upload the file to GCS
+      await file.save(await fs.readFile(req.file.path), {
+        contentType: req.file.mimetype,
+        public: true, // Make file publicly accessible
+        metadata: {
+          cacheControl: 'public, max-age=31536000', // Cache for 1 year
+        },
+      });
+
+      // Get public URL
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${gcsFileName}`;
+
+      // Delete local temp file
+      await fs.unlink(req.file.path);
+
+      console.log("[UPLOAD] File uploaded to GCS:", publicUrl);
+      res.json({ url: publicUrl });
+    } catch (error: any) {
+      console.error("[UPLOAD] Failed to upload to GCS:", error);
+      // Fallback to local storage (will be lost on redeploy)
+      const publicUrl = `/uploads/${req.file.filename}`;
+      console.log("[UPLOAD] Using local storage fallback:", publicUrl);
+      res.json({ url: publicUrl });
+    }
   });
   // Pools
   app.get(api.pools.list.path, cacheMiddleware({ ttl: 30 }), async (req, res) => {
