@@ -1,6 +1,10 @@
 // API helper to handle backend URL
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
+// Debug: Log backend URL on module load
+console.log('[API] VITE_BACKEND_URL:', import.meta.env.VITE_BACKEND_URL);
+console.log('[API] Using BACKEND_URL:', BACKEND_URL);
+
 /**
  * Get the full API URL for a given path
  * @param path - API path (e.g., '/api/pools')
