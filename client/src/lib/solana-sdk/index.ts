@@ -81,3 +81,10 @@ export {
   isPausedError,
   isInsufficientFundsError,
 } from "./errors";
+
+// ===========================================================================================
+// Token-2022 Compatible Instruction Builders
+// ===========================================================================================
+// These new exports provide dual SPL Token + Token-2022 support.
+// Use these for new code. Old exports are kept for backward compatibility.
+export * from "./instructions";

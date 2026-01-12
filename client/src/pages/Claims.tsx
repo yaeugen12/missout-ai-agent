@@ -106,15 +106,9 @@ export default function Claims() {
   const handleClaimRent = useCallback(async (pool: PoolForClaim) => {
     if (!pool.onChainAddress || !publicKey || !walletAddress || !signMessage) return;
 
-    // Check if pool is cancelled and still has participants
-    if (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0) {
-      toast({
-        title: "Cannot Claim Rent Yet",
-        description: `All ${pool.participantsCount} participant${pool.participantsCount > 1 ? 's' : ''} must claim their refunds first before you can claim rent from this cancelled pool.`,
-        variant: "destructive",
-      });
-      return;
-    }
+    // REFACTORED: Removed status-based validation
+    // Backend now checks on-chain state (pool_token.amount == 0 && participants.count == 0)
+    // If pool appears in claimable rents list, it's eligible regardless of status
 
     setClaimingRent(pool.onChainAddress);
     try {
@@ -214,28 +208,20 @@ export default function Claims() {
   const handleClaimAllRents = useCallback(async (pools: PoolForClaim[]) => {
     if (pools.length === 0 || !publicKey) return;
 
-    // Filter out cancelled pools that still have participants
-    const claimablePools = pools.filter(pool => {
-      if (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0) {
-        return false;
-      }
-      return true;
-    });
+    // REFACTORED: Removed status-based filtering
+    // Backend already filtered pools based on on-chain state (pool_token.amount == 0 && participants.count == 0)
+    // All pools in the list are eligible regardless of status
 
-    const skippedCount = pools.length - claimablePools.length;
-
-    if (claimablePools.length === 0) {
+    if (pools.length === 0) {
       toast({
         title: "No Claimable Rent",
-        description: skippedCount > 0
-          ? `All ${skippedCount} cancelled pool${skippedCount > 1 ? 's' : ''} have pending refunds. Participants must claim their refunds first.`
-          : "No pools available to claim rent from.",
+        description: "No pools available to claim rent from.",
         variant: "destructive",
       });
       return;
     }
 
-    const poolIds = claimablePools.map(p => p.onChainAddress).filter(Boolean);
+    const poolIds = pools.map(p => p.onChainAddress).filter(Boolean);
     if (poolIds.length === 0) return;
 
     setClaimingAllRents(true);
@@ -252,14 +238,14 @@ export default function Claims() {
       if (successful > 0) {
         toast({
           title: "Batch Rent Claim Complete!",
-          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}${skippedCount > 0 ? `. ${skippedCount} skipped (pending refunds)` : ''}`,
+          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}`,
         });
       }
 
       if (failed > 0 && successful === 0) {
         toast({
           title: "Batch Rent Claim Failed",
-          description: `All ${failed} claims failed${skippedCount > 0 ? `. ${skippedCount} skipped (pending refunds)` : ''}`,
+          description: `All ${failed} claims failed`,
           variant: "destructive",
         });
       }

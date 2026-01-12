@@ -68,7 +68,7 @@ export default function PoolDetails() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { joinPool, donateToPool, cancelPool, claimRefund, connected: sdkConnected } = useMissoutSDK();
-  
+
   const [isJoining, setIsJoining] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isClaimingRefund, setIsClaimingRefund] = useState(false);
@@ -111,13 +111,13 @@ export default function PoolDetails() {
 
   const handleJoin = useCallback(async () => {
     console.log("=== JOIN_CLICK ===", BUILD_ID);
-    
+
     if (!isConnected || !address) {
       console.log("JOIN: Wallet not connected, prompting connect");
       connect();
       return;
     }
-    
+
     if (!poolAddress || !pool) {
       console.log("JOIN: Error - Pool address or pool data missing", { poolAddress, hasPool: !!pool });
       toast({ variant: "destructive", title: "Error", description: "Pool not ready" });
@@ -128,19 +128,19 @@ export default function PoolDetails() {
     try {
       console.log("=== SDK_JOIN_ENTER ===");
       console.log("JOIN params:", { poolId: poolAddress, amount: pool.entryAmount });
-      
+
       const result = await joinPool({
         poolId: poolAddress,
         amount: pool.entryAmount.toString(),
       });
-      
+
       // Proof of success: SDK already throws if tx.meta.err exists
       console.log("=== JOIN_TX_CONFIRMED ===", result?.tx);
       if (!result?.tx) {
         throw new Error("No transaction signature returned from wallet");
       }
       console.log("Join tx:", getSolscanTxUrl(result.tx));
-      
+
       // 3. Notify backend
       await apiFetch(`/api/pools/${pool.id}/join`, {
         method: 'POST',
@@ -172,7 +172,7 @@ export default function PoolDetails() {
 
           const pre = txInfo.meta.preTokenBalances?.find(b => b.owner === address || b.accountIndex === txInfo.transaction.message.staticAccountKeys.findIndex(k => k.toBase58() === userAta));
           const post = txInfo.meta.postTokenBalances?.find(b => b.owner === address || b.accountIndex === txInfo.transaction.message.staticAccountKeys.findIndex(k => k.toBase58() === userAta));
-          
+
           if (pre && post) {
             const diff = (Number(pre.uiTokenAmount.amount) - Number(post.uiTokenAmount.amount)) / Math.pow(10, pre.uiTokenAmount.decimals);
             if (diff > 0) {
@@ -183,12 +183,12 @@ export default function PoolDetails() {
       } catch (e) {
         console.warn("Balance diff error", e);
       }
-      
+
       toast({
         title: "Successfully Pulled In!",
         description: `You have joined the black hole.${balanceMsg}`,
       });
-      
+
       // Wait a moment for DB/Indexer to catch up before refresh
       setTimeout(() => {
         invalidateQueries();
@@ -201,7 +201,7 @@ export default function PoolDetails() {
         const parts = err.message.split("Logs:");
         detailedError = parts[0] + "\n\nProgram Logs:\n" + parts[1].replace(/ \| /g, "\n");
       }
-      
+
       toast({
         variant: "destructive",
         title: "Pull Failed",
@@ -214,12 +214,12 @@ export default function PoolDetails() {
 
   const handleDonate = useCallback(async () => {
     console.log("=== DONATE_CONFIRM_CLICK ===", BUILD_ID);
-    
+
     if (!isConnected || !address) {
       connect();
       return;
     }
-    
+
     if (!poolAddress || !pool) {
       toast({ variant: "destructive", title: "Error", description: "Pool not ready" });
       return;
@@ -235,15 +235,15 @@ export default function PoolDetails() {
     try {
       console.log("=== SDK_DONATE_ENTER ===");
       console.log("DONATE params:", { poolId: poolAddress, amount });
-      
+
       const result = await donateToPool({
         poolId: poolAddress,
         amount: amount.toString(),
       });
-      
+
       console.log("=== DONATE_TX_CONFIRMED ===", result.tx);
       console.log("Donate tx:", getSolscanTxUrl(result.tx));
-      
+
       // POST to backend with txHash
       console.log("=== POSTING_DONATE_TO_BACKEND ===");
       await apiFetch(`/api/pools/${poolId}/donate`, {
@@ -257,12 +257,12 @@ export default function PoolDetails() {
         credentials: 'include'
       });
       console.log("=== BACKEND_DONATE_SUCCESS ===");
-      
+
       toast({
         title: "Fed the Void",
         description: `Donated ${amount} ${pool.tokenSymbol}! Tx: ${result.tx.slice(0, 8)}...`,
       });
-      
+
       setDonateModalOpen(false);
       setDonateAmount("");
       invalidateQueries();
@@ -304,7 +304,7 @@ export default function PoolDetails() {
       }
 
       console.log("=== CANCEL_TX_CONFIRMED ===", result.tx);
-      
+
       // Notify backend about cancellation (optional but good for tracking)
       try {
         await apiFetch(`/api/pools/${poolId}/cancel`, {
@@ -353,11 +353,11 @@ export default function PoolDetails() {
 
   const handleClaimRefund = useCallback(async () => {
     if (!poolAddress) return;
-    
+
     setIsClaimingRefund(true);
     try {
       const result = await claimRefund(poolAddress);
-      
+
       // Notify backend about refund
       try {
         await apiFetch(`/api/pools/${poolId}/refund`, {
@@ -395,7 +395,7 @@ export default function PoolDetails() {
 
   // Find winner's profile data from participants list
   const participants = (pool as any).participants || [];
-  const winnerParticipant = pool.winnerWallet 
+  const winnerParticipant = pool.winnerWallet
     ? participants.find((p: any) => p.walletAddress === pool.winnerWallet)
     : null;
   const winnerDisplayName = winnerParticipant?.displayName;
@@ -406,7 +406,7 @@ export default function PoolDetails() {
       {/* Hero Section with Black Hole */}
       <div className="relative h-[100vh] flex flex-col items-center justify-center border-b border-white/10 pt-28 overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.08)_0%,transparent_80%)]" />
-        
+
         {/* Black Hole Visual with Orbiting Avatars */}
         <div className="relative z-10 w-full flex-1 flex items-center justify-center mt-16">
           <BlackHoleExperience
@@ -421,10 +421,25 @@ export default function PoolDetails() {
             tokenSymbol={pool.tokenSymbol}
             payoutTxHash={(pool as any).payoutTxHash}
           />
+
+          {/* ✅ Singularity Mass – Right HUD (matches your red box) */}
+          <div className="absolute right-10 top-1/2 -translate-y-1/2 z-40 hidden lg:block">
+            <div className="flex flex-col items-end bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[220px]">
+              <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">
+                Singularity Mass
+              </div>
+              <div className="text-5xl font-mono font-black text-neon-cyan leading-none tracking-tighter">
+                {(pool.totalPot || 0).toFixed(2)}
+              </div>
+              <div className="text-xs font-mono font-black text-primary mt-3 uppercase tracking-[0.3em] opacity-80">
+                {pool.tokenSymbol}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Content Overlay - Moved completely below the visual */}
-        <div className="w-full container mx-auto px-4 z-20 pb-12 mt-auto">
+        {/* Content Overlay - below the visual (only badges now) */}
+        <div className="w-full container mx-auto px-4 z-20 pb-12 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-8 text-center md:text-left">
             <div className="space-y-4">
               <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-xs font-tech text-muted-foreground uppercase tracking-[0.2em]">
@@ -436,14 +451,8 @@ export default function PoolDetails() {
                 </span>
               </div>
             </div>
-            
-            <div className="flex flex-col items-center md:items-end bg-zinc-900/40 p-6 rounded-2xl border border-white/10 backdrop-blur-xl">
-              <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">Singularity Mass</div>
-              <div className="text-5xl md:text-6xl font-mono font-black text-neon-cyan drop-shadow-[0_0_20px_rgba(0,240,255,0.3)] leading-none tracking-tighter">
-                {(pool.totalPot || 0).toFixed(2)}
-              </div>
-              <div className="text-xs font-mono font-black text-primary mt-3 uppercase tracking-[0.3em] opacity-80">{pool.tokenSymbol}</div>
-            </div>
+
+            {/* ⛔ removed old Singularity Mass block from here */}
           </div>
         </div>
       </div>
@@ -451,9 +460,9 @@ export default function PoolDetails() {
       {/* Main Content Area */}
       <div className="container mx-auto px-4 py-8">
         <DevnetReadiness />
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
+
           {/* Left Col: Actions & Status */}
           <div className="lg:col-span-2 space-y-6">
 
@@ -476,8 +485,8 @@ export default function PoolDetails() {
                     ALREADY JOINED
                   </Button>
                 ) : (
-                  <Button 
-                    onClick={handleJoin} 
+                  <Button
+                    onClick={handleJoin}
                     disabled={isJoining || !poolAddress}
                     className="w-full h-14 text-lg font-bold bg-primary text-black hover:bg-white hover:text-primary transition-all uppercase tracking-widest"
                     data-testid="button-join-pool"
@@ -489,7 +498,7 @@ export default function PoolDetails() {
                 )
               ) : pool.status === 'cancelled' ? (
                 canClaimRefund ? (
-                  <Button 
+                  <Button
                     onClick={handleClaimRefund}
                     disabled={isClaimingRefund || !sdkConnected}
                     className="w-full h-14 text-lg font-bold bg-green-600 text-white hover:bg-green-500 transition-all uppercase tracking-widest"
@@ -562,7 +571,7 @@ export default function PoolDetails() {
               {/* Donate Button - available when pool is not ended/cancelled */}
               {pool.status !== 'ended' && pool.status !== 'cancelled' && poolAddress && (
                 <div className="mt-4 pt-4 border-t border-white/5">
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => {
                       console.log("=== DONATE_OPEN_MODAL ===");
@@ -592,7 +601,7 @@ export default function PoolDetails() {
                 LIVE
               </span>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
               {participants.length > 0 ? (
                 participants.map((p: any) => (
@@ -620,7 +629,7 @@ export default function PoolDetails() {
               Donate {pool?.tokenSymbol} tokens to increase the pot. Donations are non-refundable.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-tech uppercase text-muted-foreground">

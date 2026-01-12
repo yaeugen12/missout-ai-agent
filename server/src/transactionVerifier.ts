@@ -1,8 +1,8 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js/lib/index.cjs.js";
 import { logger, logError } from "./logger.js";
 import { rpcManager, withRPCFailover } from "./rpc-manager.js";
 
-const PROGRAM_ID = new PublicKey("53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw");
+const PROGRAM_ID = new PublicKey("CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L");
 
 // Instruction discriminators (first 8 bytes of instruction data)
 // Calculated as sha256("global:{function_name}")[0..8]
@@ -67,7 +67,7 @@ export async function verifyTransactionExists(txHash: string): Promise<{
  */
 export async function verifyPoolExists(
   poolAddress: string,
-  expectedProgramId: string = "53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw"
+  expectedProgramId: string = "CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L"
 ): Promise<{
   exists: boolean;
   ownedByProgram: boolean;

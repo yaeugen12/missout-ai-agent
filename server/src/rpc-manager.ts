@@ -8,7 +8,7 @@
  * - Request retries with circuit breaker pattern
  */
 
-import { Connection, ConnectionConfig } from "@solana/web3.js";
+import { Connection, ConnectionConfig } from "@solana/web3.js/lib/index.cjs.js";
 import { logger } from "./logger.js";
 
 interface RPCEndpoint {

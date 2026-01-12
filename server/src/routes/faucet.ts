@@ -1,37 +1,37 @@
 import { Router } from "express";
 import { FaucetService } from "../services/faucetService.js";
-import rateLimit from "express-rate-limit";
-import { redis } from "../cache.js";
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 const router = Router();
 
 // Initialize faucet service
 const faucetService = new FaucetService({
-  mintAddress: process.env.HNCZ_DEVNET_MINT || "HNcz9fndVXBogLjU55uyvbz79P5qWxaBZVKk7iRSy7jV",
-  decimals: parseInt(process.env.HNCZ_DEVNET_DECIMALS || "9"),
-  amountPerRequest: parseInt(process.env.HNCZ_FAUCET_AMOUNT || "100000"),
   rpcUrl: process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
   authorityPrivateKey: process.env.DEV_WALLET_PRIVATE_KEY!,
-});
-
-// Rate limiting: 10 requests per IP per hour
-const faucetRateLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,
-  message: "Too many faucet requests from this IP. Please try again later.",
-  standardHeaders: true,
-  legacyHeaders: false,
+  tokens: {
+    classic: {
+      mintAddress: process.env.HNCZ_DEVNET_MINT || "HNcz9fndVXBogLjU55uyvbz79P5qWxaBZVKk7iRSy7jV",
+      decimals: parseInt(process.env.HNCZ_DEVNET_DECIMALS || "9"),
+      amountPerRequest: parseInt(process.env.HNCZ_FAUCET_AMOUNT || "100000"),
+      tokenProgramId: TOKEN_PROGRAM_ID,
+    },
+    token2022: {
+      mintAddress: process.env.TOKEN2022_DEVNET_MINT || "BhzvZjrFpMtmCamkuPvc1tfrdQHaVovRzvFhqgVj2yRH",
+      decimals: parseInt(process.env.TOKEN2022_DEVNET_DECIMALS || "9"),
+      amountPerRequest: parseInt(process.env.TOKEN2022_FAUCET_AMOUNT || "100000"),
+      tokenProgramId: TOKEN_2022_PROGRAM_ID,
+    },
+  },
 });
 
 /**
  * POST /api/faucet/request
- * Request HNCZ tokens from faucet
+ * Send tokens with NO RATE LIMIT
  */
-router.post("/request", faucetRateLimiter, async (req, res) => {
+router.post("/request", async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    const { walletAddress, tokenType = "classic" } = req.body;
 
-    // Validate request
     if (!walletAddress || typeof walletAddress !== "string") {
       return res.status(400).json({
         success: false,
@@ -39,35 +39,21 @@ router.post("/request", faucetRateLimiter, async (req, res) => {
       });
     }
 
-    // Check wallet-based rate limit (24 hours) using Redis
-    const cooldownKey = `faucet:hncz:${walletAddress}`;
-
-    if (redis) {
-      const existing = await redis.get(cooldownKey);
-      if (existing) {
-        const ttl = await redis.ttl(cooldownKey);
-        const hoursRemaining = Math.ceil(ttl / 3600);
-
-        return res.status(429).json({
-          success: false,
-          error: `You can request tokens again in ${hoursRemaining} hour${hoursRemaining > 1 ? 's' : ''}.`,
-          retryAfter: hoursRemaining,
-        });
-      }
+    if (tokenType !== "classic" && tokenType !== "token2022") {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid token type. Must be 'classic' or 'token2022'",
+      });
     }
 
-    // Send tokens
+    // Send tokens (no rate limit)
     const result = await faucetService.sendTokens({
       walletAddress,
+      tokenType,
       requestIp: req.ip,
     });
 
     if (result.success) {
-      // Set 24-hour cooldown in Redis
-      if (redis) {
-        await redis.set(cooldownKey, "1", "EX", 24 * 60 * 60); // 24 hours
-      }
-
       return res.json({
         ...result,
         explorerUrl: `https://explorer.solana.com/tx/${result.signature}?cluster=devnet`,
@@ -79,18 +65,19 @@ router.post("/request", faucetRateLimiter, async (req, res) => {
     console.error("[Faucet Route] Error:", error);
     return res.status(500).json({
       success: false,
-      error: "Internal server error. Please try again later.",
+      error: "Internal server error.",
     });
   }
 });
 
 /**
  * GET /api/faucet/health
- * Check faucet health and balance
  */
 router.get("/health", async (req, res) => {
   try {
-    const health = await faucetService.healthCheck();
+    const { tokenType = "classic" } = req.query;
+    const validTokenType = (tokenType === "classic" || tokenType === "token2022") ? tokenType : "classic";
+    const health = await faucetService.healthCheck(validTokenType);
     res.json(health);
   } catch (error: any) {
     res.status(500).json({
@@ -102,20 +89,30 @@ router.get("/health", async (req, res) => {
 
 /**
  * GET /api/faucet/info
- * Get faucet configuration info
  */
 router.get("/info", async (req, res) => {
   try {
-    const balance = await faucetService.getBalance();
+    const { tokenType = "classic" } = req.query;
+    const validTokenType = (tokenType === "classic" || tokenType === "token2022") ? tokenType : "classic";
+    const balance = await faucetService.getBalance(validTokenType);
 
-    res.json({
+    const tokenConfig = validTokenType === "classic" ? {
       mintAddress: process.env.HNCZ_DEVNET_MINT,
       tokenSymbol: "HNCZ",
       tokenName: "HNCZ Devnet Token",
       amountPerRequest: parseInt(process.env.HNCZ_FAUCET_AMOUNT || "100000"),
+    } : {
+      mintAddress: process.env.TOKEN2022_DEVNET_MINT,
+      tokenSymbol: "T2022",
+      tokenName: "Token-2022 Devnet",
+      amountPerRequest: parseInt(process.env.TOKEN2022_FAUCET_AMOUNT || "100000"),
+    };
+
+    res.json({
+      ...tokenConfig,
       balance,
       network: "devnet",
-      rateLimitHours: 24,
+      rateLimitHours: 0,
     });
   } catch (error: any) {
     res.status(500).json({

@@ -1,22 +1,35 @@
-import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js/lib/index.cjs.js";
 import {
   createTransferInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   getAccount,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 import bs58 from "bs58";
 
-export interface FaucetConfig {
+export type TokenType = "classic" | "token2022";
+
+export interface TokenConfig {
   mintAddress: string;
   decimals: number;
   amountPerRequest: number;
+  tokenProgramId: PublicKey;
+}
+
+export interface FaucetConfig {
   rpcUrl: string;
   authorityPrivateKey: string;
+  tokens: {
+    classic: TokenConfig;
+    token2022: TokenConfig;
+  };
 }
 
 export interface FaucetRequest {
   walletAddress: string;
+  tokenType?: TokenType;
   requestIp?: string;
 }
 
@@ -31,32 +44,40 @@ export interface FaucetResponse {
 export class FaucetService {
   private connection: Connection;
   private authority: Keypair;
-  private mintAddress: PublicKey;
   private config: FaucetConfig;
 
   constructor(config: FaucetConfig) {
     this.config = config;
     this.connection = new Connection(config.rpcUrl, "confirmed");
-    this.mintAddress = new PublicKey(config.mintAddress);
 
     // Initialize authority keypair from private key
     try {
       const secretKey = bs58.decode(config.authorityPrivateKey);
       this.authority = Keypair.fromSecretKey(secretKey);
       console.log("[Faucet] Initialized with authority:", this.authority.publicKey.toBase58());
+      console.log("[Faucet] Classic token:", config.tokens.classic.mintAddress);
+      console.log("[Faucet] Token-2022:", config.tokens.token2022.mintAddress);
     } catch (error) {
       console.error("[Faucet] Failed to initialize authority keypair:", error);
       throw new Error("Invalid authority private key");
     }
   }
 
+  private getTokenConfig(tokenType: TokenType = "classic"): TokenConfig {
+    return this.config.tokens[tokenType];
+  }
+
   /**
-   * Send HNCZ tokens to a wallet
+   * Send tokens to a wallet (supports both Classic SPL and Token-2022)
    */
   async sendTokens(request: FaucetRequest): Promise<FaucetResponse> {
-    const { walletAddress } = request;
+    const { walletAddress, tokenType = "classic" } = request;
 
     try {
+      // Get token configuration
+      const tokenConfig = this.getTokenConfig(tokenType);
+      const mintAddress = new PublicKey(tokenConfig.mintAddress);
+
       // Validate wallet address
       let recipientPubkey: PublicKey;
       try {
@@ -68,24 +89,51 @@ export class FaucetService {
         };
       }
 
-      console.log(`[Faucet] Processing request for ${walletAddress}`);
+      console.log(`[Faucet] Processing ${tokenType} token request for ${walletAddress}`);
+      console.log(`[Faucet] Mint: ${mintAddress.toBase58()}`);
+      console.log(`[Faucet] Token Program: ${tokenConfig.tokenProgramId.toBase58()}`);
 
       // Get authority token account
       const authorityTokenAccount = await getAssociatedTokenAddress(
-        this.mintAddress,
-        this.authority.publicKey
+        mintAddress,
+        this.authority.publicKey,
+        false,
+        tokenConfig.tokenProgramId
       );
+
+      console.log(`[Faucet] Authority token account: ${authorityTokenAccount.toBase58()}`);
+
+      // Check authority balance
+      try {
+        const authorityBalance = await getAccount(this.connection, authorityTokenAccount, undefined, tokenConfig.tokenProgramId);
+        console.log(`[Faucet] Authority balance: ${Number(authorityBalance.amount) / Math.pow(10, tokenConfig.decimals)} tokens`);
+
+        if (Number(authorityBalance.amount) < tokenConfig.amountPerRequest * Math.pow(10, tokenConfig.decimals)) {
+          return {
+            success: false,
+            error: `Faucet has insufficient ${tokenType} tokens. Please contact support.`,
+          };
+        }
+      } catch (error: any) {
+        console.error(`[Faucet] Authority token account does not exist or error checking balance:`, error.message);
+        return {
+          success: false,
+          error: `Faucet ${tokenType} account not initialized. Please contact support.`,
+        };
+      }
 
       // Get recipient token account (or create if doesn't exist)
       const recipientTokenAccount = await getAssociatedTokenAddress(
-        this.mintAddress,
-        recipientPubkey
+        mintAddress,
+        recipientPubkey,
+        false,
+        tokenConfig.tokenProgramId
       );
 
       // Check if recipient token account exists
       let accountExists = false;
       try {
-        await getAccount(this.connection, recipientTokenAccount);
+        await getAccount(this.connection, recipientTokenAccount, undefined, tokenConfig.tokenProgramId);
         accountExists = true;
       } catch {
         accountExists = false;
@@ -96,20 +144,21 @@ export class FaucetService {
 
       // Create associated token account if needed
       if (!accountExists) {
-        console.log(`[Faucet] Creating token account for ${walletAddress}`);
+        console.log(`[Faucet] Creating ${tokenType} token account for ${walletAddress}`);
         transaction.add(
           createAssociatedTokenAccountInstruction(
             this.authority.publicKey, // payer
             recipientTokenAccount,     // ata
             recipientPubkey,           // owner
-            this.mintAddress           // mint
+            mintAddress,               // mint
+            tokenConfig.tokenProgramId
           )
         );
       }
 
       // Calculate amount in smallest units (with decimals)
       const amountInSmallestUnits = BigInt(
-        Math.floor(this.config.amountPerRequest * Math.pow(10, this.config.decimals))
+        Math.floor(tokenConfig.amountPerRequest * Math.pow(10, tokenConfig.decimals))
       );
 
       // Add transfer instruction
@@ -118,7 +167,9 @@ export class FaucetService {
           authorityTokenAccount,     // source
           recipientTokenAccount,     // destination
           this.authority.publicKey,  // owner
-          amountInSmallestUnits      // amount
+          amountInSmallestUnits,     // amount
+          [],
+          tokenConfig.tokenProgramId
         )
       );
 
@@ -152,14 +203,14 @@ export class FaucetService {
         };
       }
 
-      console.log(`[Faucet] ✅ Sent ${this.config.amountPerRequest} HNCZ to ${walletAddress}`);
+      console.log(`[Faucet] ✅ Sent ${tokenConfig.amountPerRequest} ${tokenType} tokens to ${walletAddress}`);
       console.log(`[Faucet] Signature: ${signature}`);
 
       return {
         success: true,
         signature,
-        amount: this.config.amountPerRequest,
-        message: `Successfully sent ${this.config.amountPerRequest} HNCZ tokens`,
+        amount: tokenConfig.amountPerRequest,
+        message: `Successfully sent ${tokenConfig.amountPerRequest} tokens`,
       };
     } catch (error: any) {
       console.error("[Faucet] Error sending tokens:", error);
@@ -187,33 +238,39 @@ export class FaucetService {
   }
 
   /**
-   * Get faucet balance
+   * Get faucet balance for a specific token type
    */
-  async getBalance(): Promise<number> {
+  async getBalance(tokenType: TokenType = "classic"): Promise<number> {
     try {
+      const tokenConfig = this.getTokenConfig(tokenType);
+      const mintAddress = new PublicKey(tokenConfig.mintAddress);
+
       const authorityTokenAccount = await getAssociatedTokenAddress(
-        this.mintAddress,
-        this.authority.publicKey
+        mintAddress,
+        this.authority.publicKey,
+        false,
+        tokenConfig.tokenProgramId
       );
 
-      const accountInfo = await getAccount(this.connection, authorityTokenAccount);
-      const balance = Number(accountInfo.amount) / Math.pow(10, this.config.decimals);
+      const accountInfo = await getAccount(this.connection, authorityTokenAccount, undefined, tokenConfig.tokenProgramId);
+      const balance = Number(accountInfo.amount) / Math.pow(10, tokenConfig.decimals);
 
       return balance;
     } catch (error) {
-      console.error("[Faucet] Error getting balance:", error);
+      console.error(`[Faucet] Error getting ${tokenType} balance:`, error);
       return 0;
     }
   }
 
   /**
-   * Health check
+   * Health check for a specific token type
    */
-  async healthCheck(): Promise<{ healthy: boolean; balance?: number; error?: string }> {
+  async healthCheck(tokenType: TokenType = "classic"): Promise<{ healthy: boolean; balance?: number; error?: string }> {
     try {
-      const balance = await this.getBalance();
+      const tokenConfig = this.getTokenConfig(tokenType);
+      const balance = await this.getBalance(tokenType);
 
-      if (balance < this.config.amountPerRequest) {
+      if (balance < tokenConfig.amountPerRequest) {
         return {
           healthy: false,
           balance,

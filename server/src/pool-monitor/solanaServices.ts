@@ -1,4 +1,4 @@
-import { PublicKey, Connection, Keypair, SystemProgram, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, Connection, Keypair, SystemProgram, TransactionInstruction } from "@solana/web3.js/lib/index.cjs.js";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
@@ -6,6 +6,7 @@ import { IDL } from "@shared/idl.js";
 import { AnchorUtils, Randomness } from "@switchboard-xyz/on-demand";
 import { pool as dbPool } from "../db.js";
 import { rpcManager } from "../rpc-manager";
+import { resolveTokenProgramForMint } from "@shared/token-program-utils.js";
 
 const log = (...args: any[]) => console.log("[MONITOR]", ...args);
 
@@ -16,7 +17,7 @@ let treasuryWallet: PublicKey | null = null;
 let connection: Connection | null = null;
 
 // Constants from SDK
-const PROGRAM_ID = new PublicKey("53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw");
+const PROGRAM_ID = new PublicKey("CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L");
 
 // Switchboard Configuration
 const SWITCHBOARD_PROGRAM_ID = new PublicKey(process.env.SWITCHBOARD_PROGRAM_ID || "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2");
@@ -126,8 +127,8 @@ function deriveParticipantsPda(poolPubkey: PublicKey): [PublicKey, number] {
 /**
  * Derive pool token address
  */
-function derivePoolTokenAddress(mint: PublicKey, pool: PublicKey): PublicKey {
-  return getAssociatedTokenAddressSync(mint, pool, true, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+function derivePoolTokenAddress(mint: PublicKey, pool: PublicKey, tokenProgramId: PublicKey): PublicKey {
+  return getAssociatedTokenAddressSync(mint, pool, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 }
 
 /**
@@ -618,10 +619,9 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolData.mint, poolPk);
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolData.mint);
 
-  const mintInfo = await conn.getAccountInfo(poolData.mint, "confirmed");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
+  const poolToken = derivePoolTokenAddress(poolData.mint, poolPk, tokenProgramId);
 
   const winnerToken = getAssociatedTokenAddressSync(poolData.mint, poolData.winner, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const devToken = getAssociatedTokenAddressSync(poolData.mint, poolData.devWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
@@ -633,18 +633,18 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
     [192, 241, 157, 158, 130, 150, 10, 8],
     Buffer.alloc(0),
     [
-      { pubkey: poolData.mint, isSigner: false, isWritable: true },
-      { pubkey: poolPk, isSigner: false, isWritable: true },
-      { pubkey: poolToken, isSigner: false, isWritable: true },
-      { pubkey: winnerToken, isSigner: false, isWritable: true },
-      { pubkey: devToken, isSigner: false, isWritable: true },
-      { pubkey: treasuryToken, isSigner: false, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: poolData.winner, isSigner: false, isWritable: false },
-      { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: participantsPda, isSigner: false, isWritable: true },
+      { pubkey: poolData.mint, isSigner: false, isWritable: true },            // 0: mint
+      { pubkey: poolPk, isSigner: false, isWritable: true },                   // 1: pool
+      { pubkey: poolToken, isSigner: false, isWritable: true },                // 2: pool_token
+      { pubkey: winnerToken, isSigner: false, isWritable: true },              // 3: winner_token
+      { pubkey: devToken, isSigner: false, isWritable: true },                 // 4: dev_token
+      { pubkey: treasuryToken, isSigner: false, isWritable: true },            // 5: treasury_token
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },          // 6: token_program
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 7: associated_token_program
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // 8: system_program
+      { pubkey: poolData.winner, isSigner: false, isWritable: false },         // 9: winner_pubkey
+      { pubkey: userPk, isSigner: true, isWritable: true },                    // 10: user
+      { pubkey: participantsPda, isSigner: false, isWritable: true },          // 11: participants
     ]
   );
 
@@ -665,5 +665,114 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
   } catch (err: any) {
     log(`pool=${poolAddress.slice(0, 8)} action=PAYOUT ❌ FAILED: ${err.message}`);
     throw err;
+  }
+}
+
+/**
+ * Check if pool is empty and eligible for rent claim
+ * Returns true ONLY if:
+ * 1. pool_token.amount == 0
+ * 2. participants.count == 0
+ */
+export async function isPoolEmptyForRentClaim(poolAddress: string): Promise<boolean> {
+  try {
+    const prog = getProgram();
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+
+    // Fetch pool state
+    const poolData = await (prog.account as any).pool.fetch(poolPk, "confirmed");
+
+    // Derive participants PDA
+    const [participantsPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("participants"), poolPk.toBuffer()],
+      PROGRAM_ID
+    );
+
+    // Fetch participants state
+    const participantsData = await (prog.account as any).participants.fetch(participantsPda, "confirmed");
+
+    // Derive pool_token PDA
+    const mintPk = poolData.mint;
+    const tokenProgramId = await resolveTokenProgramForMint(conn, mintPk);
+    const poolTokenPda = getAssociatedTokenAddressSync(
+      mintPk,
+      poolPk,
+      true,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // Fetch pool_token account
+    const { getAccount } = await import("@solana/spl-token");
+    const poolTokenAccount = await getAccount(conn, poolTokenPda, undefined, tokenProgramId);
+
+    const isEmpty = poolTokenAccount.amount === BigInt(0) && participantsData.count === 0;
+
+    log(`pool=${poolAddress.slice(0, 8)} isEmpty=${isEmpty} tokenAmount=${poolTokenAccount.amount.toString()} participantsCount=${participantsData.count}`);
+
+    return isEmpty;
+  } catch (err: any) {
+    log(`pool=${poolAddress.slice(0, 8)} ❌ Error checking if empty: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Get on-chain state for rent eligibility check
+ */
+export async function getPoolRentEligibility(poolAddress: string): Promise<{
+  isEligible: boolean;
+  poolTokenAmount: string;
+  participantsCount: number;
+  error?: string;
+}> {
+  try {
+    const prog = getProgram();
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+
+    // Fetch pool state
+    const poolData = await (prog.account as any).pool.fetch(poolPk, "confirmed");
+
+    // Derive participants PDA
+    const [participantsPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("participants"), poolPk.toBuffer()],
+      PROGRAM_ID
+    );
+
+    // Fetch participants state
+    const participantsData = await (prog.account as any).participants.fetch(participantsPda, "confirmed");
+
+    // Derive pool_token PDA
+    const mintPk = poolData.mint;
+    const tokenProgramId = await resolveTokenProgramForMint(conn, mintPk);
+    const poolTokenPda = getAssociatedTokenAddressSync(
+      mintPk,
+      poolPk,
+      true,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // Fetch pool_token account
+    const { getAccount } = await import("@solana/spl-token");
+    const poolTokenAccount = await getAccount(conn, poolTokenPda, undefined, tokenProgramId);
+
+    const isEligible = poolTokenAccount.amount === BigInt(0) && participantsData.count === 0;
+
+    return {
+      isEligible,
+      poolTokenAmount: poolTokenAccount.amount.toString(),
+      participantsCount: participantsData.count,
+    };
+  } catch (err: any) {
+    log(`pool=${poolAddress.slice(0, 8)} ❌ Error getting rent eligibility: ${err.message}`);
+    return {
+      isEligible: false,
+      poolTokenAmount: "0",
+      participantsCount: 0,
+      error: err.message,
+    };
   }
 }

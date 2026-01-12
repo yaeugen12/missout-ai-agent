@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js/lib/index.cjs.js";
 import { rpcManager } from "./rpc-manager.js";
 
 const HELIUS_RPC_URL = process.env.VITE_SOLANA_RPC_PRIMARY || process.env.VITE_SOLANA_RPC_FALLBACK || "";

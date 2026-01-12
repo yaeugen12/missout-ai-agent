@@ -2,6 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, TransactionInstruction } from "@solana/web3.js";
 import {
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountInstruction,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -11,6 +12,7 @@ import { getMissoutClient, PoolState, ParticipantsState } from "../client";
 import { derivePoolPda, deriveParticipantsPda, derivePoolTokenAddress } from "../pda/derive";
 import { TokenAmount } from "../utils/token";
 import { PROGRAM_ID } from "../programs/program-id";
+import { resolveTokenProgramForMint } from "../utils/token-program";
 
 export interface CreatePoolParams {
   mint: PublicKey;
@@ -105,18 +107,60 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
   const salt = generateSalt();
   const [poolPda] = derivePoolPda(params.mint, salt);
   const [participantsPda] = deriveParticipantsPda(poolPda);
-  const poolToken = derivePoolTokenAddress(params.mint, poolPda);
+
+  const userPk = wallet.publicKey;
+  const tokenProgramId = await resolveTokenProgramForMint(conn, params.mint);
+  
+  // Derive poolToken AFTER we have tokenProgramId
+  const poolToken = getAssociatedTokenAddressSync(params.mint, poolPda, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   console.log("Derived PDA (Pool):", poolPda.toBase58());
   console.log("Derived PDA (Participants):", participantsPda.toBase58());
   console.log("Derived PDA (Pool Token Vault):", poolToken.toBase58());
-
-  const userPk = wallet.publicKey;
-  const mintInfo = await conn.getAccountInfo(params.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
+  console.log("Token Program ID:", tokenProgramId.toBase58());
 
   // Robust detection for ATA
   const userToken = getAssociatedTokenAddressSync(params.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  // Check if user's ATA exists
+  console.log("[CREATE_POOL] Checking if user ATA exists:", userToken.toBase58());
+  const userTokenAccount = await conn.getAccountInfo(userToken);
+
+  const instructions: TransactionInstruction[] = [];
+
+  if (!userTokenAccount) {
+    console.log("[CREATE_POOL] User ATA does not exist, creating it first...");
+    const createAtaIx = createAssociatedTokenAccountInstruction(
+      userPk,
+      userToken,
+      userPk,
+      params.mint,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    instructions.push(createAtaIx);
+  } else {
+    console.log("[CREATE_POOL] User ATA already exists");
+  }
+
+  // CRITICAL: Check if pool_token ATA exists, create it if not
+  console.log("[CREATE_POOL] Checking if pool_token ATA exists:", poolToken.toBase58());
+  const poolTokenAccount = await conn.getAccountInfo(poolToken);
+
+  if (!poolTokenAccount) {
+    console.log("[CREATE_POOL] Pool token ATA does not exist, creating it first...");
+    const createPoolTokenAtaIx = createAssociatedTokenAccountInstruction(
+      userPk,        // payer
+      poolToken,     // ATA address
+      poolPda,       // owner (the pool PDA)
+      params.mint,   // mint
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    instructions.push(createPoolTokenAtaIx);
+  } else {
+    console.log("[CREATE_POOL] Pool token ATA already exists");
+  }
 
   const tokenAmount = await TokenAmount.fromTokens(params.amount, params.mint, conn);
 
@@ -152,7 +196,7 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
       { pubkey: userToken, isSigner: false, isWritable: true },          // 2: user_token
       { pubkey: userPk, isSigner: true, isWritable: true },              // 3: user (signer)
       { pubkey: poolToken, isSigner: false, isWritable: true },          // 4: pool_token
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },  // 5: token_program
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },  // 5: token_program
       { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 6: associated_token_program
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },     // 7: system_program
       { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },          // 8: rent
@@ -163,7 +207,10 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
   console.log("Instruction programId:", PROGRAM_ID.toBase58());
   console.log("Fee Payer:", userPk.toBase58());
 
-  const sig = await client.buildAndSendTransaction([ix]);
+  // Add create pool instruction to array
+  instructions.push(ix);
+
+  const sig = await client.buildAndSendTransaction(instructions);
   console.log("TX Signature:", sig);
   console.log(`Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
 
@@ -245,11 +292,12 @@ export async function joinPool(params: JoinPoolParams): Promise<{ tx: string }> 
   console.log("JOIN_POOL poolState.mint:", poolState.mint.toBase58());
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
 
   const userPk = wallet.publicKey;
-  const mintInfo = await conn.getAccountInfo(poolState.mint, "confirmed");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+
+  // CRITICAL: Use getAssociatedTokenAddressSync with correct tokenProgramId
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   const tokenAmount = await TokenAmount.fromTokens(params.amount, poolState.mint, conn);
@@ -271,7 +319,7 @@ export async function joinPool(params: JoinPoolParams): Promise<{ tx: string }> 
       { pubkey: poolToken, isSigner: false, isWritable: true },         // 2: pool_token
       { pubkey: userToken, isSigner: false, isWritable: true },         // 3: user_token
       { pubkey: userPk, isSigner: true, isWritable: true },             // 4: user (signer)
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 5: token_program
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false }, // 5: token_program
       { pubkey: participantsPda, isSigner: false, isWritable: true },   // 6: participants
     ]
   );
@@ -315,11 +363,12 @@ export async function donateToPool(params: DonateParams): Promise<{ tx: string }
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
 
   const userPk = wallet.publicKey;
-  const mintInfo = await conn.getAccountInfo(poolState.mint, "confirmed");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+
+  // CRITICAL: Use getAssociatedTokenAddressSync with correct tokenProgramId
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   const tokenAmount = await TokenAmount.fromTokens(params.amount, poolState.mint, conn);
@@ -341,7 +390,7 @@ export async function donateToPool(params: DonateParams): Promise<{ tx: string }
       { pubkey: poolToken, isSigner: false, isWritable: true },         // 2: pool_token
       { pubkey: userToken, isSigner: false, isWritable: true },         // 3: user_token
       { pubkey: userPk, isSigner: true, isWritable: true },             // 4: user (signer)
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 5: token_program
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false }, // 5: token_program
       { pubkey: participantsPda, isSigner: false, isWritable: true },   // 6: participants (try writable)
     ]
   );
@@ -382,7 +431,10 @@ export async function cancelPool(poolId: string): Promise<{ tx: string }> {
     throw new Error("Pool not found");
   }
 
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+  const conn = client.getConnection();
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
   // Correct discriminator from IDL for cancel_pool: [211, 11, 27, 100, 252, 115, 57, 77]
@@ -395,7 +447,7 @@ export async function cancelPool(poolId: string): Promise<{ tx: string }> {
       { pubkey: poolPk, isSigner: false, isWritable: true },            // 1: pool
       { pubkey: poolToken, isSigner: false, isWritable: true },         // 2: pool_token
       { pubkey: userPk, isSigner: true, isWritable: true },             // 3: user (signer)
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // 4: token_program
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false }, // 4: token_program
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // 5: system_program
     ]
   );
@@ -421,12 +473,12 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
 
   const userPk = wallet.publicKey;
   const conn = client.getConnection();
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
@@ -442,7 +494,7 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
       { pubkey: userToken, isSigner: false, isWritable: true },
       { pubkey: treasuryToken, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
@@ -551,12 +603,12 @@ export async function payoutWinner(poolId: string): Promise<{ tx: string }> {
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
 
   const userPk = wallet.publicKey;
   const conn = client.getConnection();
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
 
   const winnerToken = getAssociatedTokenAddressSync(poolState.mint, poolState.winner, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const devToken = getAssociatedTokenAddressSync(poolState.mint, poolState.devWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
@@ -575,7 +627,7 @@ export async function payoutWinner(poolId: string): Promise<{ tx: string }> {
       { pubkey: participantsPda, isSigner: false, isWritable: true },
       { pubkey: poolState.winner, isSigner: false, isWritable: false },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ]
@@ -624,11 +676,12 @@ export async function adminClosePool(poolId: string): Promise<{ tx: string }> {
     throw new Error("Pool not found");
   }
 
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
   const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
   const creatorToken = getAssociatedTokenAddressSync(
     poolState.mint,
     poolState.creator,
@@ -647,7 +700,7 @@ export async function adminClosePool(poolId: string): Promise<{ tx: string }> {
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: creatorToken, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ]
   );
@@ -776,11 +829,12 @@ export async function finalizeForfeitedPool(poolId: string): Promise<{ tx: strin
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
   const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
   const treasuryToken = getAssociatedTokenAddressSync(
     poolState.mint,
     poolState.treasuryWallet,
@@ -799,7 +853,7 @@ export async function finalizeForfeitedPool(poolId: string): Promise<{ tx: strin
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: treasuryToken, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
@@ -831,7 +885,7 @@ export async function sweepExpiredPool(poolId: string): Promise<{ tx: string }> 
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
   // IDL account order: mint, pool, pool_token, user, token_program, system_program, participants
@@ -843,7 +897,7 @@ export async function sweepExpiredPool(poolId: string): Promise<{ tx: string }> 
       { pubkey: poolPk, isSigner: false, isWritable: true },
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
@@ -876,8 +930,10 @@ export async function claimRent(poolId: string, closeTarget: PublicKey): Promise
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+
   const userPk = wallet.publicKey;
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
   // IDL account order: pool, mint, pool_token, close_target, user, token_program, participants
   const ix = createInstructionWithDiscriminator(
@@ -889,7 +945,7 @@ export async function claimRent(poolId: string, closeTarget: PublicKey): Promise
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: closeTarget, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
@@ -980,11 +1036,12 @@ export async function buildClaimRefundInstruction(
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
   
   const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
-  const tokenProgramId = mintInfo?.owner || TOKEN_PROGRAM_ID;
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
@@ -1000,7 +1057,7 @@ export async function buildClaimRefundInstruction(
       { pubkey: userToken, isSigner: false, isWritable: true },
       { pubkey: treasuryToken, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
@@ -1030,7 +1087,7 @@ export async function buildClaimRentInstruction(
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
-  const poolToken = derivePoolTokenAddress(poolState.mint, poolPk);
+  const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
   const ix = createInstructionWithDiscriminator(
@@ -1042,7 +1099,7 @@ export async function buildClaimRentInstruction(
       { pubkey: poolToken, isSigner: false, isWritable: true },
       { pubkey: closeTarget, isSigner: false, isWritable: true },
       { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenProgramId, isSigner: false, isWritable: false },
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
 import { ProfileEditModal } from "@/components/ProfileEditModal";
 import { TransactionHistory } from "@/components/TransactionHistory";
+import FaucetModal from "@/components/FaucetModal";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ export function Navbar() {
   const { data: profile } = useMyProfile();
   const [copied, setCopied] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [faucetModalOpen, setFaucetModalOpen] = useState(false);
 
   const navItems = [
     { href: "/initialize", label: "Initialize", icon: Plus },
@@ -52,62 +54,6 @@ export function Navbar() {
     return balance.toFixed(6);
   };
 
-  // 🚀 Faucet HNCZ — rebuilt with clean API
-  const handleFaucet = async () => {
-    if (!address) {
-      toast.error("Connect your wallet first!");
-      return;
-    }
-
-    try {
-      const loadingToast = toast.loading("Requesting HNCZ tokens...");
-
-      const res = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/faucet/request`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            walletAddress: address,
-          }),
-          credentials: "include",
-        }
-      );
-
-      const data = await res.json();
-      toast.dismiss(loadingToast);
-
-      if (!res.ok) {
-        const errorMessage = data.error || "Faucet request failed";
-        const retryInfo = data.retryAfter ? ` (Wait ${data.retryAfter}h)` : "";
-        toast.error(errorMessage + retryInfo, { duration: 5000 });
-        return;
-      }
-
-      toast.success(
-        <div className="flex flex-col gap-1">
-          <div className="font-bold">🎉 {data.amount?.toLocaleString()} HNCZ Received!</div>
-          {data.explorerUrl && (
-            <a
-              href={data.explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline text-xs"
-            >
-              View on Explorer →
-            </a>
-          )}
-        </div>
-      );
-
-      // Refresh balances after successful claim
-      refresh();
-    } catch (error: any) {
-      toast.error(error.message || "Network error");
-    }
-  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-background/80 backdrop-blur-md">
@@ -152,14 +98,13 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
-          {/* ⭐ Faucet button added — no other UI changes */}
           {isConnected && (
             <Button
-              onClick={handleFaucet}
+              onClick={() => setFaucetModalOpen(true)}
               className="bg-primary/10 text-primary border border-primary/50 hover:bg-primary hover:text-black transition-all font-tech font-bold uppercase tracking-wider flex items-center gap-2"
             >
               <Droplets className="w-4 h-4" />
-              Get HNCZ
+              FAUCET
             </Button>
           )}
 
@@ -352,6 +297,7 @@ export function Navbar() {
       </div>
 
       <ProfileEditModal open={profileModalOpen} onOpenChange={setProfileModalOpen} />
+      <FaucetModal open={faucetModalOpen} onOpenChange={setFaucetModalOpen} />
     </header>
   );
 }

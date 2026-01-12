@@ -301,17 +301,32 @@ export class DatabaseStorage implements IStorage {
 
     const refunds = Array.from(refundPoolsMap.values());
 
-    // Query 2: Get ended/cancelled pools where user is creator and can claim rent
-    const rents = await db
+    // Query 2: Get pools where user is creator and can claim rent
+    // REFACTORED: Now checks on-chain state instead of status field
+    const { isPoolEmptyForRentClaim } = await import("./pool-monitor/solanaServices.js");
+
+    const potentialRentPools = await db
       .select()
       .from(pools)
       .where(
         and(
           eq(pools.creatorWallet, wallet),
-          sql`${pools.status} IN ('ended', 'cancelled')`,
           eq(pools.rentClaimed, 0)
         )
       );
+
+    // Filter pools based on on-chain state: pool_token.amount == 0 AND participants.count == 0
+    const rents: Pool[] = [];
+    for (const pool of potentialRentPools) {
+      try {
+        const isEmpty = await isPoolEmptyForRentClaim(pool.poolAddress);
+        if (isEmpty) {
+          rents.push(pool);
+        }
+      } catch (err) {
+        console.error(`[getClaimablePools] Error checking pool ${pool.poolAddress.slice(0, 8)}:`, err);
+      }
+    }
 
     return { refunds, rents };
   }
