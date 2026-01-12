@@ -1,7 +1,5 @@
-// This IDL file was updated to match the deployed program
-// It contains 17 instructions, new event types, and expanded Pool/Participants structures
 export const IDL = {
-  "address": "53oTPbfy559uTaJQAbuWeAN1TyWXK1KfxUsM2GPJtrJw",
+  "address": "CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L",
   "metadata": {
     "name": "ml",
     "version": "0.1.0",
@@ -1625,6 +1623,46 @@ export const IDL = {
       "code": 6058,
       "name": "NoWinnerSelected",
       "msg": "No winner selected"
+    },
+    {
+      "code": 6059,
+      "name": "ForbiddenTransferFee",
+      "msg": "Transfer fee extension is not allowed - would modify transfer amounts"
+    },
+    {
+      "code": 6060,
+      "name": "ForbiddenTransferHook",
+      "msg": "Transfer hook extension is not allowed - arbitrary code execution risk"
+    },
+    {
+      "code": 6061,
+      "name": "ForbiddenConfidentialTransfer",
+      "msg": "Confidential transfer extension is not allowed - hidden balances break accounting"
+    },
+    {
+      "code": 6062,
+      "name": "ForbiddenNonTransferable",
+      "msg": "Non-transferable tokens are not allowed - lottery requires transferable tokens"
+    },
+    {
+      "code": 6063,
+      "name": "ForbiddenInterestBearing",
+      "msg": "Interest bearing extension is not allowed - automatic balance changes break payouts"
+    },
+    {
+      "code": 6064,
+      "name": "ForbiddenPermanentDelegate",
+      "msg": "Permanent delegate extension is not allowed - unauthorized control risk"
+    },
+    {
+      "code": 6065,
+      "name": "ForbiddenMintCloseAuthority",
+      "msg": "Mint close authority must be disabled - mint could be closed"
+    },
+    {
+      "code": 6066,
+      "name": "ForbiddenDefaultAccountState",
+      "msg": "Default account state must be Initialized - frozen accounts cannot participate"
     }
   ],
   "types": [
@@ -2164,7 +2202,4 @@ export const IDL = {
       }
     }
   ]
-};
-
-export type MissoutLotteryIDL = typeof IDL;
-export default IDL;
+} as const;
