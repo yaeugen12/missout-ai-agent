@@ -1,4 +1,4 @@
-export const IDL = {
+{
   "address": "CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L",
   "metadata": {
     "name": "ml",
@@ -2202,4 +2202,4 @@ export const IDL = {
       }
     }
   ]
-} as const;
+}
