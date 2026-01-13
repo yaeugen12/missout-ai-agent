@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Loader2, Droplets, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Loader2, Droplets, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { useWallet } from "../hooks/use-wallet";
 import { toast } from "sonner";
 
@@ -68,6 +68,18 @@ export default function FaucetModal({ open, onOpenChange }: FaucetModalProps) {
   };
 
   const getLastFourChars = (address: string) => address.slice(-4);
+
+  const copyMintToClipboard = (tokenType: TokenType) => {
+    const mint = tokenType === "classic" ? CLASSIC_MINT : TOKEN2022_MINT;
+    navigator.clipboard.writeText(mint);
+    toast.success("Mint address copied!", {
+      description: `${mint.slice(0, 8)}...${mint.slice(-8)}`,
+    });
+  };
+
+  const getMintAddress = (tokenType: TokenType) => {
+    return tokenType === "classic" ? CLASSIC_MINT : TOKEN2022_MINT;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -162,11 +174,26 @@ export default function FaucetModal({ open, onOpenChange }: FaucetModalProps) {
 
         {successToken && (
           <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-            <div className="flex items-center gap-2 text-green-400">
-              <CheckCircle2 className="w-5 h-5" />
-              <div>
-                <p className="font-semibold">Success</p>
-                <p className="text-sm">Tokens received — Welcome to MissOut, you are ready to play</p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold">Success</p>
+                  <p className="text-sm">Tokens received — Welcome to MissOut, you are ready to play</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="text-xs bg-black/50 px-2 py-1 rounded border border-green-500/30 text-green-300">
+                      {getMintAddress(successToken)}
+                    </code>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => copyMintToClipboard(successToken)}
+                      className="h-6 w-6 p-0 hover:bg-green-500/20"
+                    >
+                      <Copy className="w-3 h-3 text-green-400" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

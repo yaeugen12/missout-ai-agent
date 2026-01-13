@@ -46,7 +46,7 @@ const defaultFilters: PoolFilterState = {
   fillPercentage: [0, 100],
   statusOpen: true,
   statusLocked: true,
-  statusEnded: false,
+  statusEnded: true,  // Show ended pools by default (for stress testing and user visibility)
   statusRefundable: false,
   sortBy: "newest"
 };
@@ -122,8 +122,8 @@ export function PoolFilters({ pools, onFilteredPoolsChange }: PoolFiltersProps) 
 
     const allowedStatuses: string[] = [];
     if (filtersToApply.statusOpen) allowedStatuses.push("open");
-    if (filtersToApply.statusLocked) allowedStatuses.push("locked", "unlocking", "randomness_committed", "randomness_revealed");
-    if (filtersToApply.statusEnded) allowedStatuses.push("winner_selected", "ended");
+    if (filtersToApply.statusLocked) allowedStatuses.push("locked", "unlocking", "randomnesscommitted", "randomnessrevealed", "randomness");
+    if (filtersToApply.statusEnded) allowedStatuses.push("winnerselected", "ended");
     if (filtersToApply.statusRefundable) allowedStatuses.push("cancelled");
     
     if (allowedStatuses.length > 0) {

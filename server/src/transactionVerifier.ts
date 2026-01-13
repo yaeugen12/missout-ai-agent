@@ -4,6 +4,9 @@ import { rpcManager, withRPCFailover } from "./rpc-manager.js";
 
 const PROGRAM_ID = new PublicKey("CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L");
 
+// Test mode: Skip transaction verification when allowMock is enabled
+const SKIP_TX_VERIFICATION = process.env.allowMock === "true" || process.env.allowMock === "1";
+
 // Instruction discriminators (first 8 bytes of instruction data)
 // Calculated as sha256("global:{function_name}")[0..8]
 const INSTRUCTION_DISCRIMINATORS = {
@@ -129,6 +132,12 @@ export async function verifyPoolCreationTransaction(
       `[POOL_CREATE_VERIFY] Verifying pool creation: tx=${txHash.slice(0, 16)}... pool=${poolAddress.slice(0, 16)}...`
     );
 
+    // SKIP VERIFICATION IN TEST MODE (allowMock=true)
+    if (SKIP_TX_VERIFICATION) {
+      logger.warn(`[POOL_CREATE_VERIFY] ⚠️  SKIPPING verification (test mode enabled)`);
+      return { valid: true };
+    }
+
     // Step 1: Verify transaction exists and succeeded
     const txVerification = await verifyTransactionExists(txHash);
 
@@ -216,6 +225,12 @@ export async function verifyJoinTransaction(
       `[JOIN_VERIFY] Verifying join: tx=${txHash.slice(0, 16)}... pool=${poolAddress.slice(0, 16)}... wallet=${walletAddress.slice(0, 16)}...`
     );
 
+    // SKIP VERIFICATION IN TEST MODE (allowMock=true)
+    if (SKIP_TX_VERIFICATION) {
+      logger.warn(`[JOIN_VERIFY] ⚠️  SKIPPING verification (test mode enabled)`);
+      return { valid: true };
+    }
+
     // Step 1: Verify transaction exists and succeeded
     const txVerification = await verifyTransactionExists(txHash);
 
@@ -287,6 +302,12 @@ export async function verifyUserTransaction(
     logger.info(
       `${logPrefix} Verifying: tx=${txHash.slice(0, 16)}... wallet=${expectedWallet.slice(0, 16)}... pool=${poolAddress.slice(0, 16)}...`
     );
+
+    // SKIP VERIFICATION IN TEST MODE (allowMock=true)
+    if (SKIP_TX_VERIFICATION) {
+      logger.warn(`${logPrefix} ⚠️  SKIPPING verification (test mode enabled)`);
+      return { valid: true };
+    }
 
     // Step 1: Fetch transaction
     const tx = await conn.getTransaction(txHash, {

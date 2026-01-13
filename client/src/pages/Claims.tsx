@@ -514,15 +514,10 @@ export default function Claims() {
                           )}>
                             {pool.status}
                           </span>
-                          {pool.status === 'cancelled' && (pool.participantsCount || 0) > 0 && (
-                            <span className="px-2 py-1 text-[10px] font-tech uppercase bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded">
-                              {pool.participantsCount} REFUND{pool.participantsCount > 1 ? 'S' : ''} PENDING
-                            </span>
-                          )}
                           <Button
                             size="sm"
                             onClick={() => handleClaimRent(pool)}
-                            disabled={claimingRent === pool.onChainAddress || (pool.status === 'cancelled' && (pool.participantsCount || 0) > 0)}
+                            disabled={claimingRent === pool.onChainAddress}
                             className="bg-amber-500/10 text-amber-400 border border-amber-500/50 hover:bg-amber-500 hover:text-black transition-all font-tech uppercase text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {claimingRent === pool.onChainAddress ? (

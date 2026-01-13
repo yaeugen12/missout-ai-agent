@@ -1087,6 +1087,8 @@ export async function buildClaimRentInstruction(
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
+  const conn = client.getConnection();
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
   const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 

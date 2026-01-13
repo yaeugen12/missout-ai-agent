@@ -280,9 +280,9 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const percentFull = Math.min(100, (participantsCount / pool.maxParticipants) * 100);
   const isFull = percentFull >= 100;
   const normalizedStatus = pool.status.toUpperCase();
-  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS";
-  const isLocked = normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS";
-  const canDonate = normalizedStatus !== "ENDED" && normalizedStatus !== "CANCELLED";
+  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS" || normalizedStatus === "RANDOMNESSCOMMITTED" || normalizedStatus === "RANDOMNESSREVEALED";
+  const isLocked = normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS" || normalizedStatus === "RANDOMNESSCOMMITTED" || normalizedStatus === "RANDOMNESSREVEALED";
+  const canDonate = normalizedStatus !== "ENDED" && normalizedStatus !== "CANCELLED" && normalizedStatus !== "WINNERSELECTED" && normalizedStatus !== "WINNER";
   
   const lockEndTime = pool.lockTime 
     ? new Date(new Date(pool.lockTime).getTime() + pool.lockDuration * 60 * 1000)
@@ -292,37 +292,49 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const solscanUrl = poolAddress ? `https://solscan.io/account/${poolAddress}` : null;
 
   const statusConfig: Record<string, { label: string; className: string }> = {
-    OPEN: { 
-      label: "OPEN", 
-      className: "text-primary border-primary/50 bg-primary/10" 
+    OPEN: {
+      label: "OPEN",
+      className: "text-primary border-primary/50 bg-primary/10"
     },
-    LOCKED: { 
-      label: "HORIZON", 
-      className: "text-yellow-400 border-yellow-400/50 bg-yellow-400/10" 
+    LOCKED: {
+      label: "HORIZON",
+      className: "text-yellow-400 border-yellow-400/50 bg-yellow-400/10"
     },
-    UNLOCKING: { 
-      label: "UNLOCKING", 
-      className: "text-orange-400 border-orange-400/50 bg-orange-400/10" 
+    UNLOCKING: {
+      label: "UNLOCKING",
+      className: "text-orange-400 border-orange-400/50 bg-orange-400/10"
     },
-    RANDOMNESS: { 
-      label: "DRAWING", 
-      className: "text-purple-400 border-purple-400/50 bg-purple-400/10" 
+    RANDOMNESS: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
     },
-    WINNER: { 
-      label: "ESCAPED", 
-      className: "text-green-400 border-green-400/50 bg-green-400/10" 
+    RANDOMNESSCOMMITTED: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
     },
-    ENDED: { 
-      label: "COLLAPSED", 
-      className: "text-gray-500 border-gray-500/50 bg-gray-500/10" 
+    RANDOMNESSREVEALED: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
     },
-    CANCELLED: { 
-      label: "REFUND", 
-      className: "text-red-400 border-red-400/50 bg-red-400/10" 
+    WINNERSELECTED: {
+      label: "ESCAPED",
+      className: "text-green-400 border-green-400/50 bg-green-400/10"
+    },
+    WINNER: {
+      label: "ESCAPED",
+      className: "text-green-400 border-green-400/50 bg-green-400/10"
+    },
+    ENDED: {
+      label: "COLLAPSED",
+      className: "text-gray-500 border-gray-500/50 bg-gray-500/10"
+    },
+    CANCELLED: {
+      label: "REFUND",
+      className: "text-red-400 border-red-400/50 bg-red-400/10"
     },
   };
 
-  const currentStatus = statusConfig[pool.status] || statusConfig.OPEN;
+  const currentStatus = statusConfig[normalizedStatus] || statusConfig.OPEN;
 
   const handleCopyPoolAddress = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

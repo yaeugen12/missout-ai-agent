@@ -680,6 +680,8 @@ export async function isPoolEmptyForRentClaim(poolAddress: string): Promise<bool
     const conn = getConnection();
     const poolPk = new PublicKey(poolAddress);
 
+    log(`pool=${poolAddress.slice(0, 8)} Checking rent eligibility...`);
+
     // Fetch pool state
     const poolData = await (prog.account as any).pool.fetch(poolPk, "confirmed");
 
@@ -690,7 +692,17 @@ export async function isPoolEmptyForRentClaim(poolAddress: string): Promise<bool
     );
 
     // Fetch participants state
-    const participantsData = await (prog.account as any).participants.fetch(participantsPda, "confirmed");
+    let participantsData;
+    try {
+      participantsData = await (prog.account as any).participants.fetch(participantsPda, "confirmed");
+    } catch (err: any) {
+      // Participants account might be closed if rent already claimed
+      if (err.message?.includes("Account does not exist") || err.message?.includes("Invalid account data")) {
+        log(`pool=${poolAddress.slice(0, 8)} Participants account does not exist (might be closed)`);
+        return false; // Can't claim rent if accounts are closed
+      }
+      throw err;
+    }
 
     // Derive pool_token PDA
     const mintPk = poolData.mint;
@@ -705,15 +717,93 @@ export async function isPoolEmptyForRentClaim(poolAddress: string): Promise<bool
 
     // Fetch pool_token account
     const { getAccount } = await import("@solana/spl-token");
-    const poolTokenAccount = await getAccount(conn, poolTokenPda, undefined, tokenProgramId);
+    let poolTokenAccount;
+    try {
+      poolTokenAccount = await getAccount(conn, poolTokenPda, undefined, tokenProgramId);
+    } catch (err: any) {
+      // Pool token account might be closed after claim_rent
+      if (err.message?.includes("Account does not exist") || err.message?.includes("Invalid account owner")) {
+        log(`pool=${poolAddress.slice(0, 8)} Pool token account does not exist (already claimed rent)`);
+        return false; // Already claimed
+      }
+      throw err;
+    }
 
-    const isEmpty = poolTokenAccount.amount === BigInt(0) && participantsData.count === 0;
+    // Check pool status - must be cancelled to claim rent
+    const isCancelled = poolData.status?.cancelled !== undefined;
 
-    log(`pool=${poolAddress.slice(0, 8)} isEmpty=${isEmpty} tokenAmount=${poolTokenAccount.amount.toString()} participantsCount=${participantsData.count}`);
+    // For rent claim: pool must be cancelled AND all tokens refunded (pool_token.amount == 0)
+    // participants.count does NOT need to be 0 because participants may not have claimed yet
+    const canClaimRent = isCancelled && poolTokenAccount.amount === BigInt(0);
 
-    return isEmpty;
+    log(`pool=${poolAddress.slice(0, 8)} canClaimRent=${canClaimRent} isCancelled=${isCancelled} tokenAmount=${poolTokenAccount.amount.toString()} participantsCount=${participantsData.count}`);
+
+    return canClaimRent;
   } catch (err: any) {
     log(`pool=${poolAddress.slice(0, 8)} ❌ Error checking if empty: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Check if a wallet is in the on-chain participants list for refund eligibility
+ */
+export async function isWalletInParticipantsList(poolAddress: string, walletAddress: string): Promise<boolean> {
+  try {
+    const prog = getProgram();
+    const poolPk = new PublicKey(poolAddress);
+    const walletPk = new PublicKey(walletAddress);
+
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} Checking if wallet is in participants list...`);
+
+    // Derive participants PDA
+    const [participantsPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("participants"), poolPk.toBuffer()],
+      PROGRAM_ID
+    );
+
+    // Fetch participants state
+    let participantsData;
+    try {
+      participantsData = await (prog.account as any).participants.fetch(participantsPda, "confirmed");
+    } catch (err: any) {
+      // Participants account might be closed or doesn't exist
+      if (err.message?.includes("Account does not exist") || err.message?.includes("Invalid account data")) {
+        log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} Participants account does not exist`);
+        return false;
+      }
+      throw err;
+    }
+
+    // Debug: Log the entire participants data structure to see field names
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} participantsData keys: ${Object.keys(participantsData).join(', ')}`);
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} participantsData: ${JSON.stringify(participantsData, null, 2)}`);
+
+    // Check if wallet is in the participants list
+    // The field name might be 'wallets', 'participants', or something else
+    const wallets = participantsData.wallets || participantsData.participants || participantsData.list || [];
+    const count = participantsData.count || 0;
+
+    // Debug: Log the participants data structure
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} Participants count: ${count}, Wallets array length: ${wallets.length}`);
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} Looking for wallet: ${walletPk.toBase58()}`);
+
+    // Check if wallet is in the list (compare first 'count' wallets)
+    for (let i = 0; i < count && i < wallets.length; i++) {
+      const participantPk = wallets[i];
+      const participantStr = participantPk.toBase58();
+      log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} Checking index ${i}: ${participantStr}`);
+
+      if (participantStr === walletPk.toBase58()) {
+        log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} ✅ Found in participants list at index ${i}`);
+        return true;
+      }
+    }
+
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} ❌ NOT in participants list (count: ${count})`);
+    return false;
+  } catch (err: any) {
+    log(`pool=${poolAddress.slice(0, 8)} wallet=${walletAddress.slice(0, 8)} ❌ Error checking participants list: ${err.message}`);
     return false;
   }
 }

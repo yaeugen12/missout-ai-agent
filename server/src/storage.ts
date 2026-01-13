@@ -271,6 +271,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     // Query 1: Get cancelled pools where user can claim refund
     // Uses JOIN to get pool + participant data in one query
+    // Query potential refund pools from database
     const refundResults = await db
       .select({
         pool: pools,
@@ -286,17 +287,43 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    // Group participants by pool ID
+    // REFACTORED: Filter based on on-chain participants list
+    // Only return pools where wallet is ACTUALLY in the on-chain participants list
+    const { isWalletInParticipantsList } = await import("./pool-monitor/solanaServices.js");
+
     const refundPoolsMap = new Map<number, Pool & { participants: Participant[] }>();
 
     for (const row of refundResults) {
-      if (!refundPoolsMap.has(row.pool.id)) {
-        refundPoolsMap.set(row.pool.id, {
-          ...row.pool,
-          participants: []
-        });
+      try {
+        // Verify wallet is in on-chain participants list
+        const isParticipant = await isWalletInParticipantsList(row.pool.poolAddress, wallet);
+
+        if (isParticipant) {
+          if (!refundPoolsMap.has(row.pool.id)) {
+            refundPoolsMap.set(row.pool.id, {
+              ...row.pool,
+              participants: []
+            });
+          }
+          refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
+        } else {
+          console.log(`[getClaimablePools] Skipping pool ${row.pool.poolAddress.slice(0, 8)} - wallet not in on-chain participants list (likely already claimed)`);
+
+          // Database sync: Mark as claimed if not in on-chain list
+          // This prevents repeated checks for already-claimed refunds
+          try {
+            await db
+              .update(participants)
+              .set({ refundClaimed: 1 })
+              .where(eq(participants.id, row.participant.id));
+            console.log(`[getClaimablePools] Marked participant ${row.participant.id} refund as claimed (DB sync)`);
+          } catch (dbErr) {
+            console.error(`[getClaimablePools] Failed to update participant ${row.participant.id}:`, dbErr);
+          }
+        }
+      } catch (err) {
+        console.error(`[getClaimablePools] Error checking on-chain participants for pool ${row.pool.poolAddress.slice(0, 8)}:`, err);
       }
-      refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
     }
 
     const refunds = Array.from(refundPoolsMap.values());

@@ -75,11 +75,9 @@ export default function Home() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredPools
-              .filter(pool => pool.status.toUpperCase() !== "ENDED" && pool.status.toUpperCase() !== "WINNER")
-              .map((pool) => (
-                <PoolCard key={pool.id} pool={pool} />
-              ))}
+            {filteredPools.map((pool) => (
+              <PoolCard key={pool.id} pool={pool} />
+            ))}
           </div>
         )}
       </main>
