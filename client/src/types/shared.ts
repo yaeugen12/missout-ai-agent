@@ -20,7 +20,10 @@ export interface Pool {
   randomnessAccount: string | null;
   randomnessRequested: boolean;
   lockDuration: number;
+  lockTime: string | null;
   totalPot: number;
+  initialPriceUsd: number | null;
+  currentPriceUsd: number | null;
   participants?: Array<{ walletAddress: string }>;
 }
 

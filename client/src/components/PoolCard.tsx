@@ -2,7 +2,7 @@ import { memo, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { type Pool } from "@/types/shared";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye, Loader2 } from "lucide-react";
+import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye, Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
 import { useCountdown } from "@/hooks/use-countdown";
@@ -58,6 +58,23 @@ function TokenAvatar({
       <div className="absolute inset-0 rounded-full animate-pulse opacity-30" 
         style={{ boxShadow: `inset 0 0 20px ${accentColor}` }} 
       />
+    </div>
+  );
+}
+
+function VolatilityBadge({ initialPrice, currentPrice }: { initialPrice: number; currentPrice: number }) {
+  const percent = ((currentPrice - initialPrice) / initialPrice) * 100;
+  const isUp = percent > 1;
+  const isDown = percent < -1;
+  
+  const TrendIcon = isUp ? TrendingUp : isDown ? TrendingDown : Minus;
+  const colorClass = isUp ? "text-green-400" : isDown ? "text-red-400" : "text-cyan-400";
+  const bgClass = isUp ? "bg-green-500/10 border-green-500/20" : isDown ? "bg-red-500/10 border-red-500/20" : "bg-cyan-500/10 border-cyan-500/20";
+  
+  return (
+    <div className={cn("flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-mono font-bold", bgClass, colorClass)}>
+      <TrendIcon className="w-3 h-3" />
+      <span>{percent >= 0 ? "+" : ""}{percent.toFixed(1)}%</span>
     </div>
   );
 }
@@ -559,7 +576,15 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wider">slots</span>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              {/* Mini Volatility Indicator */}
+              {pool.initialPriceUsd && pool.currentPriceUsd && (
+                <VolatilityBadge 
+                  initialPrice={pool.initialPriceUsd} 
+                  currentPrice={pool.currentPriceUsd} 
+                />
+              )}
+              
               <CountdownRing 
                 endTime={lockEndTime}
                 lockDuration={pool.lockDuration}
