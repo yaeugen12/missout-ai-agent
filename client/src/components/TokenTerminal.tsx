@@ -53,19 +53,11 @@ export function TokenTerminal({ onCreateLottery }: TokenTerminalProps) {
   }, [toast]);
 
   useEffect(() => {
-    fetchTokens();
-    const interval = setInterval(() => fetchTokens(true), 10000);
-    return () => clearInterval(interval);
-  }, [fetchTokens]);
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
 
-  const filteredTokens = tokens.filter(t => {
-    const matchesCategory = t.category === activeTab;
-    const matchesSearch = !searchQuery || 
-      t.mint.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const filteredTokens: DiscoveredToken[] = [];
 
   const handleCopyMint = (mint: string) => {
     navigator.clipboard.writeText(mint);
@@ -173,32 +165,33 @@ export function TokenTerminal({ onCreateLottery }: TokenTerminalProps) {
                 <span className="font-mono text-sm text-muted-foreground">Scanning Helius...</span>
               </div>
             </div>
-          ) : filteredTokens.length === 0 ? (
+          ) : (
             <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <Search className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                <p className="font-mono text-sm text-muted-foreground">No tokens found</p>
-                <p className="font-mono text-xs text-muted-foreground/60 mt-1">
-                  {searchQuery ? "Try a different search" : "Waiting for new activity..."}
+              <div className="text-center p-6 bg-primary/5 border border-primary/20 rounded-xl backdrop-blur-sm max-w-sm mx-auto">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/30">
+                  <Zap className="w-8 h-8 text-primary animate-pulse" />
+                </div>
+                <h3 className="text-xl font-display font-bold text-white mb-2 tracking-tight">TERMINAL V2</h3>
+                <p className="font-mono text-sm text-primary/80 mb-4 uppercase tracking-widest">System Upgrade in Progress</p>
+                <div className="space-y-2 text-xs font-mono text-muted-foreground text-left bg-black/40 p-3 rounded border border-white/5">
+                  <div className="flex justify-between">
+                    <span>> STATUS:</span>
+                    <span className="text-yellow-500">DEVELOPMENT</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>> ENGINE:</span>
+                    <span>HELIUS H-ON-DEMAND</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>> ETA:</span>
+                    <span className="text-primary">COMING SOON</span>
+                  </div>
+                </div>
+                <p className="mt-6 text-xs text-muted-foreground/60 italic font-mono">
+                  Advanced token discovery and real-time analytics are being migrated to our new high-speed infrastructure.
                 </p>
               </div>
             </div>
-          ) : (
-            <ScrollArea className="h-full">
-              <div className="divide-y divide-white/5">
-                {filteredTokens.map((token) => (
-                  <TokenRow 
-                    key={token.mint} 
-                    token={token} 
-                    onCopy={handleCopyMint}
-                    onCreateLottery={onCreateLottery}
-                    getCategoryIcon={getCategoryIcon}
-                    getCategoryBadgeVariant={getCategoryBadgeVariant}
-                    getCategoryLabel={getCategoryLabel}
-                  />
-                ))}
-              </div>
-            </ScrollArea>
           )}
         </TabsContent>
       </Tabs>

@@ -32,7 +32,7 @@ export default function Terminal() {
               TOKEN <span className="text-primary text-neon-cyan">TERMINAL</span>
             </h1>
             <p className="text-muted-foreground font-tech text-sm">
-              Real-time token discovery powered by Helius RPC
+              Advanced Token Discovery — Coming with Version 2
             </p>
           </div>
         </div>
