@@ -168,7 +168,7 @@ export function VolatilityWaveform({
 
   if (!currentPrice || currentPrice === 0) {
     return (
-      <div className={`bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl ${className}`}>
+      <div className={`bg-zinc-900/60 p-6 rounded-2xl backdrop-blur-xl shadow-2xl ${className}`}>
         <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] opacity-60">
           Volatility Pulse
         </div>
@@ -206,7 +206,7 @@ export function VolatilityWaveform({
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.5 }}
-      className={`bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl ${className}`}
+      className={`bg-zinc-900/60 p-6 rounded-2xl backdrop-blur-xl shadow-2xl ${className}`}
       data-testid="volatility-waveform"
     >
       <div className="flex items-center justify-between mb-3">

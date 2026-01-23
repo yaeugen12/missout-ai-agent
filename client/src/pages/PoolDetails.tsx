@@ -438,7 +438,7 @@ export default function PoolDetails() {
               />
               
               {/* Singularity Mass */}
-              <div className="bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[220px]">
+              <div className="bg-zinc-900/60 p-6 rounded-2xl backdrop-blur-xl shadow-2xl min-w-[220px]">
                 <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">
                   Singularity Mass
                 </div>
