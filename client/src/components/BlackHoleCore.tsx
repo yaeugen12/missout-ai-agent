@@ -10,7 +10,6 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
   const controls = useAnimation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  const isActive = status === 'OPEN' || status === 'LOCKED';
   const isWinning = status === 'WINNER' || status === 'RANDOMNESS';
 
   useEffect(() => {
@@ -40,78 +39,87 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
     const drawBlackHole = () => {
       ctx.clearRect(0, 0, size, size);
 
-      const gradient = ctx.createRadialGradient(
-        centerX, centerY, 0,
-        centerX, centerY, size / 2
-      );
-      gradient.addColorStop(0, "rgba(0, 20, 30, 1)");
-      gradient.addColorStop(0.3, "rgba(0, 10, 15, 1)");
-      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = "rgba(0, 0, 0, 1)";
       ctx.fillRect(0, 0, size, size);
 
-      const rings = [
-        { radius: size * 0.42, width: 3, opacity: 0.9, speed: 0.5 },
-        { radius: size * 0.38, width: 2, opacity: 0.7, speed: 0.7 },
-        { radius: size * 0.34, width: 1.5, opacity: 0.5, speed: 0.9 },
-        { radius: size * 0.30, width: 1, opacity: 0.3, speed: 1.1 },
+      const outerRadius = size * 0.46;
+      const innerRadius = size * 0.22;
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.9)";
+      ctx.lineWidth = 6;
+      ctx.shadowBlur = 40;
+      ctx.shadowColor = "rgba(0, 240, 255, 0.8)";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, outerRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.4)";
+      ctx.lineWidth = 12;
+      ctx.shadowBlur = 60;
+      ctx.shadowColor = "rgba(0, 240, 255, 0.5)";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, size * 0.40, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0, 200, 230, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = "rgba(0, 240, 255, 0.4)";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, size * 0.35, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0, 180, 210, 0.3)";
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = "rgba(0, 240, 255, 0.3)";
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+
+      const highlights = [
+        { angle: time * 0.3, size: 20 },
+        { angle: time * 0.3 + Math.PI * 0.7, size: 15 },
+        { angle: time * 0.3 + Math.PI * 1.4, size: 18 },
+        { angle: time * 0.3 + Math.PI * 0.3, size: 12 },
       ];
 
-      rings.forEach((ring, index) => {
-        const pulseOffset = Math.sin(time * ring.speed + index) * 0.1;
-        const currentOpacity = ring.opacity * (0.8 + pulseOffset);
+      highlights.forEach((h) => {
+        const x = centerX + Math.cos(h.angle) * outerRadius;
+        const y = centerY + Math.sin(h.angle) * outerRadius;
         
+        const gradient = ctx.createRadialGradient(x, y, 0, x, y, h.size);
+        gradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+        gradient.addColorStop(0.3, "rgba(0, 240, 255, 0.7)");
+        gradient.addColorStop(1, "rgba(0, 240, 255, 0)");
+        
+        ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(centerX, centerY, ring.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(0, 240, 255, ${currentOpacity})`;
-        ctx.lineWidth = ring.width;
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = `rgba(0, 240, 255, ${currentOpacity * 0.8})`;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.arc(x, y, h.size, 0, Math.PI * 2);
+        ctx.fill();
       });
 
-      const numGlowPoints = 8;
-      for (let i = 0; i < numGlowPoints; i++) {
-        const angle = (i / numGlowPoints) * Math.PI * 2 + time * 0.3;
-        const radius = size * 0.40;
-        const x = centerX + Math.cos(angle) * radius;
-        const y = centerY + Math.sin(angle) * radius;
-        
-        const glowGradient = ctx.createRadialGradient(x, y, 0, x, y, 15);
-        glowGradient.addColorStop(0, "rgba(0, 240, 255, 0.8)");
-        glowGradient.addColorStop(0.5, "rgba(0, 240, 255, 0.3)");
-        glowGradient.addColorStop(1, "rgba(0, 240, 255, 0)");
-        
-        ctx.fillStyle = glowGradient;
-        ctx.beginPath();
-        ctx.arc(x, y, 15, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      const innerGradient = ctx.createRadialGradient(
+      const blackHoleGradient = ctx.createRadialGradient(
         centerX, centerY, 0,
-        centerX, centerY, size * 0.25
+        centerX, centerY, innerRadius * 1.5
       );
-      innerGradient.addColorStop(0, "rgba(0, 0, 0, 1)");
-      innerGradient.addColorStop(0.7, "rgba(0, 0, 0, 1)");
-      innerGradient.addColorStop(1, "rgba(0, 10, 20, 0.9)");
+      blackHoleGradient.addColorStop(0, "rgba(0, 0, 0, 1)");
+      blackHoleGradient.addColorStop(0.7, "rgba(0, 0, 0, 1)");
+      blackHoleGradient.addColorStop(1, "rgba(0, 20, 30, 0.8)");
       
-      ctx.fillStyle = innerGradient;
+      ctx.fillStyle = blackHoleGradient;
       ctx.beginPath();
-      ctx.arc(centerX, centerY, size * 0.22, 0, Math.PI * 2);
+      ctx.arc(centerX, centerY, innerRadius * 1.3, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(centerX, centerY, size * 0.23, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0, 180, 220, 0.4)";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = "rgba(0, 240, 255, 0.5)";
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 0, 0, 1)";
+      ctx.fill();
 
-      time += 0.02;
+      time += 0.015;
       animationFrame = requestAnimationFrame(drawBlackHole);
     };
 
@@ -125,17 +133,17 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
   return (
     <div className="relative w-full aspect-square flex items-center justify-center">
       <motion.div 
-        className="absolute inset-[5%] rounded-full"
+        className="absolute inset-0 rounded-full"
         style={{
-          background: "radial-gradient(circle, rgba(0,240,255,0.15) 0%, transparent 70%)",
-          filter: "blur(40px)",
+          background: "radial-gradient(circle, rgba(0,240,255,0.12) 0%, transparent 60%)",
+          filter: "blur(50px)",
         }}
         animate={{
-          scale: [1, 1.1, 1],
-          opacity: [0.4, 0.6, 0.4],
+          scale: [1, 1.08, 1],
+          opacity: [0.5, 0.7, 0.5],
         }}
         transition={{
-          duration: 4,
+          duration: 5,
           repeat: Infinity,
           ease: "easeInOut"
         }}
@@ -143,64 +151,29 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
 
       <canvas
         ref={canvasRef}
-        width={400}
-        height={400}
+        width={500}
+        height={500}
         className="absolute inset-0 w-full h-full"
-        style={{ mixBlendMode: "screen" }}
-      />
-
-      <motion.div
-        animate={controls}
-        className="absolute inset-[8%] rounded-full"
-        style={{
-          background: "conic-gradient(from 0deg, transparent 0%, rgba(0,240,255,0.1) 25%, transparent 50%, rgba(0,240,255,0.05) 75%, transparent 100%)",
-        }}
       />
 
       {isWinning && (
         <motion.div
-          className="absolute inset-[35%] rounded-full"
+          className="absolute inset-[38%] rounded-full z-10"
           initial={{ scale: 0, opacity: 0 }}
           animate={{ 
-            scale: [0, 1.2, 1],
-            opacity: [0, 1, 0.8],
+            scale: [0, 1.5, 1],
+            opacity: [0, 1, 0.9],
           }}
           transition={{
-            duration: 1,
+            duration: 1.2,
             ease: "easeOut"
           }}
           style={{
-            background: "radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(0,240,255,0.5) 50%, transparent 100%)",
-            boxShadow: "0 0 60px rgba(0,240,255,0.8), 0 0 100px rgba(255,255,255,0.5)",
+            background: "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(0,240,255,0.6) 40%, transparent 100%)",
+            boxShadow: "0 0 80px rgba(0,240,255,1), 0 0 120px rgba(255,255,255,0.6)",
           }}
         />
       )}
-
-      {[...Array(20)].map((_, i) => {
-        const angle = (i / 20) * Math.PI * 2;
-        const distance = 45 + Math.random() * 10;
-        return (
-          <motion.div
-            key={i}
-            className="absolute w-[2px] h-[2px] rounded-full"
-            style={{
-              left: `${50 + Math.cos(angle) * distance}%`,
-              top: `${50 + Math.sin(angle) * distance}%`,
-              background: "rgba(0, 240, 255, 0.8)",
-              boxShadow: "0 0 4px rgba(0, 240, 255, 0.8)",
-            }}
-            animate={{
-              opacity: [0.3, 1, 0.3],
-              scale: [0.8, 1.2, 0.8],
-            }}
-            transition={{
-              duration: 2 + Math.random() * 2,
-              repeat: Infinity,
-              delay: Math.random() * 2,
-            }}
-          />
-        );
-      })}
     </div>
   );
 }
