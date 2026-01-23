@@ -204,69 +204,6 @@ export function NotificationCenter() {
                         disabled={!settings.enabled || !settings.soundEnabled}
                       />
                     </div>
-
-                    {/* Test Sounds */}
-                    <div className="space-y-2 pt-2 border-t border-white/5">
-                      <span className="text-xs text-muted-foreground uppercase tracking-wider">
-                        Test Sounds
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.WIN, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Win
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.JOIN, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Join
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.LOCKED, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Lock
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.UNLOCKED, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Unlock
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.RANDOMNESS, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Random
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-[9px]"
-                          onClick={() => notificationSoundGenerator.playSound(NotificationType.CANCEL, settings.volume)}
-                        >
-                          <Play className="w-3 h-3 mr-1" />
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
