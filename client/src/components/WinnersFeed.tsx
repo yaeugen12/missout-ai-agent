@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiFetch } from "@/lib/api";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -21,6 +21,22 @@ interface WinnerFeedEntry {
 export function WinnersFeed() {
   const [winners, setWinners] = useState<WinnerFeedEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isVisible, setIsVisible] = useState(true);
+
+  // Hide when scrolling down past 200px
+  useEffect(() => {
+    let lastScrollY = window.scrollY;
+    
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      // Hide after scrolling 200px down
+      setIsVisible(currentScrollY < 200);
+      lastScrollY = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const fetchWinners = async () => {
     try {
@@ -89,7 +105,15 @@ export function WinnersFeed() {
   const scrollDistance = (winners.length * cardWidth) + (separatorsCount * separatorWidth);
 
   return (
-    <div className="fixed top-16 left-0 right-0 bg-transparent border-none overflow-hidden z-50 pointer-events-none">
+    <motion.div 
+      className="fixed top-16 left-0 right-0 bg-transparent border-none overflow-hidden z-50 pointer-events-none"
+      initial={{ opacity: 1, y: 0 }}
+      animate={{ 
+        opacity: isVisible ? 1 : 0, 
+        y: isVisible ? 0 : -20 
+      }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="relative h-14 flex items-center pointer-events-auto">
         {/* Gradient fade edges */}
         <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-black/0 via-black/0 to-transparent z-10 pointer-events-none" />
@@ -129,7 +153,7 @@ export function WinnersFeed() {
           })}
         </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
