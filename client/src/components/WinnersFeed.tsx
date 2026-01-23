@@ -89,11 +89,11 @@ export function WinnersFeed() {
   const scrollDistance = (winners.length * cardWidth) + (separatorsCount * separatorWidth);
 
   return (
-    <div className="w-full bg-transparent border-b border-white/[0.02] overflow-hidden relative z-50">
+    <div className="w-full bg-transparent border-none overflow-hidden relative z-50">
       <div className="relative h-14 flex items-center">
         {/* Gradient fade edges */}
-        <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-background via-background/40 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-background via-background/40 to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-black via-black/40 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-black via-black/40 to-transparent z-10 pointer-events-none" />
 
         {/* Scrolling container */}
         <motion.div
