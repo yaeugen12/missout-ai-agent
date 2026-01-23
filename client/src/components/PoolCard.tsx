@@ -86,15 +86,16 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
   return (
-    <div className="absolute -right-8 top-1/2 -translate-y-1/2 w-44 h-44 pointer-events-none overflow-visible">
+    <div className="absolute -right-8 top-1/2 -translate-y-1/2 w-48 h-48 pointer-events-none overflow-visible">
       <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
         <defs>
           <filter id="vortexGlow">
-            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feGaussianBlur stdDeviation="4" result="blur"/>
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
           <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+            <stop offset="50%" stopColor="#FFFACD" stopOpacity="0.9" />
             <stop offset="100%" stopColor="#B8860B" stopOpacity="0.8" />
           </linearGradient>
         </defs>
@@ -109,8 +110,8 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
             fill="transparent"
             stroke="white"
             strokeWidth="0.5"
-            className="opacity-[0.05]"
-            strokeDasharray="1 4"
+            className="opacity-[0.08]"
+            strokeDasharray="1 6"
             style={{ transformOrigin: "center" }}
           />
         ))}
@@ -122,7 +123,7 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
           r="38"
           fill="transparent"
           stroke="url(#ringGradient)"
-          strokeWidth="6"
+          strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
@@ -130,33 +131,47 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
           transition={{ duration: 2.5, ease: "circOut" }}
           style={{ filter: "url(#vortexGlow)" }}
         />
+
+        {/* Outer Glow Ring */}
+        <circle
+          cx="50"
+          cy="50"
+          r="38"
+          fill="transparent"
+          stroke="white"
+          strokeWidth="1"
+          className="opacity-20"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+        />
       </svg>
       
       {/* Central Singularity (The Black Hole Core) with Text */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div 
-          className="w-24 h-24 rounded-full relative overflow-hidden flex flex-col items-center justify-center"
+          className="w-28 h-28 rounded-full relative overflow-hidden flex flex-col items-center justify-center"
           style={{ 
-            background: "radial-gradient(circle at center, #000 30%, #080808 60%, transparent 90%)",
+            background: "radial-gradient(circle at center, #000 40%, #0a0a0a 70%, transparent 100%)",
+            boxShadow: "inset 0 0 40px rgba(0,0,0,1), 0 0 20px rgba(255,215,0,0.1)"
           }}
         >
           {/* Pulsing Core Glow */}
           <motion.div 
             className="absolute inset-0 rounded-full z-0"
             animate={{ 
-              scale: [0.95, 1.05, 0.95],
-              opacity: [0.1, 0.2, 0.1]
+              scale: [0.9, 1.1, 0.9],
+              opacity: [0.15, 0.35, 0.15]
             }}
-            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `radial-gradient(circle at center, rgba(255, 215, 0, 0.15) 0%, transparent 70%)` }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `radial-gradient(circle at center, rgba(255, 215, 0, 0.2) 0%, transparent 75%)` }}
           />
           
           {/* Pool Size Text Integrated in Core */}
           <div className="relative z-10 flex flex-col items-center justify-center text-center">
-            <span className="text-xl font-mono font-black text-amber-100 leading-none mb-1 shadow-sm">
+            <span className="text-2xl font-mono font-black text-amber-100 leading-none mb-1 drop-shadow-[0_0_8px_rgba(255,215,0,0.5)]">
               {(poolSize ?? 0).toLocaleString()}
             </span>
-            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] font-black leading-none opacity-80">POOL SIZE</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] font-black leading-none opacity-90">POOL SIZE</span>
           </div>
         </div>
       </div>
@@ -424,82 +439,52 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         />
 
         <div className="relative z-10 pt-2">
-          {/* Locked/Timer Overlay - Takes full card surface but transparent */}
+          {/* Status Badge - Top Left */}
+          <div className="absolute top-0 left-0 flex flex-col gap-2">
+            <span className={cn(
+              "px-3 py-1 text-[10px] font-black uppercase border rounded-full tracking-widest backdrop-blur-md shadow-lg",
+              currentStatus.className
+            )}>
+              {currentStatus.label}
+            </span>
+          </div>
+
+          {/* Locked/Timer Overlay */}
           {isLocked && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="absolute -inset-5 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] pointer-events-none"
+              className="absolute -inset-5 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-[4px] pointer-events-none rounded-xl"
             >
               <CountdownOverlay endTime={lockEndTime} lockDuration={pool.lockDuration} />
             </motion.div>
           )}
 
-          {/* Lock Time Indicator - ABSOLUTELY PROMINENT WITHIN CARD FLOW */}
-          {normalizedStatus === "OPEN" && !isFull && (
-            <div className="flex justify-center mb-4">
-              <div className="bg-black/80 border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-pulse">
-                <Clock className="w-5 h-5 text-primary" />
-                <div className="flex flex-col items-center">
-                  <span className="text-sm font-mono font-black text-white leading-none">{pool.lockDuration}m</span>
-                  <span className="text-[8px] text-primary font-black uppercase tracking-widest leading-none mt-1">LOCK DURATION</span>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div className="flex items-start gap-4 mb-4">
-            <TokenAvatar 
-              logoUrl={tokenMetadata?.logoUrl} 
-              symbol={pool.tokenSymbol} 
-              accentColor={accentColor}
-            />
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <h3 className="text-xl font-display font-black text-white group-hover:text-primary transition-colors truncate">
+          <div className="flex items-start justify-between gap-4 mb-6 pt-8">
+            <div className="flex items-center gap-4">
+              <TokenAvatar 
+                logoUrl={tokenMetadata?.logoUrl} 
+                symbol={pool.tokenSymbol} 
+                accentColor={accentColor}
+              />
+              <div className="flex flex-col">
+                <h3 className="text-2xl font-display font-black text-white group-hover:text-primary transition-all duration-300 tracking-tight">
                   {pool.tokenSymbol}
                 </h3>
-                <span className={cn(
-                  "px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm tracking-tight shrink-0",
-                  currentStatus.className
-                )}>
-                  {currentStatus.label}
-                </span>
+                <p className="text-muted-foreground text-xs font-medium opacity-70">
+                  {pool.tokenName}
+                </p>
               </div>
-              <p className="text-muted-foreground text-xs truncate mb-1">
-                {pool.tokenName}
-              </p>
+            </div>
+            
+            <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopyPoolAddress}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                  data-testid={`button-copy-pool-${pool.id}`}
+                  className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  title="Copy Pool Address"
                 >
-                  <span className="font-mono">
-                    {poolAddress ? shortenAddress(poolAddress) : `#${pool.id}`}
-                  </span>
-                  <AnimatePresence mode="wait">
-                    {copied ? (
-                      <motion.span
-                        key="check"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
-                      >
-                        <Check className="w-3 h-3 text-green-400" />
-                      </motion.span>
-                    ) : (
-                      <motion.span
-                        key="copy"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
-                      >
-                        <Copy className="w-3 h-3" />
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
+                  {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
                 </button>
                 {solscanUrl && (
                   <a
@@ -507,22 +492,26 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="text-muted-foreground/60 hover:text-primary transition-colors"
-                    data-testid={`link-solscan-${pool.id}`}
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-primary/20 hover:border-primary/40 transition-colors"
                   >
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
                   </a>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="mb-4 relative min-h-[120px] flex items-center">
-            {/* Entry Box */}
-            <div className="bg-zinc-800/80 border border-white/5 rounded-xl p-4 backdrop-blur-md w-[55%] z-20 shadow-xl">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
-              <div className="text-2xl font-mono font-black text-amber-200 leading-none">
+          <div className="mb-8 relative min-h-[140px] flex items-center">
+            {/* Entry Box - Glassmorphism Style */}
+            <div className="bg-gradient-to-br from-zinc-800/90 to-black/90 border border-white/10 rounded-2xl p-5 backdrop-blur-xl w-[60%] z-20 shadow-[0_8px_32px_rgba(0,0,0,0.5)] relative overflow-hidden group/entry">
+              <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 to-transparent opacity-0 group-hover/entry:opacity-100 transition-opacity duration-500" />
+              <div className="text-[11px] text-muted-foreground uppercase tracking-[0.3em] mb-2 font-black opacity-60">Entry Amount</div>
+              <div className="text-3xl font-mono font-black text-amber-200 leading-none tracking-tighter drop-shadow-[0_0_12px_rgba(251,191,36,0.3)]">
                 {pool.entryAmount.toLocaleString()}
+              </div>
+              <div className="mt-3 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-[9px] text-primary/80 font-bold uppercase tracking-widest">Active Pool</span>
               </div>
             </div>
 
@@ -535,15 +524,28 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             />
           </div>
 
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-muted-foreground" />
-              <span className="text-base text-white font-mono">
-                <span className="text-primary font-bold">{participantsCount}</span>
-                <span className="text-muted-foreground">/{pool.maxParticipants}</span>
-              </span>
-              <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">slots</span>
+          <div className="flex items-center justify-between mb-5 px-1">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+                <Users className="w-5 h-5 text-primary" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-lg text-white font-mono leading-none font-black">
+                  {participantsCount}<span className="text-muted-foreground/50 text-sm mx-0.5">/</span>{pool.maxParticipants}
+                </span>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold">Participants</span>
+              </div>
             </div>
+            
+            <div className="flex items-center gap-3">
+              {pool.initialPriceUsd && pool.currentPriceUsd && (
+                <VolatilityBadge 
+                  initialPrice={pool.initialPriceUsd} 
+                  currentPrice={pool.currentPriceUsd} 
+                />
+              )}
+            </div>
+          </div>
             
             <div className="flex items-center gap-3">
               {/* Mini Volatility Indicator */}
