@@ -424,7 +424,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           }}
         />
 
-        <div className="relative z-10 px-6 pt-6 pb-5">
+        <div className="relative z-10 px-4 pt-4 pb-3">
           {/* Locked/Timer Overlay */}
           {isLocked && (
             <motion.div
@@ -436,33 +436,30 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             </motion.div>
           )}
 
-          {/* Lock Duration (top, centered) */}
+          {/* Lock Duration (top right) */}
           {normalizedStatus === "OPEN" && !isFull && (
-            <div className="flex justify-center mb-6">
-              <div className="px-6 py-3 rounded-full border border-cyan-300/70 bg-black/45 backdrop-blur-md shadow-[0_0_18px_rgba(34,211,238,0.25)]">
-                <div className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-cyan-200" />
-                  <div className="flex flex-col items-center leading-none">
-                    <span className="text-sm font-mono font-black text-white">{pool.lockDuration}m</span>
-                    <span className="text-[9px] text-cyan-200/80 font-black uppercase tracking-[0.25em] mt-1">
-                      LOCK DURATION
-                    </span>
-                  </div>
+            <div className="absolute top-4 right-4 z-20">
+              <div className="px-3 py-1.5 rounded-2xl border border-cyan-300/50 bg-black/40 backdrop-blur-md shadow-[0_0_12px_rgba(34,211,238,0.2)]">
+                <div className="flex flex-col items-center leading-none">
+                  <span className="text-xs font-mono font-black text-white">{pool.lockDuration}m</span>
+                  <span className="text-[7px] text-cyan-200/80 font-black uppercase tracking-[0.1em] mt-0.5">
+                    LOCK DURATION
+                  </span>
                 </div>
               </div>
             </div>
           )}
 
           {/* Header */}
-          <div className="flex items-start gap-4 mb-5">
+          <div className="flex items-start gap-3 mb-3">
             <TokenAvatar logoUrl={tokenMetadata?.logoUrl} symbol={pool.tokenSymbol} accentColor={accentColor} />
 
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <h3 className="text-[26px] font-black text-white truncate leading-none">{pool.tokenSymbol}</h3>
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <h3 className="text-[18px] font-black text-white truncate leading-none">{pool.tokenSymbol}</h3>
                 <span
                   className={cn(
-                    "px-2.5 py-1 text-[10px] font-black uppercase border rounded-md tracking-wider shrink-0",
+                    "px-1.5 py-0.5 text-[8px] font-black uppercase border rounded-md tracking-wider shrink-0",
                     currentStatus.className
                   )}
                 >
