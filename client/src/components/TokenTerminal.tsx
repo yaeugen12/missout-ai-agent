@@ -175,15 +175,15 @@ export function TokenTerminal({ onCreateLottery }: TokenTerminalProps) {
                 <p className="font-mono text-sm text-primary/80 mb-4 uppercase tracking-widest">System Upgrade in Progress</p>
                 <div className="space-y-2 text-xs font-mono text-muted-foreground text-left bg-black/40 p-3 rounded border border-white/5">
                   <div className="flex justify-between">
-                    <span>> STATUS:</span>
+                    <span>{">"} STATUS:</span>
                     <span className="text-yellow-500">DEVELOPMENT</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>> ENGINE:</span>
+                    <span>{">"} ENGINE:</span>
                     <span>HELIUS H-ON-DEMAND</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>> ETA:</span>
+                    <span>{">"} ETA:</span>
                     <span className="text-primary">COMING SOON</span>
                   </div>
                 </div>
