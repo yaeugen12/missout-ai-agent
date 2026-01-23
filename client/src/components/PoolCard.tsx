@@ -86,7 +86,7 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
   return (
-    <div className="absolute -right-10 top-1/2 -translate-y-1/2 w-48 h-48 pointer-events-none overflow-visible">
+    <div className="absolute -right-8 top-1/2 -translate-y-1/2 w-44 h-44 pointer-events-none overflow-visible">
       <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
         <defs>
           <filter id="vortexGlow">
@@ -94,8 +94,8 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
           <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={accentColor} stopOpacity="1" />
-            <stop offset="100%" stopColor={accentColor} stopOpacity="0.4" />
+            <stop offset="0%" stopColor="#FFD700" stopOpacity="1" />
+            <stop offset="100%" stopColor="#B8860B" stopOpacity="0.8" />
           </linearGradient>
         </defs>
         
@@ -108,8 +108,9 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
             r={r}
             fill="transparent"
             stroke="white"
-            strokeWidth="0.25"
-            className="opacity-[0.03]"
+            strokeWidth="0.5"
+            className="opacity-[0.05]"
+            strokeDasharray="1 4"
             style={{ transformOrigin: "center" }}
           />
         ))}
@@ -121,41 +122,13 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
           r="38"
           fill="transparent"
           stroke="url(#ringGradient)"
-          strokeWidth="4"
+          strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset }}
           transition={{ duration: 2.5, ease: "circOut" }}
           style={{ filter: "url(#vortexGlow)" }}
-        />
-
-        {/* Orbiting Photon Sphere (Animated Dots) */}
-        <motion.circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="transparent"
-          stroke={accentColor}
-          strokeWidth="1.5"
-          strokeDasharray="0.5 15"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-          className="opacity-40"
-        />
-        
-        {/* Counter-rotating accretion disk layer */}
-        <motion.circle
-          cx="50"
-          cy="50"
-          r="32"
-          fill="transparent"
-          stroke={accentColor}
-          strokeWidth="0.5"
-          strokeDasharray="2 10"
-          animate={{ rotate: -360 }}
-          transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-          className="opacity-10"
         />
       </svg>
       
@@ -164,37 +137,26 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
         <div 
           className="w-24 h-24 rounded-full relative overflow-hidden flex flex-col items-center justify-center"
           style={{ 
-            background: "radial-gradient(circle at center, #000 20%, #050505 50%, transparent 80%)",
+            background: "radial-gradient(circle at center, #000 30%, #080808 60%, transparent 90%)",
           }}
         >
           {/* Pulsing Core Glow */}
           <motion.div 
             className="absolute inset-0 rounded-full z-0"
             animate={{ 
-              scale: [0.9, 1.1, 0.9],
-              opacity: [0.1, 0.3, 0.1]
+              scale: [0.95, 1.05, 0.95],
+              opacity: [0.1, 0.2, 0.1]
             }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: `radial-gradient(circle at center, ${accentColor.replace("0.8", "0.4")} 0%, transparent 70%)` }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `radial-gradient(circle at center, rgba(255, 215, 0, 0.15) 0%, transparent 70%)` }}
           />
           
           {/* Pool Size Text Integrated in Core */}
           <div className="relative z-10 flex flex-col items-center justify-center text-center">
-            <span className="text-sm font-mono font-black text-white leading-none mb-1">
+            <span className="text-xl font-mono font-black text-amber-100 leading-none mb-1 shadow-sm">
               {(poolSize ?? 0).toLocaleString()}
             </span>
-            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] font-black leading-none">Pool Size</span>
-          </div>
-
-          {/* Inner Singularity Point (subtle backdrop) */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
-            <motion.div 
-              className="w-1 h-1 rounded-full bg-white blur-[1px]"
-              animate={{ 
-                scale: [1, 3, 1],
-              }}
-              transition={{ duration: 3, repeat: Infinity }}
-            />
+            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.2em] font-black leading-none opacity-80">POOL SIZE</span>
           </div>
         </div>
       </div>
@@ -556,10 +518,12 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           </div>
 
           <div className="mb-4 relative min-h-[120px] flex items-center">
-            {/* Entry Box (Full width but limited to make room for vortex) */}
-            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md w-[55%] z-20">
+            {/* Entry Box */}
+            <div className="bg-zinc-800/80 border border-white/5 rounded-xl p-4 backdrop-blur-md w-[55%] z-20 shadow-xl">
               <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
-              <div className="text-lg font-mono font-black text-white leading-none">{pool.entryAmount.toLocaleString()}</div>
+              <div className="text-2xl font-mono font-black text-amber-200 leading-none">
+                {pool.entryAmount.toLocaleString()}
+              </div>
             </div>
 
             {/* Vortex with integrated Pool Size text */}
@@ -573,12 +537,12 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-white font-mono">
+              <Users className="w-5 h-5 text-muted-foreground" />
+              <span className="text-base text-white font-mono">
                 <span className="text-primary font-bold">{participantsCount}</span>
                 <span className="text-muted-foreground">/{pool.maxParticipants}</span>
               </span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">slots</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">slots</span>
             </div>
             
             <div className="flex items-center gap-3">
