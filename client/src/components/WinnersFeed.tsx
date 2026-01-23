@@ -99,14 +99,14 @@ export function WinnersFeed() {
   const displayWinners = buildDisplayArray();
 
   // Calculate scroll distance: winners + separators
-  const cardWidth = 280; // 260px card + 20px gap
-  const separatorWidth = 100; // Width of separator
+  const cardWidth = 220; // Reduced from 280 (200px card + 20px gap)
+  const separatorWidth = 80; // Reduced from 100
   const separatorsCount = winners.length < 5 ? 4 : 2; // cycles - 1
   const scrollDistance = (winners.length * cardWidth) + (separatorsCount * separatorWidth);
 
   return (
     <motion.div 
-      className="fixed top-16 left-0 right-0 bg-transparent border-none overflow-hidden z-50 pointer-events-none"
+      className="fixed top-14 left-0 right-0 bg-transparent border-none overflow-hidden z-50 pointer-events-none"
       initial={{ opacity: 1, y: 0 }}
       animate={{ 
         opacity: isVisible ? 1 : 0, 
@@ -114,19 +114,19 @@ export function WinnersFeed() {
       }}
       transition={{ duration: 0.3 }}
     >
-      <div className="relative h-14 flex items-center pointer-events-auto">
+      <div className="relative h-11 flex items-center pointer-events-auto">
         {/* Gradient fade edges */}
-        <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-black/0 via-black/0 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-black/0 via-black/0 to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-black/20 via-black/10 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-black/20 via-black/10 to-transparent z-10 pointer-events-none" />
 
         {/* Scrolling container */}
         <motion.div
-          className="flex items-center h-full gap-6"
+          className="flex items-center h-full gap-5"
           animate={{
             x: [0, -scrollDistance], // Move exactly one set of unique winners
           }}
           transition={{
-            duration: winners.length * 4, // 4 seconds per winner for readable speed
+            duration: winners.length * 8, // Doubled duration (from 4 to 8) to make it slower
             repeat: Infinity,
             ease: "linear",
           }}
@@ -162,47 +162,32 @@ function WinnerCard({ winner }: { winner: WinnerFeedEntry }) {
   const isPositiveROI = winner.roiPercent > 0;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.03] backdrop-blur-sm rounded-lg border-none hover:bg-white/[0.06] transition-all min-w-[260px] group">
+    <div className="flex items-center gap-2 px-3 py-1 bg-black/20 backdrop-blur-sm rounded-full border border-white/5 hover:bg-white/[0.06] transition-all min-w-[200px] group h-8">
       {/* Avatar */}
-      <Avatar className="w-10 h-10 border-2 border-primary/30">
+      <Avatar className="w-6 h-6 border border-primary/30">
         <AvatarImage src={avatarUrl} alt={winner.displayName} />
-        <AvatarFallback className="bg-primary/20 text-primary text-xs">
+        <AvatarFallback className="bg-primary/20 text-primary text-[8px]">
           {winner.displayName.slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
 
       {/* Winner Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-white truncate">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[11px] font-bold text-white/90 truncate">
             {winner.displayName}
           </span>
-          <span className="text-[10px] text-muted-foreground font-mono">
+          <span className="text-[9px] text-muted-foreground font-mono opacity-70">
             {winner.tokenSymbol}
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-[10px]">
-          <span className="text-muted-foreground">
-            Bet: <span className="text-white font-mono">${winner.betUsd.toFixed(2)}</span>
-          </span>
-          <span className="text-muted-foreground">→</span>
-          <span className="text-muted-foreground">
-            Won: <span className="text-green-400 font-mono font-semibold">${winner.winUsd.toFixed(2)}</span>
+        <div className="flex items-center gap-1.5 text-[9px] leading-none">
+          <span className="text-green-400 font-mono font-bold">${winner.winUsd.toFixed(1)}</span>
+          <span className="text-white/30 text-[8px] font-mono">
+            {isPositiveROI ? "+" : ""}{winner.roiPercent.toFixed(0)}%
           </span>
         </div>
-      </div>
-
-      {/* ROI Badge */}
-      <div
-        className={`px-2 py-1 rounded text-xs font-bold font-mono ${
-          isPositiveROI
-            ? "bg-green-500/20 text-green-400 border border-green-500/30"
-            : "bg-red-500/20 text-red-400 border border-red-500/30"
-        }`}
-      >
-        {isPositiveROI ? "+" : ""}
-        {winner.roiPercent.toFixed(0)}%
       </div>
     </div>
   );
