@@ -2,9 +2,10 @@ import { memo, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { type Pool } from "@/types/shared";
 import { cn } from "@/lib/utils";
-import { ArrowRight, Copy, Check, ExternalLink, Users, Heart, Eye, Loader2 } from "lucide-react";
+import { ArrowRight, Copy, Check, ExternalLink, Users, Clock, Heart, Eye, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTokenMetadata } from "@/hooks/use-token-metadata";
+import { useCountdown } from "@/hooks/use-countdown";
 import { getTokenAccentColor, shortenAddress } from "@/lib/colorUtils";
 import { Button } from "@/components/ui/button";
 import { DonateModal } from "@/components/DonateModal";
@@ -20,21 +21,27 @@ interface PoolCardProps {
 
 function TokenAvatar({ 
   logoUrl, 
-  symbol 
+  symbol, 
+  accentColor 
 }: { 
   logoUrl?: string; 
-  symbol: string;
+  symbol: string; 
+  accentColor: string;
 }) {
   const [imgError, setImgError] = useState(false);
   
   if (logoUrl && !imgError) {
     return (
-      <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-amber-500/50">
+      <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-white/10">
         <img
           src={logoUrl}
           alt={symbol}
           className="w-full h-full object-cover"
           onError={() => setImgError(true)}
+        />
+        <div 
+          className="absolute inset-0 opacity-30"
+          style={{ background: `radial-gradient(circle at center, transparent 40%, ${accentColor} 100%)` }}
         />
       </div>
     );
@@ -42,63 +49,214 @@ function TokenAvatar({
   
   return (
     <div 
-      className="relative w-14 h-14 rounded-full flex items-center justify-center ring-2 ring-amber-500/50"
+      className="relative w-14 h-14 rounded-full flex items-center justify-center ring-2 ring-white/10"
       style={{ 
-        background: "linear-gradient(135deg, #D4A574 0%, #8B6914 50%, #5C4A1F 100%)"
+        background: `radial-gradient(circle at 30% 30%, ${accentColor.replace("0.8", "0.4")} 0%, rgba(0,0,0,0.9) 70%)` 
       }}
     >
-      <span className="text-lg font-bold text-white">{symbol.slice(0, 2)}</span>
+      <span className="text-lg font-bold text-white/90">{symbol.slice(0, 2)}</span>
+      <div className="absolute inset-0 rounded-full animate-pulse opacity-30" 
+        style={{ boxShadow: `inset 0 0 20px ${accentColor}` }} 
+      />
     </div>
   );
 }
 
-function ProgressRing({ percentFull, poolSize }: { percentFull: number; poolSize: number }) {
-  const circumference = 2 * Math.PI * 42;
+function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { percentFull: number; accentColor: string; poolSize?: number; symbol?: string }) {
+  const circumference = 2 * Math.PI * 38;
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
   return (
-    <div className="relative w-28 h-28">
-      <svg className="w-full h-full rotate-[-90deg]" viewBox="0 0 100 100">
+    <div className="absolute -right-10 top-1/2 -translate-y-1/2 w-48 h-48 pointer-events-none overflow-visible">
+      <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
         <defs>
-          <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFD700" />
-            <stop offset="50%" stopColor="#DAA520" />
-            <stop offset="100%" stopColor="#B8860B" />
-          </linearGradient>
-          <filter id="goldGlow">
-            <feGaussianBlur stdDeviation="2" result="blur"/>
+          <filter id="vortexGlow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
+          <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={accentColor} stopOpacity="1" />
+            <stop offset="100%" stopColor={accentColor} stopOpacity="0.4" />
+          </linearGradient>
         </defs>
         
-        <circle
-          cx="50"
-          cy="50"
-          r="42"
-          fill="transparent"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="4"
-        />
+        {/* Ambient Cosmic Dust (Static Rings) */}
+        {[30, 34, 38, 42].map((r, i) => (
+          <circle
+            key={r}
+            cx="50"
+            cy="50"
+            r={r}
+            fill="transparent"
+            stroke="white"
+            strokeWidth="0.25"
+            className="opacity-[0.03]"
+            style={{ transformOrigin: "center" }}
+          />
+        ))}
         
+        {/* Main Event Horizon Progress Ring */}
         <motion.circle
           cx="50"
           cy="50"
-          r="42"
+          r="38"
           fill="transparent"
-          stroke="url(#goldGradient)"
-          strokeWidth="5"
+          stroke="url(#ringGradient)"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ filter: "url(#goldGlow)", }}
+          transition={{ duration: 2.5, ease: "circOut" }}
+          style={{ filter: "url(#vortexGlow)" }}
+        />
+
+        {/* Orbiting Photon Sphere (Animated Dots) */}
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="45"
+          fill="transparent"
+          stroke={accentColor}
+          strokeWidth="1.5"
+          strokeDasharray="0.5 15"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+          className="opacity-40"
+        />
+        
+        {/* Counter-rotating accretion disk layer */}
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="32"
+          fill="transparent"
+          stroke={accentColor}
+          strokeWidth="0.5"
+          strokeDasharray="2 10"
+          animate={{ rotate: -360 }}
+          transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
+          className="opacity-10"
         />
       </svg>
       
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold text-white">{poolSize.toLocaleString()}</span>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Pool Size</span>
+      {/* Central Singularity (The Black Hole Core) with Text */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div 
+          className="w-24 h-24 rounded-full relative overflow-hidden flex flex-col items-center justify-center"
+          style={{ 
+            background: "radial-gradient(circle at center, #000 20%, #050505 50%, transparent 80%)",
+          }}
+        >
+          {/* Pulsing Core Glow */}
+          <motion.div 
+            className="absolute inset-0 rounded-full z-0"
+            animate={{ 
+              scale: [0.9, 1.1, 0.9],
+              opacity: [0.1, 0.3, 0.1]
+            }}
+            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: `radial-gradient(circle at center, ${accentColor.replace("0.8", "0.4")} 0%, transparent 70%)` }}
+          />
+          
+          {/* Pool Size Text Integrated in Core */}
+          <div className="relative z-10 flex flex-col items-center justify-center text-center">
+            <span className="text-sm font-mono font-black text-white leading-none mb-1">
+              {(poolSize ?? 0).toLocaleString()}
+            </span>
+            <span className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] font-black leading-none">Pool Size</span>
+          </div>
+
+          {/* Inner Singularity Point (subtle backdrop) */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+            <motion.div 
+              className="w-1 h-1 rounded-full bg-white blur-[1px]"
+              animate={{ 
+                scale: [1, 3, 1],
+              }}
+              transition={{ duration: 3, repeat: Infinity }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CountdownRing({ 
+  endTime, 
+  lockDuration, 
+  accentColor,
+  status 
+}: { 
+  endTime: Date | null; 
+  lockDuration: number;
+  accentColor: string;
+  status: string;
+}) {
+  const countdown = useCountdown(endTime, lockDuration);
+  
+  if (status !== "LOCKED" && status !== "UNLOCKING") {
+    return null;
+  }
+  
+  const circumference = 2 * Math.PI * 18;
+  const strokeDashoffset = circumference - (circumference * countdown.percentRemaining) / 100;
+  
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative w-10 h-10">
+        <svg className="w-full h-full rotate-[-90deg]" viewBox="0 0 44 44">
+          <circle
+            cx="22"
+            cy="22"
+            r="18"
+            fill="transparent"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="text-white/10"
+          />
+          <motion.circle
+            cx="22"
+            cy="22"
+            r="18"
+            fill="transparent"
+            stroke={accentColor}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            initial={{ strokeDashoffset: circumference }}
+            animate={{ strokeDashoffset }}
+            transition={{ duration: 0.5 }}
+            style={{ filter: `drop-shadow(0 0 4px ${accentColor})` }}
+          />
+        </svg>
+        <Clock className="absolute inset-0 m-auto w-4 h-4 text-white/70" />
+      </div>
+      <div className="text-right">
+        <div className="text-sm font-mono font-bold text-white">{countdown.formatted}</div>
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">remaining</div>
+      </div>
+    </div>
+  );
+}
+
+function CountdownOverlay({ 
+  endTime, 
+  lockDuration 
+}: { 
+  endTime: Date | null; 
+  lockDuration: number;
+}) {
+  const countdown = useCountdown(endTime, lockDuration);
+  return (
+    <div className="bg-black/80 border-2 border-yellow-400 px-6 py-4 rounded-xl shadow-[0_0_30px_rgba(250,204,21,0.4)] flex flex-col items-center gap-2 transform scale-110">
+      <Clock className="w-8 h-8 text-yellow-400 animate-pulse" />
+      <div className="flex flex-col items-center">
+        <span className="text-3xl font-mono font-black text-white leading-none">
+          {countdown.formatted}
+        </span>
+        <span className="text-[10px] text-yellow-400 font-black uppercase tracking-[0.2em] mt-1">EVENT HORIZON</span>
       </div>
     </div>
   );
@@ -109,6 +267,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const [donateModalOpen, setDonateModalOpen] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const tokenMetadata = useTokenMetadata(pool.tokenSymbol);
+  const accentColor = getTokenAccentColor(pool.tokenSymbol);
   const { connected, joinPool: sdkJoinPool } = useMissoutSDK();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -121,19 +280,58 @@ function PoolCardComponent({ pool }: PoolCardProps) {
   const percentFull = Math.min(100, (participantsCount / pool.maxParticipants) * 100);
   const isFull = percentFull >= 100;
   const normalizedStatus = pool.status.toUpperCase();
-  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED";
+  const isActive = normalizedStatus === "OPEN" || normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS" || normalizedStatus === "RANDOMNESSCOMMITTED" || normalizedStatus === "RANDOMNESSREVEALED";
+  const isLocked = normalizedStatus === "LOCKED" || normalizedStatus === "UNLOCKING" || normalizedStatus === "RANDOMNESS" || normalizedStatus === "RANDOMNESSCOMMITTED" || normalizedStatus === "RANDOMNESSREVEALED";
   const canDonate = normalizedStatus !== "ENDED" && normalizedStatus !== "CANCELLED" && normalizedStatus !== "WINNERSELECTED" && normalizedStatus !== "WINNER";
   
+  const lockEndTime = pool.lockTime 
+    ? new Date(new Date(pool.lockTime).getTime() + pool.lockDuration * 60 * 1000)
+    : null;
+
   const poolAddress = pool.poolAddress;
   const solscanUrl = poolAddress ? `https://solscan.io/account/${poolAddress}` : null;
 
   const statusConfig: Record<string, { label: string; className: string }> = {
-    OPEN: { label: "OPEN", className: "text-primary border-primary/50 bg-primary/10" },
-    LOCKED: { label: "LOCKED", className: "text-yellow-400 border-yellow-400/50 bg-yellow-400/10" },
-    WINNER: { label: "ENDED", className: "text-green-400 border-green-400/50 bg-green-400/10" },
-    WINNERSELECTED: { label: "ENDED", className: "text-green-400 border-green-400/50 bg-green-400/10" },
-    ENDED: { label: "ENDED", className: "text-gray-500 border-gray-500/50 bg-gray-500/10" },
-    CANCELLED: { label: "REFUND", className: "text-red-400 border-red-400/50 bg-red-400/10" },
+    OPEN: {
+      label: "OPEN",
+      className: "text-primary border-primary/50 bg-primary/10"
+    },
+    LOCKED: {
+      label: "HORIZON",
+      className: "text-yellow-400 border-yellow-400/50 bg-yellow-400/10"
+    },
+    UNLOCKING: {
+      label: "UNLOCKING",
+      className: "text-orange-400 border-orange-400/50 bg-orange-400/10"
+    },
+    RANDOMNESS: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
+    },
+    RANDOMNESSCOMMITTED: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
+    },
+    RANDOMNESSREVEALED: {
+      label: "DRAWING",
+      className: "text-purple-400 border-purple-400/50 bg-purple-400/10"
+    },
+    WINNERSELECTED: {
+      label: "ESCAPED",
+      className: "text-green-400 border-green-400/50 bg-green-400/10"
+    },
+    WINNER: {
+      label: "ESCAPED",
+      className: "text-green-400 border-green-400/50 bg-green-400/10"
+    },
+    ENDED: {
+      label: "COLLAPSED",
+      className: "text-gray-500 border-gray-500/50 bg-gray-500/10"
+    },
+    CANCELLED: {
+      label: "REFUND",
+      className: "text-red-400 border-red-400/50 bg-red-400/10"
+    },
   };
 
   const currentStatus = statusConfig[normalizedStatus] || statusConfig.OPEN;
@@ -164,6 +362,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
     
     setIsJoining(true);
     try {
+      // 1. SDK Join (On-chain)
       const result = await sdkJoinPool({
         poolId: poolAddress || pool.id.toString(),
         amount: pool.entryAmount.toString(),
@@ -173,6 +372,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         throw new Error("No transaction signature returned from wallet");
       }
 
+      // 2. Notify Backend
       await apiFetch(`/api/pools/${pool.id}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,48 +383,139 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         credentials: 'include'
       });
 
-      toast({ title: "Success", description: "Successfully joined the void!" });
+      toast({
+        title: "Success",
+        description: "Successfully joined the void!",
+      });
 
+      // 3. Refresh Data
       queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
       queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
 
     } catch (err: any) {
       console.error("Join error:", err);
-      toast({ variant: "destructive", title: "Error", description: err.message || "Failed to join pool" });
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err.message || "Failed to join pool",
+      });
     } finally {
       setIsJoining(false);
     }
   }, [isJoining, connected, walletAddress, sdkJoinPool, pool, poolAddress, toast, queryClient]);
 
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    if (donateModalOpen || isJoining) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, [donateModalOpen, isJoining]);
+
   return (
-    <Link href={`/pool/${pool.id}`} className="block group" data-testid={`card-pool-${pool.id}`}>
+    <Link href={`/pool/${pool.id}`} className="block group" data-testid={`card-pool-${pool.id}`} onClick={handleCardClick}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ y: -4 }}
+        whileHover={{ y: -6, scale: 1.01 }}
         transition={{ duration: 0.3 }}
-        className="relative bg-zinc-900/90 border border-cyan-500/20 rounded-2xl p-5 overflow-hidden backdrop-blur-xl"
+        className={cn(
+          "relative h-full bg-black/70 border border-white/10 p-5 overflow-hidden backdrop-blur-xl",
+          "transition-all duration-300",
+          "hover:border-white/20",
+          isActive && "hover:shadow-[0_0_40px_rgba(0,240,255,0.12)]"
+        )}
         style={{
-          boxShadow: "0 0 30px rgba(0, 200, 255, 0.05), inset 0 1px 0 rgba(255,255,255,0.05)",
+          boxShadow: isActive ? `0 0 30px ${accentColor.replace("0.8", "0.08")}` : undefined,
         }}
       >
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-3">
+        <motion.div 
+          className="absolute inset-0 pointer-events-none"
+          initial={{ opacity: 0 }}
+          whileHover={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          style={{
+            background: `radial-gradient(circle at 80% 50%, ${accentColor.replace("0.8", "0.08")} 0%, transparent 50%)`,
+          }}
+        />
+
+        <div className="relative z-10 pt-2">
+          {/* Locked/Timer Overlay - Takes full card surface but transparent */}
+          {isLocked && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute -inset-5 z-50 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] pointer-events-none"
+            >
+              <CountdownOverlay endTime={lockEndTime} lockDuration={pool.lockDuration} />
+            </motion.div>
+          )}
+
+          {/* Lock Time Indicator - ABSOLUTELY PROMINENT WITHIN CARD FLOW */}
+          {normalizedStatus === "OPEN" && !isFull && (
+            <div className="flex justify-center mb-4">
+              <div className="bg-black/80 border-2 border-primary px-4 py-2 rounded-full shadow-[0_0_20px_rgba(0,243,255,0.6)] flex items-center gap-3 animate-pulse">
+                <Clock className="w-5 h-5 text-primary" />
+                <div className="flex flex-col items-center">
+                  <span className="text-sm font-mono font-black text-white leading-none">{pool.lockDuration}m</span>
+                  <span className="text-[8px] text-primary font-black uppercase tracking-widest leading-none mt-1">LOCK DURATION</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex items-start gap-4 mb-4">
             <TokenAvatar 
               logoUrl={tokenMetadata?.logoUrl} 
-              symbol={pool.tokenSymbol}
+              symbol={pool.tokenSymbol} 
+              accentColor={accentColor}
             />
-            <div>
-              <h3 className="text-xl font-bold text-white">{pool.tokenSymbol}</h3>
-              <p className="text-sm text-muted-foreground">{pool.tokenName || "Unknown Token"}</p>
-              <div className="flex items-center gap-1.5 mt-1">
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h3 className="text-xl font-display font-black text-white group-hover:text-primary transition-colors truncate">
+                  {pool.tokenSymbol}
+                </h3>
+                <span className={cn(
+                  "px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm tracking-tight shrink-0",
+                  currentStatus.className
+                )}>
+                  {currentStatus.label}
+                </span>
+              </div>
+              <p className="text-muted-foreground text-xs truncate mb-1">
+                {pool.tokenName}
+              </p>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleCopyPoolAddress}
-                  className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors font-mono"
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                   data-testid={`button-copy-pool-${pool.id}`}
                 >
-                  {poolAddress ? shortenAddress(poolAddress) : `#${pool.id}`}
-                  {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                  <span className="font-mono">
+                    {poolAddress ? shortenAddress(poolAddress) : `#${pool.id}`}
+                  </span>
+                  <AnimatePresence mode="wait">
+                    {copied ? (
+                      <motion.span
+                        key="check"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Check className="w-3 h-3 text-green-400" />
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="copy"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                      >
+                        <Copy className="w-3 h-3" />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </button>
                 {solscanUrl && (
                   <a
@@ -233,6 +524,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
                     className="text-muted-foreground/60 hover:text-primary transition-colors"
+                    data-testid={`link-solscan-${pool.id}`}
                   >
                     <ExternalLink className="w-3 h-3" />
                   </a>
@@ -240,73 +532,117 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               </div>
             </div>
           </div>
-          
-          <div className="flex flex-col items-center bg-cyan-500/10 border border-cyan-500/30 rounded-lg px-3 py-2">
-            <span className="text-lg font-bold text-cyan-400">{pool.lockDuration}m</span>
-            <span className="text-[8px] text-cyan-400/70 uppercase tracking-wider">Lock Duration</span>
+
+          <div className="mb-4 relative min-h-[120px] flex items-center">
+            {/* Entry Box (Full width but limited to make room for vortex) */}
+            <div className="bg-white/5 border border-white/5 rounded-lg p-3 backdrop-blur-md w-[55%] z-20">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] mb-1 font-bold">Entry</div>
+              <div className="text-lg font-mono font-black text-white leading-none">{pool.entryAmount.toLocaleString()}</div>
+            </div>
+
+            {/* Vortex with integrated Pool Size text */}
+            <VortexRing 
+              percentFull={percentFull} 
+              accentColor={accentColor} 
+              poolSize={totalPot}
+              symbol={pool.tokenSymbol}
+            />
           </div>
-        </div>
 
-        <div className="flex items-center justify-between mb-4">
-          <div className="bg-zinc-800/50 border border-white/5 rounded-xl p-4">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry</div>
-            <div className="text-2xl font-bold text-amber-200">{pool.entryAmount.toLocaleString()}</div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-white font-mono">
+                <span className="text-primary font-bold">{participantsCount}</span>
+                <span className="text-muted-foreground">/{pool.maxParticipants}</span>
+              </span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">slots</span>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <CountdownRing 
+                endTime={lockEndTime}
+                lockDuration={pool.lockDuration}
+                accentColor={accentColor}
+                status={pool.status}
+              />
+            </div>
           </div>
-          
-          <ProgressRing percentFull={percentFull} poolSize={totalPot} />
-        </div>
 
-        <div className="flex items-center gap-2 mb-5">
-          <Users className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm text-white font-mono">
-            <span className="text-primary font-bold">{participantsCount}</span>
-            <span className="text-muted-foreground">/{pool.maxParticipants}</span>
-          </span>
-          <span className="text-xs text-muted-foreground">slots</span>
-        </div>
-
-        {normalizedStatus === "OPEN" && !isFull && (
-          <Button 
-            className="w-full h-12 text-sm font-bold uppercase tracking-wider bg-gradient-to-r from-cyan-500 to-cyan-400 hover:from-cyan-400 hover:to-cyan-300 text-black rounded-xl mb-3"
-            onClick={handleJoinClick}
-            disabled={isJoining || !connected}
-            data-testid={`button-join-pool-${pool.id}`}
-          >
-            {isJoining ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                GET PULLED IN
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </>
+          <div className="flex gap-1.5 mb-5">
+            {[...Array(Math.min(pool.maxParticipants, 20))].map((_, i) => (
+              <motion.div
+                key={i}
+                initial={false}
+                animate={{
+                  backgroundColor: i < participantsCount 
+                    ? accentColor 
+                    : "rgba(255, 255, 255, 0.05)",
+                  boxShadow: i < participantsCount 
+                    ? `0 0 8px ${accentColor}` 
+                    : "none",
+                }}
+                transition={{ duration: 0.4, delay: i * 0.02 }}
+                className="h-1 flex-1 rounded-full"
+                style={{ maxWidth: "20px" }}
+              />
+            ))}
+            {pool.maxParticipants > 20 && (
+              <span className="text-[9px] text-muted-foreground self-center">
+                +{pool.maxParticipants - 20}
+              </span>
             )}
-          </Button>
-        )}
+          </div>
 
-        <div className="flex gap-2">
-          {canDonate && (
-            <Button
-              variant="outline"
-              className="flex-1 h-10 border-white/10 hover:border-white/20 hover:bg-white/5 rounded-xl"
-              onClick={handleDonateClick}
-              data-testid={`button-donate-pool-${pool.id}`}
-            >
-              <Heart className="w-4 h-4 mr-2 text-pink-400" />
-              <span className="text-sm">DONATE</span>
-            </Button>
-          )}
-          
-          <Button
-            variant="outline"
-            className={cn(
-              "flex-1 h-10 border-white/10 hover:border-white/20 hover:bg-white/5 rounded-xl",
-              currentStatus.className
+          <div className="flex flex-wrap items-center gap-2">
+            {normalizedStatus === "OPEN" && !isFull && !isLocked && (
+              <Button 
+                className="flex-1 min-w-[120px] gap-1.5 font-bold uppercase tracking-wider text-[10px] group/btn"
+                size="sm"
+                onClick={handleJoinClick}
+                disabled={isJoining || !connected}
+                data-testid={`button-join-pool-${pool.id}`}
+              >
+                {isJoining ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Joining...
+                  </>
+                ) : (
+                  <>
+                    Get Pulled In
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-0.5" />
+                  </>
+                )}
+              </Button>
             )}
-            data-testid={`button-status-pool-${pool.id}`}
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            <span className="text-sm">{currentStatus.label}</span>
-          </Button>
+            <div className="flex gap-2 w-full sm:w-auto flex-1">
+              {canDonate && !isLocked && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleDonateClick}
+                  className="flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]"
+                  data-testid={`button-donate-pool-${pool.id}`}
+                >
+                  <Heart className="w-3.5 h-3.5" />
+                  Donate
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                className={cn(
+                  "flex-1 gap-1.5 font-bold uppercase tracking-wider text-[10px]",
+                  isLocked && "w-full z-[60] pointer-events-auto bg-black/60 border-yellow-400/50 hover:bg-yellow-400/10"
+                )}
+                size="sm"
+                data-testid={`button-view-pool-${pool.id}`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Open
+              </Button>
+            </div>
+          </div>
         </div>
 
         <DonateModal
