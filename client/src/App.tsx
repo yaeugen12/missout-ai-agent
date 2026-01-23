@@ -80,7 +80,7 @@ function App() {
               <div className="min-h-screen bg-black text-white selection:bg-primary/30 flex flex-col">
                 <Navbar />
                 <WinnersFeed />
-                <main className="container mx-auto px-4 py-8 flex-1">
+                <main className="flex-1">
                   <Router />
                 </main>
                 <Footer />
