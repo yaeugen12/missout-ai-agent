@@ -21,6 +21,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
 const DEV_WALLET_PUBKEY = import.meta.env.VITE_DEV_WALLET_PUBKEY || "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import {
   Loader2,
   ArrowLeft,
@@ -136,10 +137,19 @@ export default function CreatePool() {
       signature = sdkResult?.tx;
       poolAddress = sdkResult?.poolId;
 
+      if (signature) {
+        showTransactionToast({
+          type: "success",
+          title: "On-Chain Success",
+          description: "Black hole initialized in the void.",
+          txHash: signature
+        });
+      }
+
     } catch (err: any) {
       console.error("=== SDK_ERROR ===", err);
-      toast({ 
-        variant: "destructive", 
+      showTransactionToast({ 
+        type: "error",
         title: "Transaction Failed", 
         description: err.message || "Could not create pool on-chain"
       });
@@ -148,18 +158,15 @@ export default function CreatePool() {
 
     if (!signature) {
       console.error("=== GUARD_NO_SIGNATURE ===");
-      toast({ variant: "destructive", title: "No Signature", description: "Wallet did not return a transaction signature." });
+      showTransactionToast({ type: "error", title: "No Signature", description: "Wallet did not return a transaction signature." });
       return;
     }
 
     if (!poolAddress) {
       console.error("=== GUARD_NO_POOL_PDA ===");
-      toast({ variant: "destructive", title: "No Pool Address", description: "Could not derive pool address." });
+      showTransactionToast({ type: "error", title: "No Pool Address", description: "Could not derive pool address." });
       return;
     }
-
-
-    toast({ title: "On-Chain Success", description: `TX: ${signature.slice(0, 8)}...` });
 
 
     createPoolBackend({
@@ -175,13 +182,21 @@ export default function CreatePool() {
       creatorWallet: address,
     }, {
       onSuccess: (pool) => {
-        toast({ title: "Black Hole Initialized", description: "The singularity has been created." });
+        showTransactionToast({ 
+          type: "success",
+          title: "Black Hole Initialized", 
+          description: "The singularity has been created and synced." 
+        });
 
         setLocation(`/pool/${pool.id}`);
       },
       onError: (err) => {
         console.error("=== BACKEND_ERROR ===", err);
-        toast({ variant: "destructive", title: "Backend Sync Failed", description: "Pool created on-chain but not saved to database." });
+        showTransactionToast({ 
+          type: "error",
+          title: "Backend Sync Failed", 
+          description: "Pool created on-chain but not saved to database." 
+        });
       }
     });
   };
@@ -229,16 +244,22 @@ export default function CreatePool() {
         connection
       );
       
-      toast({ 
+      showTransactionToast({ 
+        type: "success",
         title: "Swap Successful!", 
-        description: `Bought ${formatTokenAmount(result.outputAmount, tokenInfo?.decimals || 9)} ${tokenInfo?.symbol}` 
+        description: `Bought ${formatTokenAmount(result.outputAmount, tokenInfo?.decimals || 9)} ${tokenInfo?.symbol}`,
+        txHash: result.signature
       });
       
       setJupiterQuote(null);
       setSolAmount("");
     } catch (error: any) {
       console.error("[Jupiter] Swap error:", error);
-      toast({ variant: "destructive", title: "Swap Failed", description: error.message });
+      showTransactionToast({ 
+        type: "error",
+        title: "Swap Failed", 
+        description: error.message 
+      });
     } finally {
       setIsSwapping(false);
     }

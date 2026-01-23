@@ -379,7 +379,11 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
       } catch (err: any) {
         console.error("Join error:", err);
-        toast({ variant: "destructive", title: "Error", description: err.message || "Failed to join pool" });
+        showTransactionToast({
+          type: "error",
+          title: "Pull Failed",
+          description: err.message || "Failed to join pool"
+        });
       } finally {
         setIsJoining(false);
       }

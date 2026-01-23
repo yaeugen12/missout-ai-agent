@@ -10,6 +10,7 @@ import { Loader2, Wallet, RefreshCw, ArrowUpFromLine, Coins, Sparkles, Zap } fro
 import { cn } from "@/lib/utils";
 import type { BatchClaimProgress } from "@/lib/solana-sdk";
 import bs58 from "bs58";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import { apiFetch } from "@/lib/api";
 
 
@@ -86,17 +87,19 @@ export default function Claims() {
         throw new Error(error.message || 'Failed to mark refund as claimed');
       }
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Refund Claimed!",
-        description: `Your tokens escaped the collapsed pool. TX: ${result.tx.slice(0, 8)}...`,
+        description: `Your tokens escaped the collapsed pool.`,
+        txHash: result.tx
       });
       queryClient.invalidateQueries({ queryKey: ["/api/pools/claimable"] });
     } catch (error: any) {
       console.error("Claim refund error:", error);
-      toast({
+      showTransactionToast({
+        type: "error",
         title: "Refund Failed",
-        description: error.message || "Failed to claim refund",
-        variant: "destructive",
+        description: error.message || "Failed to claim refund"
       });
     } finally {
       setClaimingRefund(null);
@@ -142,17 +145,19 @@ export default function Claims() {
         throw new Error(error.message || 'Failed to mark rent as claimed');
       }
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Rent Reclaimed!",
-        description: `Gravitational costs recovered. TX: ${result.tx.slice(0, 8)}...`,
+        description: `Gravitational costs recovered.`,
+        txHash: result.tx
       });
       queryClient.invalidateQueries({ queryKey: ["/api/pools/claimable"] });
     } catch (error: any) {
       console.error("Claim rent error:", error);
-      toast({
+      showTransactionToast({
+        type: "error",
         title: "Rent Claim Failed",
-        description: error.message || "Failed to claim rent",
-        variant: "destructive",
+        description: error.message || "Failed to claim rent"
       });
     } finally {
       setClaimingRent(null);

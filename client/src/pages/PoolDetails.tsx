@@ -23,6 +23,7 @@ import { MissoutClient, getMissoutClient } from "@/lib/solana-sdk/client";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { apiFetch } from "@/lib/api";
 import { socket } from "@/lib/socket";
@@ -199,9 +200,11 @@ export default function PoolDetails() {
         console.warn("Balance diff error", e);
       }
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Successfully Pulled In!",
         description: `You have joined the black hole.${balanceMsg}`,
+        txHash: result.tx
       });
 
       // Immediately invalidate queries to refresh pool data
@@ -209,17 +212,10 @@ export default function PoolDetails() {
       invalidateQueries();
     } catch (err: any) {
       console.error("=== JOIN_ERROR ===", err);
-      // Extract logs if available in error message
-      let detailedError = err.message || "Could not join the black hole.";
-      if (err.message?.includes("Logs:")) {
-        const parts = err.message.split("Logs:");
-        detailedError = parts[0] + "\n\nProgram Logs:\n" + parts[1].replace(/ \| /g, "\n");
-      }
-
-      toast({
-        variant: "destructive",
+      showTransactionToast({
+        type: "error",
         title: "Pull Failed",
-        description: <pre className="mt-2 w-full overflow-x-auto font-mono text-[10px] leading-tight bg-black/50 p-2 rounded border border-white/10 whitespace-pre-wrap">{detailedError}</pre>,
+        description: err.message || "Could not join the black hole."
       });
     } finally {
       setIsJoining(false);
@@ -265,9 +261,11 @@ export default function PoolDetails() {
         credentials: 'include'
       });
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Fed the Void",
-        description: `Donated ${amount} ${pool.tokenSymbol}! Tx: ${result.tx.slice(0, 8)}...`,
+        description: `Donated ${amount} ${pool.tokenSymbol}!`,
+        txHash: result.tx
       });
 
       setDonateModalOpen(false);
@@ -275,8 +273,8 @@ export default function PoolDetails() {
       invalidateQueries();
     } catch (err) {
       console.error("=== DONATE_ERROR ===", err);
-      toast({
-        variant: "destructive",
+      showTransactionToast({
+        type: "error",
         title: "Donation Failed",
         description: err instanceof Error ? err.message : "Transaction failed",
       });
@@ -327,9 +325,11 @@ export default function PoolDetails() {
 
       const explorerUrl = getSolscanTxUrl(result.tx);
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Pool Cancelled",
-        description: `Black hole collapsed. Tx: ${result.tx.slice(0, 8)}...`,
+        description: `Black hole collapsed.`,
+        txHash: result.tx
       });
 
       // Immediately invalidate queries to refresh pool data
@@ -346,8 +346,8 @@ export default function PoolDetails() {
         errorMessage = err.message;
       }
 
-      toast({
-        variant: "destructive",
+      showTransactionToast({
+        type: "error",
         title: "Cancel Failed",
         description: errorMessage,
       });
@@ -378,14 +378,16 @@ export default function PoolDetails() {
         console.warn("Backend notification failed", err);
       }
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Refund Claimed",
-        description: `Tokens returned. Tx: ${result.tx.slice(0, 8)}...`,
+        description: `Tokens returned.`,
+        txHash: result.tx
       });
       invalidateQueries();
     } catch (err) {
-      toast({
-        variant: "destructive",
+      showTransactionToast({
+        type: "error",
         title: "Refund Failed",
         description: err instanceof Error ? err.message : "Transaction failed",
       });

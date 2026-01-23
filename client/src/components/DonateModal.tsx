@@ -11,6 +11,7 @@ import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useToast } from "@/hooks/use-toast";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import { shortenAddress } from "@/lib/colorUtils";
 import { ExternalLink, Heart, Wallet, Loader2, Copy, Check, AlertCircle } from "lucide-react";
 
@@ -75,9 +76,11 @@ export function DonateModal({ pool, open, onOpenChange }: DonateModalProps) {
         amount: amount,
       });
 
-      toast({
+      showTransactionToast({
+        type: "success",
         title: "Donation Successful",
-        description: `You fed ${amount} ${pool.tokenSymbol} to the void! Tx: ${result.tx.slice(0, 8)}...`,
+        description: `You fed ${amount} ${pool.tokenSymbol} to the void!`,
+        txHash: result.tx
       });
 
       queryClient.invalidateQueries({ queryKey: [api.pools.list.path] });
@@ -87,10 +90,10 @@ export function DonateModal({ pool, open, onOpenChange }: DonateModalProps) {
       onOpenChange(false);
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Transaction failed");
-      toast({
+      showTransactionToast({
+        type: "error",
         title: "Donation Failed",
         description: err.message,
-        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
