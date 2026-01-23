@@ -1628,39 +1628,6 @@ export async function registerRoutes(
   // Start pool monitor
   poolMonitor.start();
 
-  // Development only - Reset pools
-  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === undefined) {
-    app.post("/api/dev/reset-pools", async (req, res) => {
-      try {
-        await db.delete(pools);
-        res.json({ success: true, message: "All pools deleted" });
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-
-    // Seed dummy winner for testing feed
-    app.post("/api/dev/seed-winner", async (req, res) => {
-      try {
-        const poolId = 1;
-
-        const entry = await storage.createWinnerFeedEntry({
-          poolId: poolId,
-          winnerWallet: "B6xyJ25Z9J5cd6BHvgVaqjVEEi38phUQKokCw2oPQQJN",
-          displayName: "pepe",
-          avatarUrl: "https://19bcdec2-82b5-4b83-b693-5924166c6a2c-00-3h719vsfvrfbd.picard.replit.dev/uploads/d380463444e13b07a560dbabc98720f7.png",
-          tokenSymbol: "HNCZ9F",
-          betUsd: 10.50,
-          winUsd: 94.50,
-          roiPercent: 800,
-        });
-        res.json({ success: true, entry });
-      } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-      }
-    });
-  }
-
   // Profile Routes
   const shortenWallet = (wallet: string) => `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
   const generateDicebearAvatar = (wallet: string, style: string = "bottts") => 
