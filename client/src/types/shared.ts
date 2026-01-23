@@ -8,8 +8,10 @@ export interface Pool {
   status: string;
   tokenMint: string;
   tokenSymbol: string;
-  entryAmount: string;
+  tokenName: string;
+  entryAmount: number;
   currentParticipants: number;
+  participantsCount: number;
   maxParticipants: number;
   creatorWallet: string;
   createdAt: Date | string;
@@ -17,6 +19,8 @@ export interface Pool {
   winnerWallet: string | null;
   randomnessAccount: string | null;
   randomnessRequested: boolean;
+  lockDuration: number;
+  totalPot: number;
   participants?: Array<{ walletAddress: string }>;
 }
 
