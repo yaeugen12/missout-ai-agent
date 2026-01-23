@@ -47,8 +47,8 @@ export function BlackHoleCore({ intensity, status }: BlackHoleCoreProps) {
           boxShadow: `0 0 ${intensity * 50}px ${intensity * 20}px rgba(0, 240, 255, 0.2)`
         }}
       >
-        <div className="absolute inset-0 rounded-full border-t border-primary/80 blur-[2px]" />
-        <div className="absolute inset-2 rounded-full border-b border-secondary/50 blur-[1px]" />
+        <div className="absolute inset-0 rounded-full border border-primary/30 blur-[2px]" />
+        <div className="absolute inset-2 rounded-full border border-secondary/20 blur-[1px]" />
       </motion.div>
 
       {/* Event Horizon (Black Center) */}
