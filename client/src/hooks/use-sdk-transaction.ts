@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import { api } from "@/types/shared";
 
 const SOLSCAN_BASE_URL = "https://solscan.io/tx";
@@ -33,16 +34,12 @@ export function useSDKTransaction<T extends (...args: any[]) => Promise<Transact
       try {
         const result = await transactionFn(...args);
         
-        const solscanUrl = `${SOLSCAN_BASE_URL}/${result.tx}`;
-        const shortSig = result.tx.slice(0, 8) + "..." + result.tx.slice(-8);
-        
-        toast({
+        showTransactionToast({
+          type: "success",
           title: options.successTitle || "Transaction Confirmed",
-          description: `${options.successDescription || "Transaction successful"} - Signature: ${shortSig}`,
-          action: undefined,
+          description: options.successDescription || "Transaction successful",
+          txHash: result.tx
         });
-
-        console.log("Transaction confirmed:", solscanUrl);
 
         queryClient.invalidateQueries({ queryKey: [api.pools.list.path] });
         if (options.invalidatePoolId) {
@@ -54,10 +51,10 @@ export function useSDKTransaction<T extends (...args: any[]) => Promise<Transact
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Transaction failed");
         
-        toast({
-          variant: "destructive",
+        showTransactionToast({
+          type: "error",
           title: options.errorTitle || "Transaction Failed",
-          description: err.message,
+          description: err.message
         });
 
         options.onError?.(err);
