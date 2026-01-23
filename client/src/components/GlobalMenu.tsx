@@ -33,7 +33,7 @@ interface MenuItemProps {
 }
 
 function MenuItem({ href, icon: Icon, label, description, onClose }: MenuItemProps) {
-  const testId = `menu-link-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const testId = `menu-link-${(label || "").toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <Link href={href} onClick={onClose} data-testid={testId}>
       <div className="group flex items-center gap-3 px-3 py-2.5 rounded-md hover-elevate cursor-pointer">

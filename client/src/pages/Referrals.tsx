@@ -125,7 +125,10 @@ export default function Referrals() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shortenWallet = (wallet: string) => `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+  const shortenWallet = (wallet: string) => {
+    if (!wallet) return "";
+    return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+  };
 
   const formatTokenAmount = (amount: string, decimals: number = 9) => {
     const value = BigInt(amount);
