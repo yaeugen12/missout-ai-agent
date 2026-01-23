@@ -86,48 +86,64 @@ function VortexRing({ percentFull, accentColor, poolSize = 0, symbol = "" }: { p
   const strokeDashoffset = circumference - (circumference * percentFull) / 100;
   
   return (
-    <div className="absolute right-4 top-1/2 -translate-y-1/2 w-40 h-40 pointer-events-none">
+    <div className="absolute -right-6 top-1/2 -translate-y-1/2 w-44 h-44 pointer-events-none">
       <svg className="w-full h-full rotate-[-90deg] relative z-10" viewBox="0 0 100 100">
         <defs>
-          <linearGradient id="cyberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#00f2ff" stopOpacity="1" />
-            <stop offset="100%" stopColor="#0066ff" stopOpacity="0.8" />
-          </linearGradient>
-          <filter id="neonGlow">
-            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <filter id="vortexGlow">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
+          <linearGradient id="vortexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={accentColor} stopOpacity="1" />
+            <stop offset="100%" stopColor={accentColor} stopOpacity="0.4" />
+          </linearGradient>
         </defs>
         
-        {/* Tech Grid Lines */}
-        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(0,242,255,0.05)" strokeWidth="0.5" strokeDasharray="2 4" />
-        
         {/* Background Track */}
-        <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
+        <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
         
-        {/* Neon Progress Ring */}
+        {/* Animated Main Ring */}
         <motion.circle
           cx="50"
           cy="50"
           r="38"
           fill="none"
-          stroke="url(#cyberGradient)"
+          stroke="url(#vortexGradient)"
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circumference}
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          style={{ filter: "url(#neonGlow)" }}
+          transition={{ duration: 2, ease: "circOut" }}
+          style={{ filter: "url(#vortexGlow)" }}
+        />
+
+        {/* Outer Tech Ring */}
+        <motion.circle
+          cx="50"
+          cy="50"
+          r="45"
+          fill="none"
+          stroke={accentColor}
+          strokeWidth="1"
+          strokeDasharray="1 10"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          className="opacity-20"
         />
       </svg>
       
-      {/* Metrics Overlay */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="text-2xl font-mono font-black text-cyan-400 leading-none mb-1 drop-shadow-[0_0_8px_rgba(0,242,255,0.5)]">
-          {Math.round(percentFull)}%
+      {/* Central Singularity with Pool Size */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-24 h-24 rounded-full flex flex-col items-center justify-center relative">
+          <div className="absolute inset-0 bg-black/80 rounded-full blur-[2px]" />
+          <div className="relative z-10 flex flex-col items-center">
+            <span className="text-lg font-mono font-black text-white leading-none">
+              {poolSize.toLocaleString()}
+            </span>
+            <span className="text-[8px] text-muted-foreground uppercase tracking-widest font-bold mt-0.5">Pool Size</span>
+          </div>
         </div>
-        <div className="text-[8px] text-cyan-400/60 uppercase tracking-widest font-bold">Full</div>
       </div>
     </div>
   );
@@ -370,87 +386,86 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         whileHover={{ y: -6, scale: 1.01 }}
         transition={{ duration: 0.3 }}
         className={cn(
-          "relative h-full border border-white/10 p-5 overflow-hidden backdrop-blur-xl rounded-xl",
-          "transition-all duration-300",
-          "hover:border-white/20",
-          isActive && "hover:shadow-[0_0_40px_rgba(0,240,255,0.12)]"
+          "relative h-full border border-white/5 p-5 overflow-hidden backdrop-blur-md rounded-2xl",
+          "transition-all duration-500",
+          "bg-gradient-to-br from-zinc-900/40 to-black/60",
+          isActive && "shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] border-white/10"
         )}
         style={{
-          backgroundImage: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(${poolCardBg})`,
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${poolCardBg})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
-          boxShadow: isActive ? `0 0 30px ${accentColor.replace("0.8", "0.08")}` : undefined,
         }}
       >
-        <motion.div 
-          className="absolute inset-0 pointer-events-none"
-          initial={{ opacity: 0 }}
-          whileHover={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          style={{
-            background: `radial-gradient(circle at 80% 50%, ${accentColor.replace("0.8", "0.08")} 0%, transparent 50%)`,
-          }}
-        />
-
         <div className="relative z-10">
-          {/* Header Section */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <TokenAvatar 
-                logoUrl={tokenMetadata?.logoUrl} 
-                symbol={pool.tokenSymbol} 
-                accentColor={accentColor}
-              />
-              <div>
-                <h3 className="text-xl font-display font-black text-white leading-none mb-1 tracking-tight">
-                  {pool.tokenSymbol}
-                </h3>
-                <span className={cn(
-                  "text-[9px] font-black uppercase px-2 py-0.5 rounded-sm border inline-block tracking-widest",
-                  currentStatus.className
-                )}>
-                  {currentStatus.label}
-                </span>
-              </div>
-            </div>
-            
+          {/* Status & Indicators Header */}
+          <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              <div className="flex flex-col items-end">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">Entry</div>
-                <div className="text-xl font-mono font-black text-white leading-none">
-                  {pool.entryAmount.toLocaleString()}
-                </div>
-              </div>
+              <span className={cn(
+                "px-3 py-1 text-[9px] font-black uppercase rounded-full border tracking-[0.15em] backdrop-blur-md shadow-sm",
+                currentStatus.className
+              )}>
+                {currentStatus.label}
+              </span>
+              {pool.initialPriceUsd && pool.currentPriceUsd && (
+                <VolatilityBadge 
+                  initialPrice={pool.initialPriceUsd} 
+                  currentPrice={pool.currentPriceUsd} 
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <CountdownRing 
+                endTime={lockEndTime}
+                lockDuration={pool.lockDuration}
+                accentColor={accentColor}
+                status={pool.status}
+              />
             </div>
           </div>
 
-          {/* Main Visual Section */}
-          <div className="bg-black/40 border border-white/5 rounded-2xl p-6 mb-6 relative overflow-hidden backdrop-blur-sm group/main">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover/main:opacity-100 transition-opacity duration-500" />
-            
-            <div className="flex flex-col gap-4 relative z-10">
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase tracking-[0.3em] mb-1 font-black opacity-60">Total Prize Pool</div>
-                <div className="text-4xl font-mono font-black text-white leading-none tracking-tighter drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-                  {totalPot.toLocaleString()}
-                  <span className="text-lg text-muted-foreground ml-2 font-medium">USD</span>
-                </div>
-              </div>
+          {/* Token & Info */}
+          <div className="flex items-center gap-4 mb-6">
+            <TokenAvatar 
+              logoUrl={tokenMetadata?.logoUrl} 
+              symbol={pool.tokenSymbol} 
+              accentColor={accentColor}
+            />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-2xl font-display font-black text-white leading-none mb-1 group-hover:text-primary transition-colors">
+                {pool.tokenSymbol}
+              </h3>
+              <p className="text-muted-foreground text-[11px] font-medium truncate opacity-60 uppercase tracking-widest">
+                {pool.tokenName}
+              </p>
+            </div>
+            <div className="flex gap-1">
+              <button
+                onClick={handleCopyPoolAddress}
+                className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                title="Copy Address"
+              >
+                {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+              </button>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col">
-                  <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 font-bold">Participants</div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-cyan-400" />
-                    <span className="text-lg text-white font-mono font-black leading-none">
-                      {participantsCount}<span className="text-muted-foreground/30 mx-1">/</span>{pool.maxParticipants}
-                    </span>
-                  </div>
-                </div>
+          {/* Central Action Area */}
+          <div className="mb-6 relative min-h-[130px] flex items-center">
+            {/* Entry Pill */}
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 backdrop-blur-xl w-[58%] z-20 shadow-xl relative overflow-hidden group/entry">
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover/entry:opacity-100 transition-opacity" />
+              <div className="text-[10px] text-muted-foreground uppercase tracking-[0.25em] mb-1 font-black opacity-50">Entry</div>
+              <div className="text-2xl font-mono font-black text-white leading-none tracking-tighter">
+                {pool.entryAmount.toLocaleString()}
+              </div>
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span className="text-[8px] text-primary/70 font-black uppercase tracking-widest">Join now</span>
               </div>
             </div>
 
-            {/* Circular Progress (Simplified) */}
+            {/* Vortex */}
             <VortexRing 
               percentFull={percentFull} 
               accentColor={accentColor} 
@@ -459,26 +474,44 @@ function PoolCardComponent({ pool }: PoolCardProps) {
             />
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Footer Metrics */}
+          <div className="flex items-end justify-between mb-5">
+            <div className="flex flex-col gap-1">
+              <div className="text-[9px] text-muted-foreground uppercase tracking-widest font-black opacity-40">Participation</div>
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <span className="text-lg text-white font-mono font-black leading-none">
+                  {participantsCount}<span className="text-muted-foreground/30 mx-0.5">/</span>{pool.maxParticipants}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex gap-1 flex-1 max-w-[120px] ml-4 self-center pb-1">
+              {[...Array(5)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className={cn(
+                    "h-1 flex-1 rounded-full transition-all duration-500",
+                    i < Math.floor(percentFull / 20) ? "bg-primary shadow-[0_0_8px_rgba(0,242,255,0.5)]" : "bg-white/5"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
             <Button 
-              className="flex-1 bg-white text-black hover:bg-white/90 font-black uppercase tracking-widest text-[11px] h-11 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.15)] group/btn"
+              className="flex-1 bg-white text-black hover:bg-white/90 font-black uppercase tracking-widest text-[10px] h-10 rounded-xl transition-all active:scale-[0.98]"
               onClick={handleJoinClick}
               disabled={isJoining || !connected}
             >
-              {isJoining ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <>
-                  Enter Void
-                  <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover/btn:translate-x-1" />
-                </>
-              )}
+              {isJoining ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enter the Void"}
             </Button>
-            
             <Button
               variant="outline"
               size="icon"
-              className="w-11 h-11 rounded-xl border-white/10 hover:bg-white/5"
+              className="w-10 h-10 rounded-xl border-white/10 hover:bg-white/5"
               asChild
             >
               <Link href={`/pool/${pool.id}`}>
