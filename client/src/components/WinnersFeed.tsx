@@ -89,11 +89,11 @@ export function WinnersFeed() {
   const scrollDistance = (winners.length * cardWidth) + (separatorsCount * separatorWidth);
 
   return (
-    <div className="w-full bg-transparent border-b border-white/5 backdrop-blur-md overflow-hidden relative z-50">
+    <div className="w-full bg-transparent border-b border-white/5 overflow-hidden relative z-50">
       <div className="relative h-14 flex items-center">
         {/* Gradient fade edges */}
-        <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-background via-background/50 to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-background via-background/50 to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-40 bg-gradient-to-r from-background via-background/40 to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-40 bg-gradient-to-l from-background via-background/40 to-transparent z-10 pointer-events-none" />
 
         {/* Scrolling container */}
         <motion.div
@@ -138,7 +138,7 @@ function WinnerCard({ winner }: { winner: WinnerFeedEntry }) {
   const isPositiveROI = winner.roiPercent > 0;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white/5 backdrop-blur-sm rounded-lg border border-white/10 hover:border-primary/30 transition-all min-w-[260px] hover-elevate group">
+    <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.03] backdrop-blur-sm rounded-lg border border-white/10 hover:border-primary/30 transition-all min-w-[260px] hover-elevate group">
       {/* Avatar */}
       <Avatar className="w-10 h-10 border-2 border-primary/30">
         <AvatarImage src={avatarUrl} alt={winner.displayName} />
