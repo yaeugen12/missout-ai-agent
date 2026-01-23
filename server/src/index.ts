@@ -322,23 +322,11 @@ app.use((req, res, next) => {
   await registerRoutes(httpServer, app);
   await seedDatabase();
 
-  /*
-  // =========================================================================
-  // FRONTEND INTEGRATION (VITE)
-  // =========================================================================
-  // The code below integrates the Vite dev server into the Express backend.
-  // This allows running BOTH backend and frontend together on port 5000.
-  // 
-  // TO RUN SEPARATELY (Backend on 5000, Frontend on 5173):
-  // 1. Comment out the block below.
-  // 2. Open a terminal and run 'cd server && npm run dev' for backend.
-  // 3. Open another terminal and run 'cd client && npm run dev' for frontend.
-  // =========================================================================
+  // Setup Vite dev server for frontend in development mode
   if (process.env.NODE_ENV === "development") {
     await setupVite(httpServer, app);
     console.log("[VITE] ✅ Vite dev server setup complete");
   }
-  */
 
   // Sentry error handler (must be after all routes)
   if (process.env.SENTRY_DSN) {
