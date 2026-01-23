@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { DonateModal } from "@/components/DonateModal";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { useToast } from "@/hooks/use-toast";
+import { showTransactionToast } from "@/lib/transaction-toast";
 import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -366,7 +367,12 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           credentials: "include",
         });
 
-        toast({ title: "Success", description: "Successfully joined the void!" });
+        showTransactionToast({
+          type: "success",
+          title: "Successfully Pulled In!",
+          description: "You have joined the void. Your tokens have been transferred.",
+          txHash: result.tx
+        });
 
         queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
         queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
