@@ -407,7 +407,7 @@ export default function PoolDetails() {
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative">
       {/* Hero Section with Black Hole */}
-      <div className="relative h-[100vh] flex flex-col items-center justify-center border-b border-white/10 pt-28 overflow-hidden bg-black">
+      <div className="relative h-[100vh] flex flex-col items-center justify-center pt-28 overflow-hidden bg-black">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.08)_0%,transparent_80%)]" />
 
         {/* Black Hole Visual with Orbiting Avatars */}
