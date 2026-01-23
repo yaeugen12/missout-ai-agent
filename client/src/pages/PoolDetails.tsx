@@ -26,6 +26,7 @@ import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { apiFetch } from "@/lib/api";
 import { socket } from "@/lib/socket";
+import { VolatilityWaveform } from "@/components/VolatilityWaveform";
 
 function ParticipantRow({ walletAddress }: { walletAddress: string }) {
   const { data: profile, isLoading } = useQueries({
@@ -429,6 +430,13 @@ export default function PoolDetails() {
           {/* ✅ Volatility & Singularity Mass – Right HUD */}
           <div className="absolute right-10 top-1/2 -translate-y-1/2 z-40 hidden lg:block">
             <div className="flex flex-col gap-4">
+              {/* Volatility Pulse */}
+              <VolatilityWaveform 
+                initialPrice={pool.initialPriceUsd ?? null}
+                currentPrice={pool.currentPriceUsd ?? null}
+                className="min-w-[220px]"
+              />
+              
               {/* Singularity Mass */}
               <div className="bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[220px]">
                 <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">
