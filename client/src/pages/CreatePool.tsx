@@ -120,15 +120,6 @@ export default function CreatePool() {
       const mintPubkey = new PublicKey(tokenInfo.mint);
       const lockDurationSeconds = lockDuration * 60;
 
-      const sdkResult = await createPool({
-        mint: mintPubkey.toBase58(),
-        amount: entryAmount,
-        maxParticipants: participants,
-        lockDurationSeconds,
-        devWallet: DEV_WALLET_PUBKEY,
-        creator: publicKey.toBase58(),
-      });
-
       const sdkResult = await createPoolOnChain({
         mint: mintPubkey,
         amount: entryAmount,

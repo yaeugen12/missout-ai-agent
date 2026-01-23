@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20", "bash", "web"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -52,6 +52,7 @@ VITE_SOLANA_CLUSTER = "devnet"
 VITE_SOLANA_RPC_FALLBACK = "https://api.devnet.solana.com"
 VITE_SOLANA_RPC_PRIMARY = "https://devnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
 VITE_DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3"
+SOLANA_RPC_URL = "https://api.devnet.solana.com"
 
 [agent]
 expertMode = true

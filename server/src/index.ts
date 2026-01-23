@@ -17,6 +17,7 @@ import * as Sentry from "@sentry/node";
 import { notificationService } from "./notifications/notificationService.js";
 import { PriceTrackingService } from "./services/priceTracking.js";
 import { storage } from "./storage.js";
+import { setupVite } from "./vite.js";
 
 import { setupSentryErrorHandlers } from "./error-handlers-sentry.js";
 // ============================================================
@@ -320,6 +321,12 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
   await seedDatabase();
+
+  // Setup Vite dev server for frontend in development mode
+  if (process.env.NODE_ENV === "development") {
+    await setupVite(httpServer, app);
+    console.log("[VITE] ✅ Vite dev server setup complete");
+  }
 
   // Sentry error handler (must be after all routes)
   if (process.env.SENTRY_DSN) {
