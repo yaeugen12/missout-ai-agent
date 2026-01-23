@@ -97,8 +97,8 @@ function VolatilityBadge({ initialPrice, currentPrice }: { initialPrice: number;
       : "bg-cyan-500/10 border-cyan-500/20";
 
   return (
-    <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded border text-[8px] font-mono font-bold", bgClass, colorClass)}>
-      <TrendIcon className="w-2.5 h-2.5" />
+    <div className={cn("flex items-center gap-1 px-2.5 py-1 rounded border text-[11px] font-mono font-bold", bgClass, colorClass)}>
+      <TrendIcon className="w-3.5 h-3.5" />
       <span>
         {percent >= 0 ? "+" : ""}
         {percent.toFixed(1)}%
