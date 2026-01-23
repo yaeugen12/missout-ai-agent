@@ -8,7 +8,7 @@ import {
   type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim,
   type WinnerFeedEntry, type InsertWinnerFeedEntry
 } from "@shared/schema";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {

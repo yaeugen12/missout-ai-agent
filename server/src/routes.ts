@@ -1629,7 +1629,7 @@ export async function registerRoutes(
   poolMonitor.start();
 
   // Development only - Reset pools
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === undefined) {
     app.post("/api/dev/reset-pools", async (req, res) => {
       try {
         await db.delete(pools);
@@ -1642,8 +1642,10 @@ export async function registerRoutes(
     // Seed dummy winner for testing feed
     app.post("/api/dev/seed-winner", async (req, res) => {
       try {
+        const poolId = 1;
+
         const entry = await storage.createWinnerFeedEntry({
-          poolId: 0,
+          poolId: poolId,
           winnerWallet: "B6xyJ25Z9J5cd6BHvgVaqjVEEi38phUQKokCw2oPQQJN",
           displayName: "pepe",
           avatarUrl: "https://19bcdec2-82b5-4b83-b693-5924166c6a2c-00-3h719vsfvrfbd.picard.replit.dev/uploads/d380463444e13b07a560dbabc98720f7.png",
