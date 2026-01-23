@@ -15,6 +15,8 @@ import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 
+import poolCardBg from "@assets/images/pool-card-bg.png";
+
 interface PoolCardProps {
   pool: Pool;
 }
@@ -437,12 +439,15 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         whileHover={{ y: -6, scale: 1.01 }}
         transition={{ duration: 0.3 }}
         className={cn(
-          "relative h-full bg-black/70 border border-white/10 p-5 overflow-hidden backdrop-blur-xl",
+          "relative h-full border border-white/10 p-5 overflow-hidden backdrop-blur-xl rounded-xl",
           "transition-all duration-300",
           "hover:border-white/20",
           isActive && "hover:shadow-[0_0_40px_rgba(0,240,255,0.12)]"
         )}
         style={{
+          backgroundImage: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(${poolCardBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           boxShadow: isActive ? `0 0 30px ${accentColor.replace("0.8", "0.08")}` : undefined,
         }}
       >
