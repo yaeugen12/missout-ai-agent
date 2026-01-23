@@ -546,24 +546,6 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               )}
             </div>
           </div>
-            
-            <div className="flex items-center gap-3">
-              {/* Mini Volatility Indicator */}
-              {pool.initialPriceUsd && pool.currentPriceUsd && (
-                <VolatilityBadge 
-                  initialPrice={pool.initialPriceUsd} 
-                  currentPrice={pool.currentPriceUsd} 
-                />
-              )}
-              
-              <CountdownRing 
-                endTime={lockEndTime}
-                lockDuration={pool.lockDuration}
-                accentColor={accentColor}
-                status={pool.status}
-              />
-            </div>
-          </div>
 
           <div className="flex gap-1.5 mb-5">
             {[...Array(Math.min(pool.maxParticipants, 20))].map((_, i) => (
