@@ -55,7 +55,7 @@ function Router() {
         {() => (
           <ExternalRedirect
             url="https://x.com/missout_fun"
-            name="X (Twitter)"
+            name="X"
           />
         )}
       </Route>
