@@ -28,6 +28,7 @@ interface BlackHoleExperienceProps {
   winnerAvatar?: string | null;
   prizeAmount: number;
   tokenSymbol: string;
+  priceUsd?: number;
   payoutTxHash?: string;
 }
 
@@ -41,6 +42,7 @@ export function BlackHoleExperience({
   winnerAvatar,
   prizeAmount,
   tokenSymbol,
+  priceUsd,
   payoutTxHash,
 }: BlackHoleExperienceProps) {
   const normalizedStatus = status.toUpperCase();
@@ -166,6 +168,7 @@ export function BlackHoleExperience({
                   avatar={winnerAvatar}
                   prizeAmount={prizeAmount}
                   tokenSymbol={tokenSymbol}
+                  priceUsd={priceUsd}
                   txHash={payoutTxHash}
                 />
               </motion.div>

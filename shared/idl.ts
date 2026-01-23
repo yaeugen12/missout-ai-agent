@@ -1,5 +1,5 @@
 export const IDL = {
-  "address": "CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L",
+  "address": "4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm",
   "metadata": {
     "name": "ml",
     "version": "0.1.0",
@@ -1712,6 +1712,16 @@ export const IDL = {
       "code": 6066,
       "name": "ForbiddenDefaultAccountState",
       "msg": "Default account state must be Initialized - frozen accounts cannot participate"
+    },
+    {
+      "code": 6067,
+      "name": "PoolProcessing",
+      "msg": "Pool is currently processing another operation - reentrancy blocked"
+    },
+    {
+      "code": 6068,
+      "name": "PoolTokenMismatch",
+      "msg": "Pool token account mismatch - provided token doesn't match stored"
     }
   ],
   "types": [
@@ -2000,6 +2010,13 @@ export const IDL = {
           {
             "name": "winner",
             "type": "pubkey"
+          },
+          {
+            "name": "processing",
+            "docs": [
+              "🔒 Reentrancy guard - prevents concurrent critical operations"
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -2255,4 +2272,4 @@ export const IDL = {
       }
     }
   ]
-} as const;
+}

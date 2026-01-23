@@ -42,21 +42,17 @@ interface TokenInfo {
   symbol: string;
   decimals: number;
   logoURI?: string;
+  priceUSD?: number;
 }
 
 export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: CreatePoolWizardProps) {
   const [step, setStep] = useState(1);
-  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
 
   // Debug: Log step changes
   useEffect(() => {
     console.log('[DEBUG CreatePoolWizard] Current step:', step);
   }, [step]);
 
-  // Debug: Log mock randomness state
-  useEffect(() => {
-    console.log('[DEBUG CreatePoolWizard] Mock randomness enabled:', useMockRandomness);
-  }, [useMockRandomness]);
   const [mintAddress, setMintAddress] = useState("");
 
   // Prefill mint address when provided
@@ -71,7 +67,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
   const [lockDuration, setLockDuration] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
-  
+  const [tokenPriceUSD, setTokenPriceUSD] = useState<number | null>(null);
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -101,18 +99,29 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         setStep(1);
         setMintAddress("");
         setTokenInfo(null);
+        setTokenPriceUSD(null);
         setEntryAmount("1");
         setParticipants(10);
         setLockDuration(5);
-        setUseMockRandomness(true); // Reset to mock randomness for next pool
       }, 300);
     }
   }, [open]);
+
+  // Fetch token price using protocolAdapter (tries multiple sources)
+  const fetchTokenPrice = async (mintAddress: string): Promise<number | null> => {
+    try {
+      return await protocolAdapter.fetchTokenPriceUsd(mintAddress);
+    } catch (error) {
+      console.error("Price fetch error:", error);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const checkToken = async () => {
       if (mintAddress.length >= 32 && mintAddress.length <= 44) {
         setIsLoadingToken(true);
+        setIsLoadingPrice(true);
         try {
           const info = await protocolAdapter.fetchTokenInfo(mintAddress);
           if (info) {
@@ -123,15 +132,22 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
               decimals: info.decimals,
               logoURI: info.logoUrl,
             });
+
+            // Fetch price
+            const price = await fetchTokenPrice(mintAddress);
+            setTokenPriceUSD(price);
           }
         } catch (error) {
           console.error("Token fetch error:", error);
           setTokenInfo(null);
+          setTokenPriceUSD(null);
         } finally {
           setIsLoadingToken(false);
+          setIsLoadingPrice(false);
         }
       } else {
         setTokenInfo(null);
+        setTokenPriceUSD(null);
       }
     };
     checkToken();
@@ -197,7 +213,6 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         burnFeeBps: 350,  // 3.5% burn
         treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
         treasuryFeeBps: 150,  // 1.5% to treasury, winner gets 90% (remainder)
-        allowMock: useMockRandomness, // Use mock randomness if enabled
       });
 
       console.log("=== SDK_RETURNED ===");
@@ -236,7 +251,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
     console.log("=== GUARDS_PASSED ===");
     console.log("SIGNATURE:", signature);
     console.log("POOL_ADDRESS:", poolAddress);
-    console.log(`Explorer: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+    console.log(`Explorer: https://explorer.solana.com/tx/${signature}`);
 
     toast({ title: "On-Chain Success", description: `TX: ${signature.slice(0, 8)}...` });
 
@@ -282,7 +297,22 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
   };
 
   const canProceedStep1 = mintAddress.length >= 32 && tokenInfo !== null;
-  const canProceedStep2 = parseFloat(entryAmount) > 0;
+
+  // Step 2: Validate entry amount and $5 USD minimum
+  const canProceedStep2 = (() => {
+    const amount = parseFloat(entryAmount);
+    if (amount <= 0) return false;
+
+    // If price is available, enforce $5 USD minimum
+    if (tokenPriceUSD !== null) {
+      const usdValue = amount * tokenPriceUSD;
+      return usdValue >= 5;
+    }
+
+    // If price unavailable, allow proceeding (user takes risk)
+    return true;
+  })();
+
   const canProceedStep3 = participants >= 2 && lockDuration >= 1;
 
   return (
@@ -392,6 +422,26 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   </div>
                   <p className="text-xl font-bold">{tokenInfo.name}</p>
                   <p className="text-muted-foreground">${tokenInfo.symbol}</p>
+
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    {isLoadingPrice ? (
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Loading price...</span>
+                      </div>
+                    ) : tokenPriceUSD !== null ? (
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">Current Price</p>
+                        <p className="text-lg font-mono font-bold text-primary">
+                          ${tokenPriceUSD.toFixed(Math.max(3, -Math.floor(Math.log10(tokenPriceUSD)) + 2))}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-amber-400">
+                        ⚠ Price unavailable
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -409,6 +459,55 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                     step="any"
                     data-testid="input-entry-amount"
                   />
+
+                  {/* USD Value and Validation */}
+                  {tokenPriceUSD !== null && entryAmount && parseFloat(entryAmount) > 0 && (
+                    <div className="mt-2">
+                      {(() => {
+                        const amountNum = parseFloat(entryAmount);
+                        const usdValue = amountNum * tokenPriceUSD;
+                        const minUSD = 5;
+                        const isValid = usdValue >= minUSD;
+                        const suggestedAmount = minUSD / tokenPriceUSD;
+
+                        return (
+                          <div className={`p-3 rounded-lg border ${isValid ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm text-muted-foreground">USD Value:</span>
+                              <span className={`text-lg font-mono font-bold ${isValid ? 'text-green-500' : 'text-red-500'}`}>
+                                ${usdValue.toFixed(2)}
+                              </span>
+                            </div>
+                            {!isValid && (
+                              <div className="mt-2 text-xs text-red-400 space-y-1">
+                                <p>⚠ Minimum bet: $5.00 USD</p>
+                                <p className="font-mono">
+                                  Suggested: {suggestedAmount.toFixed(tokenInfo.decimals)} {tokenInfo.symbol}
+                                </p>
+                              </div>
+                            )}
+                            {isValid && (
+                              <div className="mt-1 text-xs text-green-500">
+                                ✓ Amount meets minimum requirement
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Warning when price is unavailable */}
+                  {tokenPriceUSD === null && !isLoadingPrice && (
+                    <div className="mt-2 p-3 rounded-lg border bg-amber-500/10 border-amber-500/30">
+                      <div className="text-sm text-amber-400">
+                        ⚠ Price unavailable - unable to enforce $5 minimum
+                      </div>
+                      <div className="mt-1 text-xs text-amber-400/80">
+                        Proceed with caution. Minimum $5 USD equivalent recommended.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -453,28 +552,6 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   />
                 </div>
 
-                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FlaskConical className="w-4 h-4 text-amber-400" />
-                      <Label htmlFor="mock-randomness" className="text-amber-400 font-semibold cursor-pointer">
-                        Mock Randomness (Devnet)
-                      </Label>
-                    </div>
-                    <Switch
-                      id="mock-randomness"
-                      checked={useMockRandomness}
-                      onCheckedChange={setUseMockRandomness}
-                      className="data-[state=checked]:bg-amber-500"
-                    />
-                  </div>
-                  <p className="text-xs text-amber-400/80 leading-relaxed">
-                    {useMockRandomness
-                      ? "✓ Using mock randomness - instant reveals, no Switchboard delays"
-                      : "⚠ Using real Switchboard VRF - may experience delays on Devnet"}
-                  </p>
-                </div>
-
                 <div className="p-4 rounded-lg bg-muted/50 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Token</span>
@@ -482,13 +559,27 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Entry</span>
-                    <span className="font-medium">{entryAmount} {tokenInfo?.symbol}</span>
+                    <div className="text-right">
+                      <div className="font-medium">{entryAmount} {tokenInfo?.symbol}</div>
+                      {tokenPriceUSD !== null && (
+                        <div className="text-xs text-muted-foreground">
+                          ≈ ${(parseFloat(entryAmount) * tokenPriceUSD).toFixed(2)} USD
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Max Pot</span>
-                    <span className="font-medium text-primary">
-                      {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo?.symbol}
-                    </span>
+                    <div className="text-right">
+                      <div className="font-medium text-primary">
+                        {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo?.symbol}
+                      </div>
+                      {tokenPriceUSD !== null && (
+                        <div className="text-xs text-primary/70">
+                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceUSD).toFixed(2)} USD
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -533,7 +624,14 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Entry Amount</span>
-                    <span className="font-medium">{entryAmount} {tokenInfo.symbol}</span>
+                    <div className="text-right">
+                      <div className="font-medium">{entryAmount} {tokenInfo.symbol}</div>
+                      {tokenPriceUSD !== null && (
+                        <div className="text-xs text-muted-foreground">
+                          ≈ ${(parseFloat(entryAmount) * tokenPriceUSD).toFixed(2)} USD
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Max Participants</span>
@@ -545,9 +643,16 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Max Pot</span>
-                    <span className="font-medium text-primary">
-                      {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo.symbol}
-                    </span>
+                    <div className="text-right">
+                      <div className="font-medium text-primary">
+                        {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo.symbol}
+                      </div>
+                      {tokenPriceUSD !== null && (
+                        <div className="text-xs text-primary/70">
+                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceUSD).toFixed(2)} USD
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

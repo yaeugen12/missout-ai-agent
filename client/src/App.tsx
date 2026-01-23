@@ -6,9 +6,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletProvider } from "@/components/WalletProvider";
+import { NotificationProvider } from "@/hooks/useNotifications";
 import { initConnection } from "./lib/solana-sdk/connection";
 import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
+import { WinnersFeed } from "@/components/WinnersFeed";
 import { useReferralCapture } from "@/hooks/useReferralCapture";
+import { useWebSocketNotifications } from "@/hooks/useWebSocketNotifications";
 
 // Initialize connection as early as possible
 initConnection().catch(console.error);
@@ -23,6 +27,7 @@ import Referrals from "@/pages/Referrals";
 import Donate from "@/pages/Donate";
 import HowItWorks from "@/pages/HowItWorks";
 import Claims from "@/pages/Claims";
+import ExternalRedirect from "@/pages/ExternalRedirect";
 
 function Router() {
   return (
@@ -38,6 +43,22 @@ function Router() {
       <Route path="/donate" component={Donate} />
       <Route path="/how-it-works" component={HowItWorks} />
       <Route path="/claims" component={Claims} />
+      <Route path="/blog">
+        {() => (
+          <ExternalRedirect
+            url="https://medium.com/@ya.eugen12/missout-turning-meme-coin-volatility-into-a-game-you-can-actually-win-2ad228edffe8"
+            name="Medium"
+          />
+        )}
+      </Route>
+      <Route path="/socials">
+        {() => (
+          <ExternalRedirect
+            url="https://x.com/missout_fun"
+            name="X (Twitter)"
+          />
+        )}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -45,6 +66,7 @@ function Router() {
 
 function ReferralCaptureWrapper({ children }: { children: React.ReactNode }) {
   useReferralCapture();
+  useWebSocketNotifications(); // Connect to WebSocket for real-time notifications
   return <>{children}</>;
 }
 
@@ -53,16 +75,20 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WalletProvider>
-          <ReferralCaptureWrapper>
-            <div className="min-h-screen bg-black text-white selection:bg-primary/30">
-              <Navbar />
-              <main className="container mx-auto px-4 py-8">
-                <Router />
-              </main>
-              <Toaster />
-              <Analytics />
-            </div>
-          </ReferralCaptureWrapper>
+          <NotificationProvider>
+            <ReferralCaptureWrapper>
+              <div className="min-h-screen bg-black text-white selection:bg-primary/30 flex flex-col">
+                <Navbar />
+                <WinnersFeed />
+                <main className="container mx-auto px-4 py-8 flex-1">
+                  <Router />
+                </main>
+                <Footer />
+                <Toaster />
+                <Analytics />
+              </div>
+            </ReferralCaptureWrapper>
+          </NotificationProvider>
         </WalletProvider>
       </TooltipProvider>
     </QueryClientProvider>

@@ -193,20 +193,90 @@ export const protocolAdapter = {
   },
 
   async fetchTokenPriceUsd(mint: string): Promise<number | null> {
+    console.log("[protocolAdapter] Fetching price for:", mint);
+
+    // Try Jupiter API v6 first (most reliable for Solana tokens)
     try {
-      console.log("[protocolAdapter] Fetching price for:", mint);
-      const res = await fetch(`https://price.jup.ag/v4/price?ids=${mint}`);
-      const data = await res.json();
-      if (data.data && data.data[mint]) {
-        console.log("[protocolAdapter] Price found:", data.data[mint].price);
-        return data.data[mint].price;
+      console.log("[protocolAdapter] Trying Jupiter v6 API...");
+      const jupiterRes = await fetch(`https://price.jup.ag/v6/price?ids=${mint}`);
+      const jupiterData = await jupiterRes.json();
+
+      if (jupiterData.data && jupiterData.data[mint] && jupiterData.data[mint].price) {
+        const price = jupiterData.data[mint].price;
+        console.log("[protocolAdapter] ✓ Jupiter v6 price found:", price);
+        return price;
       }
-      console.log("[protocolAdapter] No price data available");
-      return null;
     } catch (e) {
-      console.error("[protocolAdapter] Price fetch failed:", e);
-      return null;
+      console.warn("[protocolAdapter] Jupiter v6 failed:", e);
     }
+
+    // Try Helius DAS API for price (includes pump.fun tokens)
+    try {
+      console.log("[protocolAdapter] Trying Helius DAS API for price...");
+      const heliusRes = await fetch(HELIUS_RPC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "get-asset-price",
+          method: "getAsset",
+          params: { id: mint }
+        })
+      });
+      const heliusData = await heliusRes.json();
+
+      if (heliusData.result?.token_info?.price_info?.price_per_token) {
+        const price = heliusData.result.token_info.price_info.price_per_token;
+        console.log("[protocolAdapter] ✓ Helius DAS price found:", price);
+        return price;
+      }
+    } catch (e) {
+      console.warn("[protocolAdapter] Helius DAS price fetch failed:", e);
+    }
+
+    // Try Birdeye API (good for pump.fun and new tokens)
+    try {
+      console.log("[protocolAdapter] Trying Birdeye API...");
+      const birdeyeRes = await fetch(`https://public-api.birdeye.so/public/price?address=${mint}`, {
+        headers: {
+          "X-API-KEY": "public" // Using public endpoint
+        }
+      });
+      const birdeyeData = await birdeyeRes.json();
+
+      if (birdeyeData.data && birdeyeData.data.value) {
+        const price = birdeyeData.data.value;
+        console.log("[protocolAdapter] ✓ Birdeye price found:", price);
+        return price;
+      }
+    } catch (e) {
+      console.warn("[protocolAdapter] Birdeye failed:", e);
+    }
+
+    // Try DexScreener API (works for most DEX-listed tokens)
+    try {
+      console.log("[protocolAdapter] Trying DexScreener API...");
+      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      const dexData = await dexRes.json();
+
+      if (dexData.pairs && dexData.pairs.length > 0) {
+        // Get the pair with highest liquidity
+        const bestPair = dexData.pairs.sort((a: any, b: any) =>
+          (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+        )[0];
+
+        if (bestPair.priceUsd) {
+          const price = parseFloat(bestPair.priceUsd);
+          console.log("[protocolAdapter] ✓ DexScreener price found:", price);
+          return price;
+        }
+      }
+    } catch (e) {
+      console.warn("[protocolAdapter] DexScreener failed:", e);
+    }
+
+    console.log("[protocolAdapter] ❌ No price data available from any source");
+    return null;
   },
 
   suggestMinEntryAmount(priceUsd: number, minUsd = 5): number {

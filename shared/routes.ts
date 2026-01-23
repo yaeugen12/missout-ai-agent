@@ -167,6 +167,26 @@ export const api = {
       },
     },
   },
+  winners: {
+    feed: {
+      method: 'GET' as const,
+      path: '/api/winners/feed',
+      responses: {
+        200: z.array(z.object({
+          id: z.number(),
+          poolId: z.number(),
+          winnerWallet: z.string(),
+          displayName: z.string(),
+          avatarUrl: z.string().nullable(),
+          tokenSymbol: z.string(),
+          betUsd: z.number(),
+          winUsd: z.number(),
+          roiPercent: z.number(),
+          createdAt: z.string(),
+        })),
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {

@@ -8,6 +8,13 @@
       "when": 1768051173315,
       "tag": "0000_nebulous_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1769182337028,
+      "tag": "0001_pink_magneto",
+      "breakpoints": true
     }
   ]
 }

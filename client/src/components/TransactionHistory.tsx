@@ -14,20 +14,16 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
   const { data: transactions, isLoading, error } = useQuery({
     queryKey: [api.profiles.transactions.path.replace(":wallet", walletAddress)],
     queryFn: async () => {
-      console.log("[TransactionHistory] Fetching for:", walletAddress);
-
       const res = await apiFetch(
         api.profiles.transactions.path.replace(":wallet", walletAddress)
       );
 
       if (!res.ok) {
         const errData = await res.json();
-        console.error("[TransactionHistory] Fetch failed:", errData);
         throw new Error(errData.message || "Failed to fetch transactions");
       }
 
       const response = await res.json();
-      console.log("[TransactionHistory] Received:", response.data?.length || 0, "txs");
       return response.data || [];
     },
     enabled: !!walletAddress,
@@ -125,7 +121,7 @@ export function TransactionHistory({ walletAddress }: TransactionHistoryProps) {
                 href={
                   tx.txHash
                     ? getSolscanTxUrl(tx.txHash)
-                    : `https://solscan.io/account/${walletAddress}?cluster=devnet`
+                    : `https://solscan.io/account/${walletAddress}` // No cluster param for mainnet
                 }
                 target="_blank"
                 rel="noreferrer"

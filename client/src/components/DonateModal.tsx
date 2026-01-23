@@ -75,12 +75,10 @@ export function DonateModal({ pool, open, onOpenChange }: DonateModalProps) {
         amount: amount,
       });
 
-      const solscanUrl = getSolscanTxUrl(result.tx);
       toast({
         title: "Donation Successful",
         description: `You fed ${amount} ${pool.tokenSymbol} to the void! Tx: ${result.tx.slice(0, 8)}...`,
       });
-      console.log("Donation tx:", solscanUrl);
 
       queryClient.invalidateQueries({ queryKey: [api.pools.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.pools.get.path, pool.id] });

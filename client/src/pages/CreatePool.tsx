@@ -1,6 +1,5 @@
 // BUILD_ID: v7-20260103-2050 - SDK Integration
 const BUILD_ID = "v7-20260103-2050";
-console.log("=== CREATEPOOL PAGE LOADED ===", BUILD_ID);
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -57,8 +56,6 @@ export default function CreatePool() {
   const [entryAmount, setEntryAmount] = useState<string>("");
   const [lockDuration, setLockDuration] = useState(60);
   const [customDuration, setCustomDuration] = useState("");
-  const [isPriceMissingAccepted, setIsPriceMissingAccepted] = useState(false);
-  const [useMockRandomness, setUseMockRandomness] = useState(true); // Default to mock for Devnet testing
 
   const [solAmount, setSolAmount] = useState<string>("");
   const [slippageBps, setSlippageBps] = useState<number>(100);
@@ -76,7 +73,8 @@ export default function CreatePool() {
 
   const currentPrice = priceUsd || 0;
   const entryUsd = parseFloat(entryAmount) * currentPrice;
-  const isValidEntry = isPriceMissingAccepted || (priceUsd !== null && entryUsd >= 5);
+  // If price is available, enforce $5 minimum. If unavailable, allow proceeding with warning.
+  const isValidEntry = priceUsd !== null ? entryUsd >= 5 : true;
   const suggestedAmount = priceUsd ? protocolAdapter.suggestMinEntryAmount(priceUsd) : 0;
 
   const handleFetchToken = async () => {
@@ -87,10 +85,7 @@ export default function CreatePool() {
 
     setIsFetching(true);
     try {
-      console.log("[CreatePool] Calling fetchTokenInfo with mint:", mintAddress);
       const info = await protocolAdapter.fetchTokenInfo(mintAddress);
-      console.log("[CreatePool] fetchTokenInfo returned:", info);
-      console.log("[CreatePool] tokenInfo.mint value:", info.mint);
       const price = await protocolAdapter.fetchTokenPriceUsd(mintAddress);
       setTokenInfo(info);
       setPriceUsd(price);
@@ -103,18 +98,12 @@ export default function CreatePool() {
   };
 
   const handleCreate = async () => {
-    console.log("==============================================");
-    console.log("=== CLICK: Initialize Black Hole ===", BUILD_ID);
-    console.log("WALLET_STATE:", { isConnected, address, sdkReady, pk: publicKey?.toBase58() });
-    
     if (!isConnected || !address) {
-      console.log("ABORT: Wallet not connected - prompting connect");
       connect();
       return;
     }
 
     if (!tokenInfo) {
-      console.log("ABORT: No token info");
       return;
     }
 
@@ -131,8 +120,7 @@ export default function CreatePool() {
       const mintPubkey = new PublicKey(tokenInfo.mint);
       const lockDurationSeconds = lockDuration * 60;
 
-      console.log("=== SDK_ENTER ===");
-      console.log("Params:", {
+      const sdkResult = await createPool({
         mint: mintPubkey.toBase58(),
         amount: entryAmount,
         maxParticipants: participants,
@@ -140,8 +128,6 @@ export default function CreatePool() {
         devWallet: DEV_WALLET_PUBKEY,
         creator: publicKey.toBase58(),
       });
-
-      console.log("=== MOCK_RANDOMNESS_STATE ===", useMockRandomness);
 
       const sdkResult = await createPoolOnChain({
         mint: mintPubkey,
@@ -153,12 +139,8 @@ export default function CreatePool() {
         burnFeeBps: 0,
         treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
         treasuryFeeBps: 0,
-        allowMock: useMockRandomness,
       });
 
-      console.log("=== SDK_RETURNED ===");
-      console.log("SIGNATURE:", sdkResult?.tx);
-      console.log("POOL_PDA:", sdkResult?.poolId);
 
       signature = sdkResult?.tx;
       poolAddress = sdkResult?.poolId;
@@ -185,18 +167,9 @@ export default function CreatePool() {
       return;
     }
 
-    console.log("=== GUARDS_PASSED ===");
-    console.log("SIGNATURE:", signature);
-    console.log("POOL_ADDRESS:", poolAddress);
-    console.log(`Explorer: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
 
     toast({ title: "On-Chain Success", description: `TX: ${signature.slice(0, 8)}...` });
-    
-    toast({ title: "Waiting for Anchor...", description: "Pool account initializing (10-15 seconds)..." });
 
-    console.log("[CreatePool] BEFORE createPoolBackend - tokenInfo:", tokenInfo);
-    console.log("[CreatePool] BEFORE createPoolBackend - tokenMint value:", tokenInfo.mint);
-    console.log("[CreatePool] BEFORE createPoolBackend - allowMock:", useMockRandomness ? 1 : 0);
 
     createPoolBackend({
       tokenSymbol: tokenInfo.symbol,
@@ -209,11 +182,10 @@ export default function CreatePool() {
       maxParticipants: participants,
       lockDuration: lockDuration,
       creatorWallet: address,
-      allowMock: useMockRandomness ? 1 : 0,
     }, {
       onSuccess: (pool) => {
-        console.log("=== BACKEND_SUCCESS ===", pool.id);
         toast({ title: "Black Hole Initialized", description: "The singularity has been created." });
+
         setLocation(`/pool/${pool.id}`);
       },
       onError: (err) => {
@@ -422,9 +394,14 @@ export default function CreatePool() {
                   </div>
                   <div className="text-right">
                     {priceUsd ? (
-                      <div className="text-lg font-mono text-green-400">${priceUsd.toFixed(6)}</div>
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Price</div>
+                        <div className="text-lg font-mono font-bold text-primary">
+                          ${priceUsd.toFixed(Math.max(3, -Math.floor(Math.log10(priceUsd)) + 2))}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="text-xs text-yellow-500">Price Unknown</div>
+                      <div className="text-xs text-amber-400">⚠ Price unavailable</div>
                     )}
                   </div>
                 </div>
@@ -628,36 +605,51 @@ export default function CreatePool() {
                       </div>
                     </div>
                     
-                    {priceUsd && entryAmount && entryUsd < 5 && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg space-y-2">
-                        <p className="text-[10px] text-red-400 font-tech uppercase tracking-tighter flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" /> Minimum entry is $5. Suggested: {suggestedAmount} {tokenInfo.symbol}
-                        </p>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="w-full h-7 text-[9px] border-red-500/30 hover:bg-red-500/20 font-black uppercase tracking-widest text-red-400"
-                          onClick={() => setEntryAmount(suggestedAmount.toString())}
-                          data-testid="button-use-suggested"
-                        >
-                          Use Suggested Amount
-                        </Button>
+                    {/* USD Value Display & Validation */}
+                    {priceUsd && entryAmount && parseFloat(entryAmount) > 0 && (
+                      <div className={`p-3 rounded-lg border mt-2 ${entryUsd >= 5 ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">USD Value:</span>
+                          <span className={`text-lg font-mono font-bold ${entryUsd >= 5 ? 'text-green-500' : 'text-red-500'}`}>
+                            ${entryUsd.toFixed(2)}
+                          </span>
+                        </div>
+                        {entryUsd < 5 && (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-[10px] text-red-400 font-tech uppercase tracking-tighter flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Minimum entry is $5.00 USD
+                            </p>
+                            <p className="text-[10px] text-red-400 font-mono">
+                              Suggested: {suggestedAmount.toFixed(tokenInfo.decimals)} {tokenInfo.symbol}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full h-7 text-[9px] border-red-500/30 hover:bg-red-500/20 font-black uppercase tracking-widest text-red-400"
+                              onClick={() => setEntryAmount(suggestedAmount.toString())}
+                              data-testid="button-use-suggested"
+                            >
+                              Use Suggested Amount
+                            </Button>
+                          </div>
+                        )}
+                        {entryUsd >= 5 && (
+                          <div className="mt-1 text-[10px] text-green-500">
+                            ✓ Amount meets minimum requirement
+                          </div>
+                        )}
                       </div>
                     )}
 
+                    {/* Warning when price unavailable */}
                     {!priceUsd && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <input 
-                          type="checkbox" 
-                          id="price-unknown"
-                          checked={isPriceMissingAccepted}
-                          onChange={(e) => setIsPriceMissingAccepted(e.target.checked)}
-                          className="w-3 h-3 rounded border-white/10 bg-black/50 accent-primary"
-                          data-testid="checkbox-accept-unknown-price"
-                        />
-                        <label htmlFor="price-unknown" className="text-[10px] text-muted-foreground uppercase cursor-pointer">
-                          I understand price is unknown and accept the risk
-                        </label>
+                      <div className="mt-2 p-3 rounded-lg border bg-amber-500/10 border-amber-500/30">
+                        <div className="text-[10px] text-amber-400 font-tech uppercase flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Price unavailable - unable to enforce $5 minimum
+                        </div>
+                        <div className="mt-1 text-[9px] text-amber-400/80">
+                          Proceed with caution. Minimum $5 USD equivalent recommended.
+                        </div>
                       </div>
                     )}
                   </div>
@@ -753,28 +745,6 @@ export default function CreatePool() {
                     <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-widest">Horizon</div>
                     <div className="font-mono text-sm font-bold">{lockDuration} Minutes</div>
                   </div>
-                </div>
-
-                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FlaskConical className="w-4 h-4 text-amber-400" />
-                      <Label htmlFor="mock-randomness" className="text-amber-400 font-semibold cursor-pointer">
-                        Mock Randomness (Devnet)
-                      </Label>
-                    </div>
-                    <Switch
-                      id="mock-randomness"
-                      checked={useMockRandomness}
-                      onCheckedChange={setUseMockRandomness}
-                      className="data-[state=checked]:bg-amber-500"
-                    />
-                  </div>
-                  <p className="text-xs text-amber-400/80 leading-relaxed">
-                    {useMockRandomness
-                      ? "✓ Using mock randomness - instant reveals, no Switchboard delays"
-                      : "⚠ Using real Switchboard VRF - may experience delays on Devnet"}
-                  </p>
                 </div>
 
                 <div className="flex gap-3">

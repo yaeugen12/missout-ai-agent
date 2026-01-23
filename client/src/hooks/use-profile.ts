@@ -77,26 +77,26 @@ export function useUpdateProfile() {
   const { publicKey } = useWallet();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   return useMutation({
-    mutationFn: async (data: { nickname?: string; avatarStyle?: AvatarStyle }) => {
+    mutationFn: async (data: { nickname?: string; avatarStyle?: AvatarStyle; avatarUrl?: string | null }) => {
       if (!publicKey) {
         throw new Error("Wallet not connected");
       }
-      
+
       const wallet = publicKey.toBase58();
-      
+
       const res = await apiFetch(`/api/profile/${wallet}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      
+
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to update profile");
       }
-      
+
       return res.json();
     },
     onSuccess: () => {

@@ -24,7 +24,6 @@ export interface CreatePoolParams {
   burnFeeBps: number;
   treasuryWallet: PublicKey;
   treasuryFeeBps: number;
-  allowMock?: boolean;
 }
 
 export interface JoinPoolParams {
@@ -68,7 +67,6 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
     amount: params.amount,
     maxParticipants: params.maxParticipants,
     lockDurationSeconds: params.lockDurationSeconds,
-    allowMock: params.allowMock,
   });
 
   const client = getMissoutClient();
@@ -100,8 +98,9 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
   console.log("RPC Endpoint:", conn.rpcEndpoint);
   const genesisHash = await conn.getGenesisHash();
   console.log("Genesis Hash:", genesisHash);
-  if (genesisHash !== 'EtWTRABG3VvS7uLxsMHn5P6qvG8gX6XrAf9e6Wbn9JNE') {
-    console.error("FAIL: Not on Devnet! Expected EtWTRABG3VvS7uLxsMHn5P6qvG8gX6XrAf9e6Wbn9JNE, got", genesisHash);
+  // Mainnet genesis hash
+  if (genesisHash !== '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d') {
+    console.error("FAIL: Not on Mainnet! Expected 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d, got", genesisHash);
   }
 
   const salt = generateSalt();
@@ -182,7 +181,7 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
   dataBuffer.writeUInt16LE(params.burnFeeBps, offset); offset += 2;
   Buffer.from(params.treasuryWallet.toBytes()).copy(dataBuffer, offset); offset += 32;
   dataBuffer.writeUInt16LE(params.treasuryFeeBps, offset); offset += 2;
-  dataBuffer.writeUInt8(params.allowMock ? 1 : 0, offset);
+  dataBuffer.writeUInt8(0, offset); // allowMock deprecated, always false
 
   console.log("DATA_BUFFER_SIZE:", dataBuffer.length, "OFFSET_FINAL:", offset + 1);
 
@@ -212,7 +211,7 @@ export async function createPool(params: CreatePoolParams): Promise<{ poolId: st
 
   const sig = await client.buildAndSendTransaction(instructions);
   console.log("TX Signature:", sig);
-  console.log(`Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
+  console.log(`Explorer: https://explorer.solana.com/tx/${sig}`);
 
 
   // ============================================================================

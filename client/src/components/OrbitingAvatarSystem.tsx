@@ -65,7 +65,7 @@ export function OrbitingAvatarSystem({
       return {
         ...p,
         angleOffset,
-        isWinner: p.walletAddress === winnerWallet,
+        isWinner: winnerWallet ? p.walletAddress.toLowerCase() === winnerWallet.toLowerCase() : false,
       };
     });
   }, [participants, winnerWallet]);

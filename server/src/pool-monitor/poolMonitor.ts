@@ -11,6 +11,8 @@ import {
   selectWinnerOnChain,
   payoutWinnerOnChain,
 } from "./solanaServices";
+import { notificationService, NotificationType } from "../notifications/notificationService.js";
+import { getPriceTrackingService } from "../index.js";
 
 const POLL_INTERVAL = 5000;
 const MAX_RETRIES = 3;
@@ -231,6 +233,22 @@ export class PoolMonitor {
       try {
         await unlockPoolOnChain(pool.poolAddress!);
         log(`Pool ${pool.id} ✅ unlockPool() succeeded`);
+
+        // 📢 NOTIFY: Pool unlocked - notify all participants + creator
+        const poolParticipants = await storage.getParticipants(pool.id);
+        if (poolParticipants && poolParticipants.length > 0) {
+          await notificationService.notifyPoolParticipants(
+            pool.creatorWallet,
+            poolParticipants.map(p => ({ wallet: p.walletAddress })),
+            {
+              type: NotificationType.UNLOCKED,
+              title: 'Pool Unlocked',
+              message: `${pool.tokenName} pool is ready for winner selection!`,
+              poolId: pool.id,
+              poolName: `${pool.tokenName} Pool`,
+            }
+          );
+        }
       } catch (err: any) {
         log(`Pool ${pool.id} ❌ unlockPool() failed: ${err.message}`);
         this.handleRetry(pool.id, "unlock");
@@ -267,6 +285,25 @@ export class PoolMonitor {
     try {
       await revealRandomnessOnChain(pool.poolAddress!);
       log(`Pool ${pool.id} ✅ revealRandomness() succeeded`);
+
+      // 📢 NOTIFY: Randomness revealed - notify all participants + creator
+      const poolParticipants = await storage.getParticipants(pool.id);
+      if (poolParticipants && poolParticipants.length > 0) {
+        const explorerUrl = `https://explorer.solana.com/address/${pool.poolAddress}?cluster=${process.env.SOLANA_NETWORK || 'devnet'}`;
+
+        await notificationService.notifyPoolParticipants(
+          pool.creatorWallet,
+          poolParticipants.map(p => ({ wallet: p.walletAddress })),
+          {
+            type: NotificationType.RANDOMNESS,
+            title: 'Randomness Received',
+            message: `Fair randomness has been generated for ${pool.tokenName} pool. Selecting winner...`,
+            poolId: pool.id,
+            poolName: `${pool.tokenName} Pool`,
+            verifyUrl: explorerUrl,
+          }
+        );
+      }
 
       // Now call selectWinner which will:
       // 1. Verify randomness is revealed
@@ -339,22 +376,94 @@ export class PoolMonitor {
         })
         .where(eq(pools.id, pool.id));
 
+      // Stop price tracking for this pool
+      const priceTrackingService = getPriceTrackingService();
+      if (priceTrackingService) {
+        priceTrackingService.stopTracking(pool.id);
+        log(`Pool ${pool.id} ✅ Price tracking stopped`);
+      }
+
+      // 📢 NOTIFY: Send WIN notification ONLY to winner (with 5s delay for frontend animation)
+      setTimeout(async () => {
+        try {
+          log(`Pool ${pool.id} 📢 Sending WIN notification to ${winnerPubkey.slice(0, 16)}`);
+          await notificationService.notifyWallets([winnerPubkey], {
+            type: NotificationType.WIN,
+            title: '🎉 VICTORY!',
+            message: `You won ${pool.totalPot ? (pool.totalPot * 0.9).toFixed(2) : pool.currentPot} ${pool.tokenSymbol}!`,
+            poolId: pool.id,
+            poolName: `${pool.tokenName} Pool`,
+          });
+          log(`Pool ${pool.id} ✅ WIN notification sent successfully`);
+        } catch (err: any) {
+          log(`Pool ${pool.id} ❌ Failed to send WIN notification: ${err.message}`);
+        }
+      }, 5000); // 5 second delay to let frontend animation complete
+
+      // 🏆 WINNERS FEED: Create entry for live feed ticker
+      try {
+        const winnerProfile = await storage.getProfile(winnerPubkey);
+        const displayName = winnerProfile?.nickname || `${winnerPubkey.slice(0, 4)}...${winnerPubkey.slice(-4)}`;
+        const avatarUrl = winnerProfile?.avatarUrl || null;
+
+        // Get winner's participant record to get their bet USD value
+        const winnerParticipant = await storage.getParticipantByWallet(pool.id, winnerPubkey);
+        const betUsd = winnerParticipant?.betUsd || 0;
+
+        // Calculate win amount with current price at payout time
+        const winAmountTokens = (pool.totalPot || 0) * 0.9; // 90% payout
+        const currentPriceUsd = pool.currentPriceUsd || 0;
+        const winUsd = winAmountTokens * currentPriceUsd;
+
+        // Calculate accurate ROI
+        const roiPercent = betUsd > 0 ? ((winUsd - betUsd) / betUsd) * 100 : 0;
+
+        log(`Pool ${pool.id} 💰 Winner payout: Bet $${betUsd.toFixed(2)}, Win $${winUsd.toFixed(2)}, ROI ${roiPercent.toFixed(0)}%`);
+
+        const winnerEntry = await storage.createWinnerFeedEntry({
+          poolId: pool.id,
+          winnerWallet: winnerPubkey.toLowerCase(),
+          displayName,
+          avatarUrl,
+          tokenSymbol: pool.tokenSymbol,
+          betUsd,
+          winUsd,
+          roiPercent,
+        });
+
+        log(`Pool ${pool.id} 🏆 Winners feed entry created`);
+
+        // Broadcast new winner to all clients via WebSocket
+        notificationService.broadcastNewWinner(winnerEntry);
+      } catch (feedErr) {
+        log(`Pool ${pool.id} ⚠️ Failed to create winners feed entry:`, feedErr);
+        // Non-critical, don't block payout flow
+      }
+
       // REFERRAL REWARDS: Allocate 1.5% treasury fee among referrers
       try {
         if (pool.tokenMint && pool.totalPot) {
           const TREASURY_FEE_BPS = 150; // 1.5% as basis points
           const treasuryFeeAmount = Math.floor((pool.totalPot * TREASURY_FEE_BPS) / 10000);
-          
+
           // Convert to token units (assuming tokenMint has decimals)
           // For now, store as raw amount string (backend will handle proper decimal conversion)
           const feeAmountStr = treasuryFeeAmount.toString();
-          
+
           log(`Pool ${pool.id} 💰 Allocating referral rewards: ${feeAmountStr} (1.5% of ${pool.totalPot})`);
           await storage.allocateReferralRewards(pool.id, pool.tokenMint, feeAmountStr);
           log(`Pool ${pool.id} ✅ Referral rewards allocated`);
         }
       } catch (refErr: any) {
         log(`Pool ${pool.id} ⚠️ Failed to allocate referral rewards: ${refErr.message}`);
+      }
+
+      // 🗑️ DELETE CHAT: Clean up chat messages when pool ends
+      try {
+        const deletedCount = await storage.deletePoolChatMessages(pool.id);
+        log(`Pool ${pool.id} 🗑️ Deleted ${deletedCount} chat messages`);
+      } catch (chatErr: any) {
+        log(`Pool ${pool.id} ⚠️ Failed to delete chat messages: ${chatErr.message}`);
       }
     } catch (err: any) {
       log(`Pool ${pool.id} ❌ payoutWinner() failed: ${err.message}`);

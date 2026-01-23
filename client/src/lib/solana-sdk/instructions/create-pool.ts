@@ -28,7 +28,6 @@ export interface CreatePoolInstructionParams {
   burnFeeBps: number; // u16
   treasuryWallet: PublicKey;
   treasuryFeeBps: number; // u16
-  allowMock: boolean;
   userPublicKey: PublicKey;
 }
 
@@ -71,7 +70,7 @@ export function buildCreatePoolInstruction(params: CreatePoolInstructionParams):
   // Serialize instruction args
   // Args: salt [u8;32], max_participants u8, lock_duration i64, amount u64,
   //       dev_wallet pubkey, dev_fee_bps u16, burn_fee_bps u16,
-  //       treasury_wallet pubkey, treasury_fee_bps u16, allow_mock bool
+  //       treasury_wallet pubkey, treasury_fee_bps u16, allow_mock bool (deprecated, always false)
   // Total: 32 + 1 + 8 + 8 + 32 + 2 + 2 + 32 + 2 + 1 = 120 bytes
   const dataBuffer = Buffer.alloc(120);
   let offset = 0;
@@ -94,7 +93,7 @@ export function buildCreatePoolInstruction(params: CreatePoolInstructionParams):
   offset += 32;
   dataBuffer.writeUInt16LE(params.treasuryFeeBps, offset);
   offset += 2;
-  dataBuffer.writeUInt8(params.allowMock ? 1 : 0, offset);
+  dataBuffer.writeUInt8(0, offset); // allowMock deprecated, always false
 
   // Prepend discriminator
   const discriminator = Buffer.from([233, 146, 209, 142, 207, 104, 64, 188]);

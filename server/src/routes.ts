@@ -28,8 +28,11 @@ import {
 import { cacheMiddleware, invalidateCache } from "./cache-middleware.js";
 import { parsePaginationParams, createPaginatedResponse, paginateArray } from "./pagination.js";
 import rateLimit from "express-rate-limit";
-import { faucetRouter } from "./routes/faucet.js";
 import { objectStorageClient } from "./replit_integrations/object_storage/objectStorage.js";
+import { notificationService, NotificationType } from "./notifications/notificationService.js";
+import { logger } from "./logger.js";
+import { getPriceTrackingService } from "./index.js";
+import { fetchTokenPriceUsd } from "./utils/priceUtils.js";
 
 // ===========================================
 // SECURITY: Rate Limiting
@@ -157,9 +160,6 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-    // === FAUCET FOR HNCZ ===
-  app.use("/api/faucet", faucetRouter);
-
   // Upload Endpoint with security validation + strict rate limiting (10 uploads per 5 minutes)
   app.post("/api/upload", strictLimiter, upload.single('file'), async (req, res) => {
     if (!req.file) {
@@ -213,9 +213,9 @@ export async function registerRoutes(
     const pagination = parsePaginationParams(req);
     const { pools: allPools, total: totalPools } = await storage.getPools(pagination.limit, pagination.offset);
 
-    // Filter out cancelled pools with refunds returned
-    // Keep only active, pending, ended pools (but not cancelled ones)
-    const activePools = allPools.filter(pool => pool.status !== 'cancelled');
+    // Filter out ended and cancelled pools from Pool Terminal
+    // Keep only active pools (open, locked, unlocking, randomness, winnerSelected)
+    const activePools = allPools.filter(pool => pool.status !== 'cancelled' && pool.status !== 'ended');
 
     // Create paginated response
     const response = createPaginatedResponse(activePools, totalPools, pagination);
@@ -380,9 +380,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: verification.reason || "Transaction verification failed" });
       }
 
-      // Verify participant exists
+      // Verify participant exists (case-insensitive comparison)
       const participantsList = await storage.getParticipants(poolId);
-      const participant = participantsList.find(p => p.walletAddress === wallet);
+      const participant = participantsList.find(p => p.walletAddress.toLowerCase() === wallet.toLowerCase());
 
       if (!participant) {
         return res.status(404).json({ message: "Participant not found in this pool" });
@@ -477,7 +477,8 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Pool not found" });
       }
 
-      if (pool.creatorWallet !== wallet) {
+      // Normalize both wallet addresses for case-insensitive comparison
+      if (pool.creatorWallet.toLowerCase() !== wallet.toLowerCase()) {
         console.log("[SECURITY] Claim rent rejected - not creator:", { wallet, creator: pool.creatorWallet });
         return res.status(403).json({ message: "Only pool creator can claim rent" });
       }
@@ -554,7 +555,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.pools.get.path, cacheMiddleware({ ttl: 20 }), async (req, res) => {
+  app.get(api.pools.get.path, cacheMiddleware({ ttl: 3 }), async (req, res) => {
     const id = Number(req.params.id);
     const pool = await storage.getPool(id);
     if (!pool) return res.status(404).json({ message: "Pool not found" });
@@ -570,7 +571,7 @@ export async function registerRoutes(
     try {
       const input = api.pools.create.input.parse(req.body);
 
-      console.log("PARSED_INPUT:", { txHash: input.txHash, poolAddress: input.poolAddress, creatorWallet: input.creatorWallet, allowMock: input.allowMock });
+      console.log("PARSED_INPUT:", { txHash: input.txHash, poolAddress: input.poolAddress, creatorWallet: input.creatorWallet });
 
       // CRITICAL: Block pool creation without on-chain transaction proof
       // This prevents fake pools from cached frontend code
@@ -654,23 +655,44 @@ export async function registerRoutes(
         poolAddress: input.poolAddress
       });
 
+      // Fetch initial token price from mainnet
+      let initialPrice: number | null = null;
+      try {
+        initialPrice = await fetchTokenPriceUsd(input.tokenMint);
+        if (initialPrice && initialPrice > 0) {
+          console.log(`[POOL CREATE] ✅ Token price fetched: $${initialPrice.toFixed(6)}`);
+        } else {
+          console.warn(`[POOL CREATE] ⚠️  Token price not available for ${input.tokenMint}`);
+        }
+      } catch (err: any) {
+        console.warn(`[POOL CREATE] ⚠️  Failed to fetch token price: ${err.message}`);
+      }
+
       // 🔐 ATOMIC TRANSACTION: Create pool + mark tx as used
       const client = await pgPool.connect();
 
       try {
         await client.query("BEGIN");
 
-        // Create pool
-        const pool = await storage.createPool(input);
+        // Create pool with initial price
+        const poolInput = {
+          ...input,
+          initialPriceUsd: initialPrice,
+          currentPriceUsd: initialPrice,
+        };
+        const pool = await storage.createPool(poolInput);
 
         // Mark transaction as used
         await markTxHashUsed(input.txHash, pool.id, input.creatorWallet, "create_pool");
 
         // A) CREATOR MUST ALWAYS BE FIRST PARTICIPANT
         console.log("[POOL CREATE] Adding creator as first participant:", input.creatorWallet);
+        const betUsd = initialPrice && pool.entryAmount ? pool.entryAmount * initialPrice : null;
         await storage.addParticipant({
           poolId: pool.id,
           walletAddress: input.creatorWallet,
+          betUsd: betUsd,
+          priceAtJoinUsd: initialPrice,
           // Avatar will be fetched from profile when participants are retrieved
         });
 
@@ -685,6 +707,13 @@ export async function registerRoutes(
 
         await client.query("COMMIT");
         client.release();
+
+        // Start real-time price tracking for this pool
+        const priceTrackingService = getPriceTrackingService();
+        if (priceTrackingService && input.tokenMint) {
+          await priceTrackingService.startTracking(pool.id, input.tokenMint);
+          console.log(`[POOL CREATE] ✅ Started price tracking for pool ${pool.id}`);
+        }
 
         // Invalidate pools cache
         await invalidateCache("api:GET:/api/pools*");
@@ -775,6 +804,14 @@ export async function registerRoutes(
         console.log("[JOIN] Local pool join (no verification required):", { wallet: input.walletAddress });
       }
 
+      // Get current token price for USD tracking
+      const currentPrice = pool.currentPriceUsd || await fetchTokenPriceUsd(pool.tokenMint || '');
+      const betUsd = currentPrice && pool.entryAmount ? pool.entryAmount * currentPrice : null;
+
+      if (currentPrice) {
+        console.log(`[JOIN] Current token price: $${currentPrice.toFixed(6)}, Bet USD: $${betUsd?.toFixed(2)}`);
+      }
+
       // 🔐 ATOMIC TRANSACTION: Add participant + mark tx as used (for on-chain pools)
       let participant;
       let updatedPool;
@@ -788,10 +825,12 @@ export async function registerRoutes(
           // Mark transaction as used
           await markTxHashUsed(input.txHash, id, input.walletAddress, "join");
 
-          // Add participant
+          // Add participant with USD tracking
           participant = await storage.addParticipant({
             poolId: id,
             walletAddress: input.walletAddress,
+            betUsd: betUsd,
+            priceAtJoinUsd: currentPrice,
             // Avatar will be fetched from profile when participants are retrieved
           });
 
@@ -813,6 +852,49 @@ export async function registerRoutes(
 
           // Return updated pool data
           updatedPool = await storage.getPool(id);
+
+          // 📢 NOTIFY: Send JOIN notification to creator + existing participants
+          // IMPORTANT: Creator becomes first participant on pool creation - don't notify them about their own join
+          const poolParticipants = await storage.getParticipants(id);
+
+          if (updatedPool && poolParticipants && poolParticipants.length > 0) {
+            const isCreatorJoining = input.walletAddress.toLowerCase() === updatedPool.creatorWallet.toLowerCase();
+
+            // If creator is joining (first participant), DON'T send notification
+            if (isCreatorJoining) {
+              logger.info('[NOTIFICATIONS] JOIN event - creator joining their own pool, skipping notification', {
+                poolId: updatedPool.id,
+                creator: updatedPool.creatorWallet.slice(0, 8),
+              });
+            } else {
+              // Someone else joined - notify creator + existing participants (except new joiner)
+              const existingParticipants = poolParticipants.filter(
+                p => p.walletAddress.toLowerCase() !== input.walletAddress.toLowerCase()
+              );
+
+              // Notify creator + all existing participants (not the new joiner)
+              // Use Set to avoid duplicates (creator is also a participant)
+              const walletsToNotify = Array.from(new Set([
+                updatedPool.creatorWallet.toLowerCase(),
+                ...existingParticipants.map(p => p.walletAddress.toLowerCase())
+              ]));
+
+              logger.info('[NOTIFICATIONS] JOIN event - notifying creator + existing participants', {
+                poolId: updatedPool.id,
+                newJoiner: input.walletAddress.slice(0, 8),
+                walletsToNotify: walletsToNotify.map(w => w.slice(0, 8)),
+                totalNotifications: walletsToNotify.length
+              });
+
+              await notificationService.notifyWallets(walletsToNotify, {
+                type: NotificationType.JOIN,
+                title: 'New Participant',
+                message: `Someone joined the ${updatedPool.tokenName} pool! (${updatedPool.participantsCount}/${updatedPool.maxParticipants})`,
+                poolId: updatedPool.id,
+                poolName: `${updatedPool.tokenName} Pool`,
+              });
+            }
+          }
         } catch (err: any) {
           await client.query("ROLLBACK");
           client.release();
@@ -836,6 +918,8 @@ export async function registerRoutes(
           participant = await storage.addParticipant({
             poolId: id,
             walletAddress: input.walletAddress,
+            betUsd: betUsd,
+            priceAtJoinUsd: currentPrice,
             // Avatar will be fetched from profile when participants are retrieved
           });
 
@@ -849,6 +933,49 @@ export async function registerRoutes(
           });
 
           updatedPool = await storage.getPool(id);
+
+          // 📢 NOTIFY: Send JOIN notification to creator + existing participants (local pools)
+          // IMPORTANT: Creator becomes first participant on pool creation - don't notify them about their own join
+          const poolParticipants = await storage.getParticipants(id);
+
+          if (updatedPool && poolParticipants && poolParticipants.length > 0) {
+            const isCreatorJoining = input.walletAddress.toLowerCase() === updatedPool.creatorWallet.toLowerCase();
+
+            // If creator is joining (first participant), DON'T send notification
+            if (isCreatorJoining) {
+              logger.info('[NOTIFICATIONS] JOIN event - creator joining their own pool, skipping notification', {
+                poolId: updatedPool.id,
+                creator: updatedPool.creatorWallet.slice(0, 8),
+              });
+            } else {
+              // Someone else joined - notify creator + existing participants (except new joiner)
+              const existingParticipants = poolParticipants.filter(
+                p => p.walletAddress.toLowerCase() !== input.walletAddress.toLowerCase()
+              );
+
+              // Notify creator + all existing participants (not the new joiner)
+              // Use Set to avoid duplicates (creator is also a participant)
+              const walletsToNotify = Array.from(new Set([
+                updatedPool.creatorWallet.toLowerCase(),
+                ...existingParticipants.map(p => p.walletAddress.toLowerCase())
+              ]));
+
+              logger.info('[NOTIFICATIONS] JOIN event - notifying creator + existing participants', {
+                poolId: updatedPool.id,
+                newJoiner: input.walletAddress.slice(0, 8),
+                walletsToNotify: walletsToNotify.map(w => w.slice(0, 8)),
+                totalNotifications: walletsToNotify.length
+              });
+
+              await notificationService.notifyWallets(walletsToNotify, {
+                type: NotificationType.JOIN,
+                title: 'New Participant',
+                message: `Someone joined the ${updatedPool.tokenName} pool! (${updatedPool.participantsCount}/${updatedPool.maxParticipants})`,
+                poolId: updatedPool.id,
+                poolName: `${updatedPool.tokenName} Pool`,
+              });
+            }
+          }
         } catch (err: any) {
           // SECURITY: Handle duplicate participant error
           if (err.message?.includes("DUPLICATE_PARTICIPANT")) {
@@ -941,6 +1068,46 @@ export async function registerRoutes(
 
         await client.query("COMMIT");
         client.release();
+
+        // 📢 NOTIFY: Send CANCEL notification ONLY to participants (not creator)
+        const cancelledPool = await storage.getPool(poolId);
+        const cancelledPoolParticipants = await storage.getParticipants(poolId);
+
+        if (cancelledPool && cancelledPoolParticipants && cancelledPoolParticipants.length > 0) {
+          // Filter out the creator from participants list
+          const participantsWithoutCreator = cancelledPoolParticipants.filter(
+            p => p.walletAddress.toLowerCase() !== cancelledPool.creatorWallet.toLowerCase()
+          );
+
+          logger.info('[NOTIFICATIONS] CANCEL event - notifying participants (excluding creator)', {
+            poolId: cancelledPool.id,
+            totalParticipants: cancelledPoolParticipants.length,
+            notifyingCount: participantsWithoutCreator.length,
+            creator: cancelledPool.creatorWallet.slice(0, 8)
+          });
+
+          // Only notify if there are participants other than the creator
+          if (participantsWithoutCreator.length > 0) {
+            // Convert to format expected by notifyParticipantsOnly
+            const participantsForNotification = participantsWithoutCreator.map(p => ({ wallet: p.walletAddress }));
+
+            await notificationService.notifyParticipantsOnly(participantsForNotification, {
+              type: NotificationType.CANCEL,
+              title: 'Pool Cancelled',
+              message: `${cancelledPool.tokenName} pool was cancelled by creator. You can claim your refund.`,
+              poolId: cancelledPool.id,
+              poolName: `${cancelledPool.tokenName} Pool`,
+            });
+          }
+        }
+
+        // 🗑️ DELETE CHAT: Clean up chat messages when pool is cancelled
+        try {
+          const deletedCount = await storage.deletePoolChatMessages(poolId);
+          console.log(`[CHAT] Deleted ${deletedCount} chat messages for cancelled pool ${poolId}`);
+        } catch (chatErr: any) {
+          console.error(`[CHAT] Failed to delete chat messages for pool ${poolId}:`, chatErr);
+        }
 
         res.json({ success: true, message: "Pool cancelled successfully" });
       } catch (err: any) {
@@ -1194,6 +1361,158 @@ export async function registerRoutes(
     res.json({ winner: winner.walletAddress, payout: pool.totalPot });
   });
 
+  // ============================================
+  // NOTIFICATIONS
+  // ============================================
+
+  // GET /api/notifications/:walletAddress - Get notifications for a wallet
+  app.get("/api/notifications/:walletAddress", async (req, res) => {
+    try {
+      const { walletAddress } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+
+      const notifications = await storage.getNotifications(walletAddress, limit);
+      res.json({ notifications });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to get notifications:", err);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  // GET /api/notifications/:walletAddress/unread-count - Get unread count
+  app.get("/api/notifications/:walletAddress/unread-count", async (req, res) => {
+    try {
+      const { walletAddress } = req.params;
+      const count = await storage.getUnreadCount(walletAddress);
+      res.json({ count });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to get unread count:", err);
+      res.status(500).json({ message: "Failed to fetch unread count" });
+    }
+  });
+
+  // POST /api/notifications/:id/mark-read - Mark notification as read
+  app.post("/api/notifications/:id/mark-read", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { walletAddress } = req.body;
+
+      if (!walletAddress) {
+        return res.status(400).json({ message: "walletAddress required" });
+      }
+
+      const success = await storage.markNotificationAsRead(id, walletAddress);
+      res.json({ success });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to mark as read:", err);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  // POST /api/notifications/:walletAddress/mark-all-read - Mark all as read
+  app.post("/api/notifications/:walletAddress/mark-all-read", async (req, res) => {
+    try {
+      const { walletAddress } = req.params;
+      const count = await storage.markAllNotificationsAsRead(walletAddress);
+      res.json({ count });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to mark all as read:", err);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // DELETE /api/notifications/:id - Delete a notification
+  app.delete("/api/notifications/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { walletAddress } = req.body;
+
+      if (!walletAddress) {
+        return res.status(400).json({ message: "walletAddress required" });
+      }
+
+      const success = await storage.deleteNotification(id, walletAddress);
+      res.json({ success });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to delete notification:", err);
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
+
+  // DELETE /api/notifications/:walletAddress/all - Delete all notifications for wallet
+  app.delete("/api/notifications/:walletAddress/all", async (req, res) => {
+    try {
+      const { walletAddress } = req.params;
+      const count = await storage.deleteAllNotifications(walletAddress);
+      res.json({ count });
+    } catch (err: any) {
+      console.error("[NOTIFICATIONS] Failed to delete all notifications:", err);
+      res.status(500).json({ message: "Failed to delete all notifications" });
+    }
+  });
+
+  // ============================================
+  // POOL CHAT
+  // ============================================
+
+  // GET /api/pools/:poolId/chat - Get chat messages for a pool
+  app.get("/api/pools/:poolId/chat", async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.poolId);
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+
+      const messages = await storage.getChatMessages(poolId, limit);
+      res.json({ messages });
+    } catch (err: any) {
+      console.error("[CHAT] Failed to get messages:", err);
+      res.status(500).json({ message: "Failed to fetch chat messages" });
+    }
+  });
+
+  // POST /api/pools/:poolId/chat - Send a chat message
+  app.post("/api/pools/:poolId/chat", async (req, res) => {
+    try {
+      const poolId = parseInt(req.params.poolId);
+      const { walletAddress, message } = req.body;
+
+      if (!walletAddress || !message) {
+        return res.status(400).json({ message: "walletAddress and message required" });
+      }
+
+      if (message.trim().length === 0) {
+        return res.status(400).json({ message: "Message cannot be empty" });
+      }
+
+      if (message.length > 500) {
+        return res.status(400).json({ message: "Message too long (max 500 characters)" });
+      }
+
+      // Verify pool exists and is not ended/cancelled
+      const pool = await storage.getPool(poolId);
+      if (!pool) {
+        return res.status(404).json({ message: "Pool not found" });
+      }
+
+      if (pool.status === 'ended' || pool.status === 'cancelled') {
+        return res.status(400).json({ message: "Cannot send messages to ended/cancelled pools" });
+      }
+
+      const chatMessage = await storage.createChatMessage({
+        poolId,
+        walletAddress: walletAddress.toLowerCase(),
+        message: message.trim(),
+      });
+
+      // Broadcast message via WebSocket
+      notificationService.broadcastChatMessage(poolId, chatMessage);
+
+      res.json(chatMessage);
+    } catch (err: any) {
+      console.error("[CHAT] Failed to send message:", err);
+      res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
   // Leaderboard
   app.get(api.leaderboard.get.path, cacheMiddleware({ ttl: 60 }), async (req, res) => {
     const data = await storage.getLeaderboard();
@@ -1328,9 +1647,10 @@ export async function registerRoutes(
 
   app.get(api.profiles.get.path, cacheMiddleware({ ttl: 300 }), async (req, res) => {
     const wallet = req.params.wallet;
+    const normalizedWallet = wallet.toLowerCase(); // Normalize to lowercase for DB lookup
 
     try {
-      const profile = await storage.getProfile(wallet);
+      const profile = await storage.getProfile(normalizedWallet);
 
       const displayName = profile?.nickname || shortenWallet(wallet);
       const displayAvatar = profile?.avatarUrl || generateDicebearAvatar(wallet, profile?.avatarStyle || "bottts");
@@ -1397,7 +1717,7 @@ export async function registerRoutes(
       });
 
       // Invalidate profile cache
-      await invalidateCache(`api:GET:/api/profiles/${wallet}*`);
+      await invalidateCache(`api:GET:/api/profile/${wallet}*`);
 
       res.json(updated);
     } catch (err) {
@@ -1666,6 +1986,20 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[Referral] Claim error:", err);
       res.status(500).json({ message: "Failed to process claim" });
+    }
+  });
+
+  // ============================================
+  // WINNERS FEED
+  // ============================================
+
+  app.get(api.winners.feed.path, cacheMiddleware({ ttl: 5 }), async (req, res) => {
+    try {
+      const winners = await storage.getRecentWinners(15);
+      res.json(winners);
+    } catch (err) {
+      console.error("[Winners Feed] Error:", err);
+      res.status(500).json({ message: "Failed to fetch winners feed" });
     }
   });
 

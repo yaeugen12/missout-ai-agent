@@ -11,6 +11,7 @@ interface WinnerRevealCardProps {
   avatar?: string | null;
   prizeAmount: number;
   tokenSymbol: string;
+  priceUsd?: number;
   txHash?: string;
 }
 
@@ -20,12 +21,13 @@ export function WinnerRevealCard({
   avatar,
   prizeAmount,
   tokenSymbol,
+  priceUsd = 0,
   txHash,
 }: WinnerRevealCardProps) {
   const avatarUrl = avatar || generateDicebearUrl(walletAddress);
   const name = displayName || shortenWallet(walletAddress);
-  
-  const getSolscanUrl = (hash: string) => `https://solscan.io/tx/${hash}?cluster=devnet`;
+
+  const getSolscanUrl = (hash: string) => `https://solscan.io/tx/${hash}`;
 
   useEffect(() => {
     SoundManager.play("reveal_burst");
@@ -162,7 +164,7 @@ export function WinnerRevealCard({
               <div className="text-[10px] font-tech text-yellow-500/70 uppercase tracking-[0.3em] mb-1">
                 Prize Claimed
               </div>
-              <motion.div 
+              <motion.div
                 className="text-3xl font-mono font-black text-yellow-400"
                 animate={{
                   textShadow: [
@@ -175,6 +177,14 @@ export function WinnerRevealCard({
               >
                 {prizeAmount.toFixed(2)} {tokenSymbol}
               </motion.div>
+              {priceUsd > 0 && (
+                <div className="text-sm font-mono text-green-400 mt-2">
+                  ${(prizeAmount * priceUsd).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
+                </div>
+              )}
             </motion.div>
             
             {txHash && (

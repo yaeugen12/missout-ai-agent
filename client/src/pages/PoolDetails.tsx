@@ -1,12 +1,12 @@
 // BUILD_ID: v10-cancel-pool-not-full
 const BUILD_ID = "v10-cancel-pool-not-full";
-console.log("=== POOL_DETAILS_LOADED ===", BUILD_ID);
 
 import { useParams } from "wouter";
 import { usePool } from "@/hooks/use-pools";
 import { useWallet } from "@/hooks/use-wallet";
 import { Navbar } from "@/components/Navbar";
 import { BlackHoleExperience } from "@/components/BlackHoleExperience";
+import { PoolChat } from "@/components/PoolChat";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -23,9 +23,9 @@ import { MissoutClient, getMissoutClient } from "@/lib/solana-sdk/client";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { getSolscanTxUrl } from "@/hooks/use-sdk-transaction";
-import { DevnetReadiness } from "@/components/DevnetReadiness";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { apiFetch } from "@/lib/api";
+import { socket } from "@/lib/socket";
 
 function ParticipantRow({ walletAddress }: { walletAddress: string }) {
   const { data: profile, isLoading } = useQueries({
@@ -98,36 +98,53 @@ export default function PoolDetails() {
       return;
     }
 
-    console.log(`[AUTO-REFRESH] Pool ${pool.id} status=${pool.status}, polling for updates...`);
 
     // Poll every 3 seconds while waiting for state transitions
     const interval = setInterval(() => {
-      console.log(`[AUTO-REFRESH] Refreshing pool ${pool.id}`);
       invalidateQueries();
     }, 3000);
 
     return () => clearInterval(interval);
   }, [pool?.id, pool?.status, invalidateQueries]);
 
+  // Listen for real-time price updates via WebSocket
+  useEffect(() => {
+    if (!poolId) return;
+
+    const handlePriceUpdate = (data: {
+      poolId: number;
+      currentPriceUsd: number;
+      initialPriceUsd: number;
+      changePercent: number;
+    }) => {
+      // Only update if it's for our pool
+      if (data.poolId === poolId) {
+        // Invalidate queries to refetch pool data with new price
+        invalidateQueries();
+      }
+    };
+
+    socket.on('price-update', handlePriceUpdate);
+
+    return () => {
+      socket.off('price-update', handlePriceUpdate);
+    };
+  }, [poolId, invalidateQueries]);
+
   const handleJoin = useCallback(async () => {
-    console.log("=== JOIN_CLICK ===", BUILD_ID);
 
     if (!isConnected || !address) {
-      console.log("JOIN: Wallet not connected, prompting connect");
       connect();
       return;
     }
 
     if (!poolAddress || !pool) {
-      console.log("JOIN: Error - Pool address or pool data missing", { poolAddress, hasPool: !!pool });
       toast({ variant: "destructive", title: "Error", description: "Pool not ready" });
       return;
     }
 
     setIsJoining(true);
     try {
-      console.log("=== SDK_JOIN_ENTER ===");
-      console.log("JOIN params:", { poolId: poolAddress, amount: pool.entryAmount });
 
       const result = await joinPool({
         poolId: poolAddress,
@@ -135,11 +152,9 @@ export default function PoolDetails() {
       });
 
       // Proof of success: SDK already throws if tx.meta.err exists
-      console.log("=== JOIN_TX_CONFIRMED ===", result?.tx);
       if (!result?.tx) {
         throw new Error("No transaction signature returned from wallet");
       }
-      console.log("Join tx:", getSolscanTxUrl(result.tx));
 
       // 3. Notify backend
       await apiFetch(`/api/pools/${pool.id}/join`, {
@@ -151,7 +166,6 @@ export default function PoolDetails() {
         }),
         credentials: 'include'
       });
-      console.log("=== BACKEND_JOIN_SUCCESS ===");
 
       // 4. Fetch balance diff for UI display
       let balanceMsg = "";
@@ -189,10 +203,9 @@ export default function PoolDetails() {
         description: `You have joined the black hole.${balanceMsg}`,
       });
 
-      // Wait a moment for DB/Indexer to catch up before refresh
-      setTimeout(() => {
-        invalidateQueries();
-      }, 1000);
+      // Immediately invalidate queries to refresh pool data
+      // The 1s polling interval will pick up changes quickly
+      invalidateQueries();
     } catch (err: any) {
       console.error("=== JOIN_ERROR ===", err);
       // Extract logs if available in error message
@@ -213,7 +226,6 @@ export default function PoolDetails() {
   }, [isConnected, address, poolAddress, pool, poolId, joinPool, toast, connect, invalidateQueries]);
 
   const handleDonate = useCallback(async () => {
-    console.log("=== DONATE_CONFIRM_CLICK ===", BUILD_ID);
 
     if (!isConnected || !address) {
       connect();
@@ -233,19 +245,14 @@ export default function PoolDetails() {
 
     setIsDonating(true);
     try {
-      console.log("=== SDK_DONATE_ENTER ===");
-      console.log("DONATE params:", { poolId: poolAddress, amount });
 
       const result = await donateToPool({
         poolId: poolAddress,
         amount: amount.toString(),
       });
 
-      console.log("=== DONATE_TX_CONFIRMED ===", result.tx);
-      console.log("Donate tx:", getSolscanTxUrl(result.tx));
 
       // POST to backend with txHash
-      console.log("=== POSTING_DONATE_TO_BACKEND ===");
       await apiFetch(`/api/pools/${poolId}/donate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -256,7 +263,6 @@ export default function PoolDetails() {
         }),
         credentials: 'include'
       });
-      console.log("=== BACKEND_DONATE_SUCCESS ===");
 
       toast({
         title: "Fed the Void",
@@ -296,14 +302,12 @@ export default function PoolDetails() {
 
     setIsCancelling(true);
     try {
-      console.log("=== SDK_CANCEL_ENTER ===");
       const result = await cancelPool(poolAddress);
 
       if (!result?.tx) {
         throw new Error("No transaction signature returned from cancel");
       }
 
-      console.log("=== CANCEL_TX_CONFIRMED ===", result.tx);
 
       // Notify backend about cancellation (optional but good for tracking)
       try {
@@ -326,9 +330,9 @@ export default function PoolDetails() {
         title: "Pool Cancelled",
         description: `Black hole collapsed. Tx: ${result.tx.slice(0, 8)}...`,
       });
-      console.log("Cancel tx:", explorerUrl);
 
-      setTimeout(() => { invalidateQueries(); }, 1000);
+      // Immediately invalidate queries to refresh pool data
+      invalidateQueries();
     } catch (err: any) {
       console.error("=== CANCEL_ERROR ===", err);
 
@@ -377,7 +381,6 @@ export default function PoolDetails() {
         title: "Refund Claimed",
         description: `Tokens returned. Tx: ${result.tx.slice(0, 8)}...`,
       });
-      console.log("Refund tx:", getSolscanTxUrl(result.tx));
       invalidateQueries();
     } catch (err) {
       toast({
@@ -393,10 +396,10 @@ export default function PoolDetails() {
   if (isLoading) return <div className="min-h-screen bg-black flex items-center justify-center"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>;
   if (error || !pool) return <div className="min-h-screen bg-black flex items-center justify-center text-red-500">Error loading pool</div>;
 
-  // Find winner's profile data from participants list
+  // Find winner's profile data from participants list (case-insensitive)
   const participants = (pool as any).participants || [];
   const winnerParticipant = pool.winnerWallet
-    ? participants.find((p: any) => p.walletAddress === pool.winnerWallet)
+    ? participants.find((p: any) => p.walletAddress.toLowerCase() === pool.winnerWallet.toLowerCase())
     : null;
   const winnerDisplayName = winnerParticipant?.displayName;
   const winnerAvatar = winnerParticipant?.displayAvatar;
@@ -419,20 +422,39 @@ export default function PoolDetails() {
             winnerAvatar={winnerAvatar}
             prizeAmount={pool.totalPot || 0}
             tokenSymbol={pool.tokenSymbol}
+            priceUsd={pool.currentPriceUsd}
             payoutTxHash={(pool as any).payoutTxHash}
           />
 
-          {/* ✅ Singularity Mass – Right HUD (matches your red box) */}
+          {/* ✅ Volatility & Singularity Mass – Right HUD */}
           <div className="absolute right-10 top-1/2 -translate-y-1/2 z-40 hidden lg:block">
-            <div className="flex flex-col items-end bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[220px]">
-              <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">
-                Singularity Mass
-              </div>
-              <div className="text-5xl font-mono font-black text-neon-cyan leading-none tracking-tighter">
-                {(pool.totalPot || 0).toFixed(2)}
-              </div>
-              <div className="text-xs font-mono font-black text-primary mt-3 uppercase tracking-[0.3em] opacity-80">
-                {pool.tokenSymbol}
+            <div className="flex flex-col gap-4">
+              {/* Singularity Mass */}
+              <div className="bg-zinc-900/60 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl min-w-[220px]">
+                <div className="text-[10px] font-tech text-muted-foreground uppercase tracking-[0.4em] mb-2 opacity-60">
+                  Singularity Mass
+                </div>
+                <div className="text-5xl font-mono font-black text-neon-cyan leading-none tracking-tighter">
+                  {(pool.totalPot || 0).toFixed(2)}
+                </div>
+                <div className="text-xs font-mono font-black text-primary mt-3 uppercase tracking-[0.3em] opacity-80">
+                  {pool.tokenSymbol}
+                </div>
+
+                {/* USD Value (Mock Mainnet Mode) */}
+                {pool.currentPriceUsd && pool.currentPriceUsd > 0 && (
+                  <div className="mt-4 pt-3 border-t border-primary/10">
+                    <div className="text-2xl font-mono font-bold text-green-400">
+                      ${((pool.totalPot || 0) * pool.currentPriceUsd).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}
+                    </div>
+                    <div className="text-[9px] font-tech text-muted-foreground uppercase tracking-widest mt-1 opacity-60">
+                      USD Value
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -459,8 +481,6 @@ export default function PoolDetails() {
 
       {/* Main Content Area */}
       <div className="container mx-auto px-4 py-8">
-        <DevnetReadiness />
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
           {/* Left Col: Actions & Status */}
@@ -574,7 +594,6 @@ export default function PoolDetails() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      console.log("=== DONATE_OPEN_MODAL ===");
                       setDonateModalOpen(true);
                     }}
                     disabled={!sdkConnected || !isConnected}
@@ -642,7 +661,6 @@ export default function PoolDetails() {
                 placeholder="Enter amount"
                 value={donateAmount}
                 onChange={(e) => {
-                  console.log("=== DONATE_AMOUNT_SET ===", e.target.value);
                   setDonateAmount(e.target.value);
                 }}
                 className="bg-black/50 border-white/10 text-white font-mono"
@@ -672,6 +690,9 @@ export default function PoolDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Pool Chat */}
+      <PoolChat poolId={pool.id} poolStatus={pool.status} />
     </div>
   );
 }

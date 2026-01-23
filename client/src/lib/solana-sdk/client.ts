@@ -39,7 +39,6 @@ export interface PoolState {
   status: any;
   winner: PublicKey;
   randomnessAccount: PublicKey;
-  allowMock: boolean;
   closeTime: anchor.BN;
   totalAmount: anchor.BN; // u64
   totalVolume: anchor.BN; // u64
@@ -206,7 +205,7 @@ export class MissoutClient {
     const schema = data[offset++];
     const configHash = data.slice(offset, offset + 32);
     offset += 32;
-    const allowMock = data[offset++] === 1;
+    offset += 1; // Skip allowMock field (deprecated)
     const randomnessCommitSlot = new anchor.BN(data.slice(offset, offset + 8), "le");
     offset += 8;
     const initialized = data[offset++] === 1;
@@ -253,7 +252,6 @@ export class MissoutClient {
       version,
       schema,
       configHash,
-      allowMock,
       randomnessCommitSlot,
       initialized,
       lastJoinTime,
@@ -476,11 +474,6 @@ export class MissoutClient {
       throw new Error(`RPC connection failed: ${healthCheck.error}`);
     }
 
-    // Ensure we are on devnet (your intentional guard)
-    if (this.connection.rpcEndpoint.includes("mainnet")) {
-      throw new Error("CRITICAL: Mainnet RPC detected during transaction build");
-    }
-
     // Step 3: Build a STABLE instruction list once (no reordering between attempts)
     // Compute budget ix must be first.
     const stableIxs: anchor.web3.TransactionInstruction[] = [
@@ -580,7 +573,7 @@ export class MissoutClient {
         }
 
         console.log("SDK_TX_SENT:", sig);
-        console.log(`Explorer: https://explorer.solana.com/tx/${sig}?cluster=devnet`);
+        console.log(`Explorer: https://explorer.solana.com/tx/${sig}`);
 
         // Confirm
         console.log("SDK_CONFIRMING...");

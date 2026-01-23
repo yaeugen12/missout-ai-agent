@@ -27,7 +27,7 @@ export function usePool(id: number) {
       if (!res.ok) throw new Error("Failed to fetch pool");
       return await res.json() as Pool;
     },
-    refetchInterval: 2000,
+    refetchInterval: 1000, // Poll every 1s for real-time updates (reduced from 2s)
     enabled: !isNaN(id),
   });
 }

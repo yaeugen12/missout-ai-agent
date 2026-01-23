@@ -58,11 +58,11 @@ export function useWalletBalances(): WalletBalances {
       );
 
       const tokenBalances: TokenBalance[] = [];
-      
-      // Fetch devnet token metadata if on devnet
-      const isDevnet = import.meta.env.VITE_NETWORK === "devnet" || 
-                       window.location.hostname.includes("replit.dev") ||
-                       import.meta.env.VITE_SOLANA_CLUSTER === "devnet";
+
+      // Check if on mainnet (default to mainnet)
+      const isMainnet = import.meta.env.VITE_NETWORK === "mainnet" ||
+                        import.meta.env.VITE_SOLANA_CLUSTER === "mainnet-beta" ||
+                        true; // Default to mainnet
 
       for (const account of tokenAccounts.value) {
         const parsedInfo = account.account.data.parsed.info;
@@ -75,14 +75,8 @@ export function useWalletBalances(): WalletBalances {
         let name = "Unknown Token";
         let logoUrl: string | undefined;
 
-        // On devnet, try a few hardcoded known mints or fallback to generic symbol for testing
-        if (isDevnet) {
-          // Hardcoded metadata for the user's specific token if Helius fails
-          if (mintAddress === "HNcz9fndVXBogLjU55uyvbz79P5qWxaBZVKk7iRSy7jV") {
-            symbol = "HNCZ9F";
-            name = "HNCZ9F Token";
-          }
-        }
+        // Mainnet: Fetch metadata from Helius/DAS
+        // (removed devnet-specific hardcoded mints)
 
         try {
           const heliusRpcUrl = import.meta.env.VITE_HELIUS_RPC_URL;

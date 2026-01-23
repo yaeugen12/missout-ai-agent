@@ -1,9 +1,0 @@
-// Replace lines 82-85 in Navbar.tsx with:
-
-      if (!res.ok) {
-        // Show detailed error message, especially for rate limits
-        const errorMessage = data.error || "Faucet request failed";
-        const retryInfo = data.retryAfter ? ` (${data.retryAfter}h remaining)` : "";
-        toast.error(errorMessage + retryInfo, { duration: 5000 });
-        return;
-      }

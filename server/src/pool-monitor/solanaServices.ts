@@ -7,6 +7,7 @@ import { AnchorUtils, Randomness } from "@switchboard-xyz/on-demand";
 import { pool as dbPool } from "../db.js";
 import { rpcManager } from "../rpc-manager";
 import { resolveTokenProgramForMint } from "@shared/token-program-utils.js";
+import { getNetworkConfig, validateNetworkConfig, getCurrentNetwork } from "@shared/network-config.js";
 
 const log = (...args: any[]) => console.log("[MONITOR]", ...args);
 
@@ -16,12 +17,28 @@ let devWallet: Keypair | null = null;
 let treasuryWallet: PublicKey | null = null;
 let connection: Connection | null = null;
 
-// Constants from SDK
-const PROGRAM_ID = new PublicKey("CU2sowQaHdVcJUgEfgYvaPKj4AVb6i58oAytLnNE5y1L");
+// Network configuration - loads based on SOLANA_NETWORK environment variable
+const networkConfig = getNetworkConfig(
+  process.env.SOLANA_NETWORK,
+  process.env.SOLANA_RPC_URL
+);
 
-// Switchboard Configuration
-const SWITCHBOARD_PROGRAM_ID = new PublicKey(process.env.SWITCHBOARD_PROGRAM_ID || "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2");
-const SWITCHBOARD_QUEUE = new PublicKey(process.env.SWITCHBOARD_QUEUE || "EYiAmGSdsQTuCw413V5BzaruWuCCSDgTPtBGvLkXHbe7");
+// Validate configuration on startup
+validateNetworkConfig(networkConfig);
+
+// Constants from network config
+const PROGRAM_ID = networkConfig.programId;
+const SWITCHBOARD_PROGRAM_ID = process.env.SWITCHBOARD_PROGRAM_ID
+  ? new PublicKey(process.env.SWITCHBOARD_PROGRAM_ID)
+  : networkConfig.switchboard.programId;
+const SWITCHBOARD_QUEUE = process.env.SWITCHBOARD_QUEUE
+  ? new PublicKey(process.env.SWITCHBOARD_QUEUE)
+  : networkConfig.switchboard.queue;
+
+// Log network configuration on startup
+log(`🌐 Network: ${networkConfig.network}`);
+log(`📍 Program ID: ${PROGRAM_ID.toString()}`);
+log(`🔀 Switchboard Queue: ${SWITCHBOARD_QUEUE.toString()}`);
 
 /**
  * Initialize Solana services - Load DEV wallet and TREASURY wallet from ENV
@@ -131,30 +148,7 @@ function derivePoolTokenAddress(mint: PublicKey, pool: PublicKey, tokenProgramId
   return getAssociatedTokenAddressSync(mint, pool, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 }
 
-/**
- * Check if pool should use mock randomness
- * Checks allowMock flag in database
- */
-async function isMockForPool(poolAddress: string): Promise<boolean> {
-  try {
-    const pool = await dbPool.query(
-      'SELECT allow_mock FROM pools WHERE pool_address = $1',
-      [poolAddress]
-    );
-
-    if (pool.rows.length === 0) {
-      log(`pool=${poolAddress.slice(0, 8)} No DB record found, defaulting to real randomness`);
-      return false;
-    }
-
-    const allowMock = pool.rows[0].allow_mock === 1;
-    log(`pool=${poolAddress.slice(0, 8)} allowMock=${allowMock}`);
-    return allowMock;
-  } catch (err: any) {
-    log(`pool=${poolAddress.slice(0, 8)} Error checking allowMock: ${err.message}, defaulting to real randomness`);
-    return false;
-  }
-}
+// Mock randomness removed - always use real Switchboard randomness
 
 /**
  * Create instruction with discriminator
@@ -328,13 +322,11 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
     return;
   }
 
-  // Check if pool should use mock randomness
-  const useMock = await isMockForPool(poolAddress);
-
+  // Always use real Switchboard randomness
   let randomnessAccount: PublicKey;
 
-  if (useMock) {
-    // MOCK MODE: Use SystemProgram as sentinel (matches on-chain condition)
+  if (false) {
+    // This path is never taken anymore
     log(`pool=${poolAddress.slice(0, 8)} 🧪 MOCK MODE: Skipping Switchboard, using SystemProgram sentinel`);
     randomnessAccount = SystemProgram.programId;
   } else {
@@ -420,7 +412,7 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
 
     log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS ✅ TX_SENT=${sig.slice(0, 16)}`);
     await conn.confirmTransaction(sig, "confirmed");
-    log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS ✅ TX_CONFIRMED=${sig.slice(0, 16)} mode=${useMock ? 'MOCK' : 'REAL'} rng=${randomnessAccount.toBase58().slice(0, 16)}`);
+    log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS ✅ TX_CONFIRMED=${sig.slice(0, 16)} mode=REAL rng=${randomnessAccount.toBase58().slice(0, 16)}`);
   } catch (err: any) {
     log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS ❌ FAILED: ${err.message}`);
     throw err;
@@ -452,13 +444,7 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
     throw new Error("Pool has no randomness_account");
   }
 
-  // Check if using mock randomness (SystemProgram sentinel)
-  const useMock = await isMockForPool(poolAddress);
-
-  if (useMock || randomnessAccount.equals(SystemProgram.programId)) {
-    log(`pool=${poolAddress.slice(0, 8)} 🧪 MOCK MODE: Skipping Switchboard reveal, ready for instant winner selection`);
-    return;
-  }
+  // Always use real Switchboard randomness (no mock mode)
 
   // Load Switchboard program
   const wallet = new Wallet(payer);
@@ -547,17 +533,9 @@ export async function selectWinnerOnChain(poolAddress: string): Promise<void> {
     throw new Error("Pool has no randomness_account field");
   }
 
-  // Check if using mock randomness
-  const useMock = await isMockForPool(poolAddress);
+  // Always use real Switchboard randomness
+  const randomnessForInstruction = randomnessAccount;
 
-  // For mock mode or if randomness is SystemProgram, use SystemProgram as sentinel
-  const randomnessForInstruction = (useMock || randomnessAccount.equals(SystemProgram.programId))
-    ? SystemProgram.programId
-    : randomnessAccount;
-
-  if (useMock || randomnessAccount.equals(SystemProgram.programId)) {
-    log(`pool=${poolAddress.slice(0, 8)} 🧪 MOCK MODE: Using SystemProgram sentinel for winner selection`);
-  }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
 

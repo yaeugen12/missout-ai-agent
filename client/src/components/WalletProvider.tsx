@@ -11,20 +11,15 @@ import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-// STRICT DEVNET - Helius RPC only
-const HELIUS_DEVNET_RPC =
-  "https://devnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07";
+const RPC_ENDPOINT = import.meta.env.VITE_HELIUS_RPC_URL || import.meta.env.VITE_SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 interface WalletProviderProps {
   children: ReactNode;
 }
 
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
-  const endpoint = HELIUS_DEVNET_RPC;
+  const endpoint = RPC_ENDPOINT;
 
-  // IMPORTANT:
-  // PhantomWalletAdapter MUST NOT be added manually
-  // Phantom registers automatically through the Solana Wallet Standard
   const wallets = useMemo(
     () => [
       new SolflareWalletAdapter(),

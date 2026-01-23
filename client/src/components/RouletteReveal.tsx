@@ -24,7 +24,7 @@ export function RouletteReveal({ participants, winnerAddress, onComplete }: Roul
     // We want the winner to land exactly in the center.
     
     // Create a long list for the scrolling effect
-    const winner = participants.find(p => p.walletAddress === winnerAddress);
+    const winner = participants.find(p => p.walletAddress.toLowerCase() === winnerAddress.toLowerCase());
     if (!winner) return;
 
     const fillerBefore = Array(30).fill(null).map(() => participants[Math.floor(Math.random() * participants.length)]);
@@ -66,11 +66,11 @@ export function RouletteReveal({ participants, winnerAddress, onComplete }: Roul
         style={{ x: 0 }}
       >
         {items.map((p, i) => (
-          <div 
+          <div
             key={i}
             className={cn(
               "flex-shrink-0 w-[100px] h-[100px] bg-muted border border-white/10 rounded-lg flex flex-col items-center justify-center p-2 relative overflow-hidden",
-              p.walletAddress === winnerAddress && "border-yellow-500/50" // Subtle hint
+              p.walletAddress.toLowerCase() === winnerAddress.toLowerCase() && "border-yellow-500/50" // Subtle hint
             )}
           >
             <img 

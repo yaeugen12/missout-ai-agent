@@ -3,12 +3,12 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useMyProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, LogOut, Copy, Check, UserCircle, History, Droplets } from "lucide-react";
+import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, LogOut, Copy, Check, UserCircle, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
 import { ProfileEditModal } from "@/components/ProfileEditModal";
 import { TransactionHistory } from "@/components/TransactionHistory";
-import FaucetModal from "@/components/FaucetModal";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -30,7 +30,6 @@ export function Navbar() {
   const { data: profile } = useMyProfile();
   const [copied, setCopied] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [faucetModalOpen, setFaucetModalOpen] = useState(false);
 
   const navItems = [
     { href: "/initialize", label: "Initialize", icon: Plus },
@@ -98,16 +97,7 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-4">
-          {isConnected && (
-            <Button
-              onClick={() => setFaucetModalOpen(true)}
-              className="bg-primary/10 text-primary border border-primary/50 hover:bg-primary hover:text-black transition-all font-tech font-bold uppercase tracking-wider flex items-center gap-2"
-            >
-              <Droplets className="w-4 h-4" />
-              FAUCET
-            </Button>
-          )}
-
+          {isConnected && address && <NotificationCenter />}
           {isConnected && address ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -297,7 +287,6 @@ export function Navbar() {
       </div>
 
       <ProfileEditModal open={profileModalOpen} onOpenChange={setProfileModalOpen} />
-      <FaucetModal open={faucetModalOpen} onOpenChange={setFaucetModalOpen} />
     </header>
   );
 }

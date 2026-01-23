@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp, bigint, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, bigint, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -27,13 +27,16 @@ export const pools = pgTable("pools", {
   donatedAmount: doublePrecision("donated_amount").default(0),
   creatorWallet: text("creator_wallet").notNull(),
 
+  // Volatility tracking
+  initialPriceUsd: doublePrecision("initial_price_usd"),
+  currentPriceUsd: doublePrecision("current_price_usd"),
+
   // Randomness
   randomnessAccount: text("randomness_account"),
   randomnessHex: text("randomness_hex"),
   txHash: text("tx_hash"),
 
   // Flags
-  allowMock: integer("allow_mock").default(0),
   rentClaimed: integer("rent_claimed").default(0),
 });
 
@@ -48,6 +51,8 @@ export const participants = pgTable("participants", {
   avatar: text("avatar"),
   joinedAt: timestamp("joined_at").defaultNow(),
   refundClaimed: integer("refund_claimed").default(0),
+  betUsd: doublePrecision("bet_usd"),              // USD value of bet at join time
+  priceAtJoinUsd: doublePrecision("price_at_join_usd"), // Token price when user joined
 });
 
 // ============================================
@@ -203,3 +208,61 @@ export type InsertReferralRelation = typeof referralRelations.$inferInsert;
 export type ReferralReward = typeof referralRewards.$inferSelect;
 export type ReferralRewardEvent = typeof referralRewardEvents.$inferSelect;
 export type ReferralClaim = typeof referralClaims.$inferSelect;
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  walletAddress: text("wallet_address").notNull(),
+  type: text("type").notNull(), // 'join', 'unlocked', 'randomness', 'win', 'cancel'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  poolId: integer("pool_id"),
+  poolName: text("pool_name"),
+  randomness: text("randomness"),
+  verifyUrl: text("verify_url"),
+  read: integer("read").default(0).notNull(), // SQLite compat: 0=false, 1=true
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+// Pool Chat Messages
+export const poolChatMessages = pgTable("pool_chat_messages", {
+  id: serial("id").primaryKey(),
+  poolId: integer("pool_id").notNull().references(() => pools.id, { onDelete: "cascade" }),
+  walletAddress: text("wallet_address").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  poolIdIdx: index("pool_chat_messages_pool_id_idx").on(table.poolId),
+  createdAtIdx: index("pool_chat_messages_created_at_idx").on(table.createdAt),
+}));
+
+export type PoolChatMessage = typeof poolChatMessages.$inferSelect;
+export type InsertPoolChatMessage = typeof poolChatMessages.$inferInsert;
+
+// ============================================
+// WINNERS FEED
+// ============================================
+
+export const winnersFeed = pgTable("winners_feed", {
+  id: serial("id").primaryKey(),
+  poolId: integer("pool_id").notNull().references(() => pools.id),
+  winnerWallet: text("winner_wallet").notNull(),
+  displayName: text("display_name").notNull(), // nickname OR shortened wallet
+  avatarUrl: text("avatar_url"), // custom avatar or null (will generate identicon)
+  tokenSymbol: text("token_symbol").notNull(),
+  betUsd: doublePrecision("bet_usd").notNull(), // USD value at join time
+  winUsd: doublePrecision("win_usd").notNull(), // USD value at payout time
+  roiPercent: doublePrecision("roi_percent").notNull(), // (win - bet) / bet * 100
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  createdAtIdx: index("winners_feed_created_at_idx").on(table.createdAt),
+}));
+
+export type WinnerFeedEntry = typeof winnersFeed.$inferSelect;
+export type InsertWinnerFeedEntry = typeof winnersFeed.$inferInsert;

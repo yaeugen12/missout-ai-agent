@@ -18,6 +18,7 @@ export type TopWinner = {
   winsCount: number;
   totalTokensWon: number;
   totalUsdWon: number;
+  totalUsdBet: number;
   biggestWinTokens: number;
   biggestWinUsd: number;
   lastWinAt: string | null;
@@ -30,10 +31,10 @@ export type TopReferrer = {
   referralsCount: number;
   totalTokensEarned: number;
   totalUsdEarned: number;
-  avgRewardPerReferral: number;
-  lastRewardAt: string | null;
-  tokenMint: string | null;
-  tokenSymbol: string | null;
+  avgRewardPerReferral?: number;
+  lastReferralAt: string | null;
+  tokenMint?: string | null;
+  tokenSymbol?: string | null;
 };
 
 export function useTopWinners(limit: number = 20) {

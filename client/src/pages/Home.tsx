@@ -6,25 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Loader2, LayoutGrid, Atom } from "lucide-react";
 import { Link } from "wouter";
 import type { Pool } from "@/types/shared";
-import { DevnetReadiness } from "@/components/DevnetReadiness";
 
 export default function Home() {
   const { data: pools, isLoading, error } = usePools();
   const [filteredPools, setFilteredPools] = useState<Pool[]>([]);
 
   // Debugging pools data
-  // console.log("[Home Debug] Pools Data:", pools);
 
   const handleFilteredPoolsChange = useCallback((filtered: Pool[]) => {
-    // console.log("[Home Debug] Filtered Pools:", filtered);
     setFilteredPools(filtered);
   }, []);
 
   return (
     <div className="bg-grid-pattern">
       <main className="container mx-auto px-4 py-12">
-        <DevnetReadiness />
-
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-6">
           <div>
             <h1 className="text-4xl md:text-6xl font-display font-black text-white mb-2 tracking-tight">

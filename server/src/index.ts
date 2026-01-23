@@ -14,6 +14,9 @@ import { readFileSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import * as Sentry from "@sentry/node";
+import { notificationService } from "./notifications/notificationService.js";
+import { PriceTrackingService } from "./services/priceTracking.js";
+import { storage } from "./storage.js";
 
 import { setupSentryErrorHandlers } from "./error-handlers-sentry.js";
 // ============================================================
@@ -74,6 +77,10 @@ if (process.env.SENTRY_DSN) {
 
 const app = express();
 const httpServer = createServer(app);
+
+// Global price tracking service instance
+let priceTrackingService: PriceTrackingService | null = null;
+
 // ============================================
 // TRUST PROXY (Required for Render deployment)
 // ============================================
@@ -237,6 +244,15 @@ app.use((req, res, next) => {
 
   startCleanupJob();
   log("Transaction cleanup job started (runs every 24 hours)");
+
+  // Initialize WebSocket notification service FIRST
+  notificationService.initialize(httpServer);
+  log("WebSocket notification service initialized");
+
+  // Initialize price tracking service and resume tracking for active pools
+  priceTrackingService = new PriceTrackingService(storage, notificationService);
+  await priceTrackingService.resumeTrackingForActivePools();
+  log("Price tracking service initialized and resumed for active pools");
 
   app.get("/health", async (_req, res) => {
     try {
@@ -414,6 +430,12 @@ app.use((req, res, next) => {
       await poolMonitor.stop();
       logger.info("✅ Pool Monitor stopped");
 
+      // Stop price tracking service
+      if (priceTrackingService) {
+        priceTrackingService.stopAll();
+        logger.info("✅ Price tracking service stopped");
+      }
+
       // Stop token discovery service
       try {
         const { tokenDiscoveryService } = await import("./tokenDiscoveryService.js");
@@ -507,3 +529,8 @@ app.use((req, res, next) => {
     gracefulShutdown("UNHANDLED_REJECTION");
   });
 })();
+
+// Export price tracking service for use in routes
+export function getPriceTrackingService(): PriceTrackingService | null {
+  return priceTrackingService;
+}

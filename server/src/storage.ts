@@ -1,10 +1,12 @@
 import { db } from "./db.js";
 import {
-  pools, participants, transactions, profiles,
-  referralRelations, referralRewards, referralRewardEvents, referralClaims,
+  pools, participants, transactions, profiles, notifications, poolChatMessages,
+  referralRelations, referralRewards, referralRewardEvents, referralClaims, winnersFeed,
   type Pool, type InsertPool, type Participant, type InsertParticipant,
-  type Transaction, type InsertTransaction, type Profile,
-  type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim
+  type Transaction, type InsertTransaction, type Profile, type Notification, type InsertNotification,
+  type PoolChatMessage, type InsertPoolChatMessage,
+  type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim,
+  type WinnerFeedEntry, type InsertWinnerFeedEntry
 } from "@shared/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -47,6 +49,7 @@ export interface IStorage {
       winsCount: number;
       totalTokensWon: number;
       totalUsdWon: number;
+      totalUsdBet: number;
       biggestWinTokens: number;
       biggestWinUsd: number;
       lastWinAt: Date | null;
@@ -75,6 +78,24 @@ export interface IStorage {
   updateProfile(walletAddress: string, data: { nickname?: string; avatarUrl?: string; avatarStyle?: string }): Promise<Profile>;
   isNicknameAvailable(nickname: string, excludeWallet?: string): Promise<boolean>;
   checkNicknameCooldown(walletAddress: string): Promise<{ canChange: boolean; cooldownEnds?: Date }>;
+
+  // Notifications
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  getNotifications(walletAddress: string, limit?: number): Promise<Notification[]>;
+  markNotificationAsRead(id: number, walletAddress: string): Promise<boolean>;
+  markAllNotificationsAsRead(walletAddress: string): Promise<number>;
+  deleteNotification(id: number, walletAddress: string): Promise<boolean>;
+  deleteAllNotifications(walletAddress: string): Promise<number>;
+  getUnreadCount(walletAddress: string): Promise<number>;
+
+  // Pool Chat
+  createChatMessage(message: InsertPoolChatMessage): Promise<PoolChatMessage>;
+  getChatMessages(poolId: number, limit?: number): Promise<PoolChatMessage[]>;
+  deletePoolChatMessages(poolId: number): Promise<number>;
+
+  // Winners Feed
+  createWinnerFeedEntry(entry: InsertWinnerFeedEntry): Promise<WinnerFeedEntry>;
+  getRecentWinners(limit?: number): Promise<WinnerFeedEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -113,25 +134,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPool(insertPool: InsertPool): Promise<Pool> {
-    console.log("[STORAGE] createPool called with allowMock:", insertPool.allowMock);
     const [pool] = await db.insert(pools).values({
       ...insertPool,
       participantsCount: 0,
       status: 'open',
       totalPot: 0,
-      allowMock: insertPool.allowMock ?? 0,
     }).returning();
-    console.log("[STORAGE] Pool created with allowMock:", pool.allowMock);
     return pool;
   }
 
   async updatePoolStatus(id: number, status: string, winner?: string): Promise<Pool> {
     // Normalize status to lowercase
     const normalizedStatus = status.toLowerCase();
+    // Normalize winner wallet to lowercase
+    const normalizedWinner = winner ? winner.toLowerCase() : undefined;
     const [updated] = await db.update(pools)
-      .set({ 
-        status: normalizedStatus, 
-        winnerWallet: winner,
+      .set({
+        status: normalizedStatus,
+        winnerWallet: normalizedWinner,
         endTime: normalizedStatus === 'ended' ? new Date() : undefined,
         lockTime: normalizedStatus === 'locked' ? new Date() : undefined
       })
@@ -153,13 +173,14 @@ export class DatabaseStorage implements IStorage {
       `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
 
     // OPTIMIZED: Single query with LEFT JOIN - 1 query instead of N+1
+    // Use case-insensitive matching for wallet addresses
     const results = await db
       .select({
         participant: participants,
         profile: profiles
       })
       .from(participants)
-      .leftJoin(profiles, eq(profiles.walletAddress, participants.walletAddress))
+      .leftJoin(profiles, sql`LOWER(${profiles.walletAddress}) = LOWER(${participants.walletAddress})`)
       .where(eq(participants.poolId, poolId));
 
     // Map results and enrich with display data
@@ -173,21 +194,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addParticipant(participant: InsertParticipant): Promise<Participant> {
+    // Normalize wallet address to lowercase for consistency
+    const normalizedParticipant = {
+      ...participant,
+      walletAddress: participant.walletAddress.toLowerCase()
+    };
+
     // Transaction to add participant and update pool count/pot
     return await db.transaction(async (tx) => {
       // SECURITY: Check for duplicate participant BEFORE inserting
       const existingParticipant = await tx.query.participants.findFirst({
         where: and(
-          eq(participants.poolId, participant.poolId),
-          eq(participants.walletAddress, participant.walletAddress)
+          eq(participants.poolId, normalizedParticipant.poolId),
+          eq(participants.walletAddress, normalizedParticipant.walletAddress)
         )
       });
-      
+
       if (existingParticipant) {
         throw new Error("DUPLICATE_PARTICIPANT: Wallet already joined this pool");
       }
-      
-      const [newParticipant] = await tx.insert(participants).values(participant).returning();
+
+      const [newParticipant] = await tx.insert(participants).values(normalizedParticipant).returning();
       
       const pool = await tx.query.pools.findFirst({
         where: eq(pools.id, participant.poolId)
@@ -226,11 +253,12 @@ export class DatabaseStorage implements IStorage {
    * @returns true if refund was successfully marked as claimed, false if already claimed
    */
   async markRefundClaimed(poolId: number, wallet: string): Promise<boolean> {
+    const normalizedWallet = wallet.toLowerCase();
     const result = await db.update(participants)
       .set({ refundClaimed: 1 })
       .where(and(
         eq(participants.poolId, poolId),
-        eq(participants.walletAddress, wallet),
+        eq(participants.walletAddress, normalizedWallet),
         eq(participants.refundClaimed, 0) // ATOMIC: Only update if not already claimed
       ))
       .returning();
@@ -269,6 +297,8 @@ export class DatabaseStorage implements IStorage {
     refunds: Array<Pool & { participants: Participant[] }>;
     rents: Pool[];
   }> {
+    const normalizedWallet = wallet.toLowerCase();
+
     // Query 1: Get cancelled pools where user can claim refund
     // Uses JOIN to get pool + participant data in one query
     // Query potential refund pools from database
@@ -282,7 +312,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(pools.status, 'cancelled'),
-          eq(participants.walletAddress, wallet),
+          eq(participants.walletAddress, normalizedWallet),
           eq(participants.refundClaimed, 0)
         )
       );
@@ -296,7 +326,7 @@ export class DatabaseStorage implements IStorage {
     for (const row of refundResults) {
       try {
         // Verify wallet is in on-chain participants list
-        const isParticipant = await isWalletInParticipantsList(row.pool.poolAddress, wallet);
+        const isParticipant = await isWalletInParticipantsList(row.pool.poolAddress, normalizedWallet);
 
         if (isParticipant) {
           if (!refundPoolsMap.has(row.pool.id)) {
@@ -337,7 +367,7 @@ export class DatabaseStorage implements IStorage {
       .from(pools)
       .where(
         and(
-          eq(pools.creatorWallet, wallet),
+          eq(pools.creatorWallet, normalizedWallet),
           eq(pools.rentClaimed, 0)
         )
       );
@@ -359,7 +389,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addTransaction(transaction: InsertTransaction): Promise<Transaction> {
-    const [newTx] = await db.insert(transactions).values(transaction).returning();
+    const normalizedTransaction = {
+      ...transaction,
+      walletAddress: transaction.walletAddress.toLowerCase()
+    };
+    const [newTx] = await db.insert(transactions).values(normalizedTransaction).returning();
     
     // If donation, update pot and donatedAmount
     if (transaction.type === 'DONATE') {
@@ -399,7 +433,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(transactions)
       .innerJoin(pools, eq(transactions.poolId, pools.id))
-      .where(eq(transactions.walletAddress, walletAddress))
+      .where(eq(transactions.walletAddress, walletAddress.toLowerCase()))
       .orderBy(desc(transactions.timestamp));
       
       return results;
@@ -432,20 +466,31 @@ export class DatabaseStorage implements IStorage {
 
     // Query pools with winners, aggregate by wallet
     // Using sql.raw() with validated integers to safely inject LIMIT/OFFSET
+    // Calculate USD values using current_price_usd at payout time (when pool ended)
+    // Calculate total bet amount from all pools where user participated (as participant or creator)
     const result = await db.execute(sql`
       SELECT
-        winner_wallet as wallet,
+        p.winner_wallet as wallet,
         COUNT(*)::int as wins_count,
-        COALESCE(SUM(total_pot), 0)::float as total_tokens_won,
-        COALESCE(MAX(total_pot), 0)::float as biggest_win_tokens,
-        MAX(end_time) as last_win_at,
-        token_mint,
-        token_symbol
-      FROM pools
-      WHERE winner_wallet IS NOT NULL
-        AND status = 'ended'
-      GROUP BY winner_wallet, token_mint, token_symbol
-      ORDER BY total_tokens_won DESC
+        COALESCE(SUM(p.total_pot), 0)::float as total_tokens_won,
+        COALESCE(SUM(p.total_pot * COALESCE(p.current_price_usd, 0)), 0)::float as total_usd_won,
+        COALESCE(MAX(p.total_pot), 0)::float as biggest_win_tokens,
+        COALESCE(MAX(p.total_pot * COALESCE(p.current_price_usd, 0)), 0)::float as biggest_win_usd,
+        MAX(p.end_time) as last_win_at,
+        p.token_mint,
+        p.token_symbol,
+        (
+          SELECT COALESCE(SUM(p2.entry_amount * COALESCE(p2.initial_price_usd, 0)), 0)
+          FROM pools p2
+          LEFT JOIN participants part ON part.pool_id = p2.id
+          WHERE (part.wallet_address = p.winner_wallet OR p2.creator_wallet = p.winner_wallet)
+            AND p2.status = 'ended'
+        )::float as total_usd_bet
+      FROM pools p
+      WHERE p.winner_wallet IS NOT NULL
+        AND p.status = 'ended'
+      GROUP BY p.winner_wallet, p.token_mint, p.token_symbol
+      ORDER BY total_usd_won DESC
       LIMIT ${sql.raw(String(safeLimit))}
       OFFSET ${sql.raw(String(safeOffset))}
     `);
@@ -454,9 +499,10 @@ export class DatabaseStorage implements IStorage {
       wallet: row.wallet as string,
       winsCount: row.wins_count as number,
       totalTokensWon: row.total_tokens_won as number,
-      totalUsdWon: 0, // Would need price API integration
+      totalUsdWon: row.total_usd_won as number,
+      totalUsdBet: row.total_usd_bet as number,
       biggestWinTokens: row.biggest_win_tokens as number,
-      biggestWinUsd: 0, // Would need price API integration
+      biggestWinUsd: row.biggest_win_usd as number,
       lastWinAt: row.last_win_at as Date | null,
       tokenMint: row.token_mint as string | null,
       tokenSymbol: row.token_symbol as string | null,
@@ -477,21 +523,21 @@ export class DatabaseStorage implements IStorage {
     `);
     const total = (countResult.rows[0] as any)?.total || 0;
 
-    // Query referral_relations and referral_rewards
+    // Query referral_relations and referral_reward_events joined with pools to get price at payout time
     // Using sql.raw() with validated integers to safely inject LIMIT/OFFSET
     const result = await db.execute(sql`
       SELECT
         rr.referrer_wallet as wallet,
         COUNT(DISTINCT rr.referred_wallet)::int as referrals_count,
-        COALESCE(SUM(
-          (COALESCE(rew.amount_pending, '0')::numeric + COALESCE(rew.amount_claimed, '0')::numeric) / 1e9
-        ), 0)::float as total_tokens_earned,
+        COALESCE(SUM(rre.amount::numeric / 1e9), 0)::float as total_tokens_earned,
+        COALESCE(SUM((rre.amount::numeric / 1e9) * COALESCE(p.current_price_usd, 0)), 0)::float as total_usd_earned,
         MIN(rr.created_at) as first_referral_at,
         MAX(rr.created_at) as last_referral_at
       FROM referral_relations rr
-      LEFT JOIN referral_rewards rew ON rr.referrer_wallet = rew.referrer_wallet
+      LEFT JOIN referral_reward_events rre ON rr.referrer_wallet = rre.referrer_wallet
+      LEFT JOIN pools p ON rre.pool_id = p.id AND p.status = 'ended'
       GROUP BY rr.referrer_wallet
-      ORDER BY referrals_count DESC
+      ORDER BY total_usd_earned DESC
       LIMIT ${sql.raw(String(safeLimit))}
       OFFSET ${sql.raw(String(safeOffset))}
     `);
@@ -500,7 +546,7 @@ export class DatabaseStorage implements IStorage {
       wallet: row.wallet as string,
       referralsCount: row.referrals_count as number,
       totalTokensEarned: row.total_tokens_earned as number,
-      totalUsdEarned: 0, // Would need price API integration
+      totalUsdEarned: row.total_usd_earned as number,
       activeReferrals: 0, // Could be computed with additional query
       firstReferralAt: row.first_referral_at as Date | null,
       lastReferralAt: row.last_referral_at as Date | null,
@@ -511,52 +557,55 @@ export class DatabaseStorage implements IStorage {
 
   // Profile methods
   async getProfile(walletAddress: string): Promise<Profile | undefined> {
-    const [profile] = await db.select().from(profiles).where(eq(profiles.walletAddress, walletAddress));
+    const normalizedWallet = walletAddress.toLowerCase();
+    const [profile] = await db.select().from(profiles).where(eq(profiles.walletAddress, normalizedWallet));
     return profile;
   }
 
   async getOrCreateNonce(walletAddress: string): Promise<string> {
+    const normalizedWallet = walletAddress.toLowerCase();
     const nonce = randomBytes(32).toString("hex");
-    
-    const existing = await this.getProfile(walletAddress);
-    
+
+    const existing = await this.getProfile(normalizedWallet);
+
     if (existing) {
       await db.update(profiles)
         .set({ nonce, updatedAt: new Date() })
-        .where(eq(profiles.walletAddress, walletAddress));
+        .where(eq(profiles.walletAddress, normalizedWallet));
     } else {
       await db.insert(profiles).values({
-        walletAddress,
+        walletAddress: normalizedWallet,
         nonce,
         avatarStyle: "bottts"
       });
     }
-    
+
     return nonce;
   }
 
   async updateProfile(walletAddress: string, data: { nickname?: string; avatarUrl?: string; avatarStyle?: string }): Promise<Profile> {
-    const existing = await this.getProfile(walletAddress);
+    const normalizedWallet = walletAddress.toLowerCase();
+    const existing = await this.getProfile(normalizedWallet);
     const updateData: any = {
       ...data,
       updatedAt: new Date(),
       nonce: null
     };
-    
+
     if (data.nickname !== undefined && data.nickname !== existing?.nickname) {
       updateData.lastNicknameChange = new Date();
       updateData.nicknameChangeCount = (existing?.nicknameChangeCount || 0) + 1;
     }
-    
+
     if (existing) {
       const [updated] = await db.update(profiles)
         .set(updateData)
-        .where(eq(profiles.walletAddress, walletAddress))
+        .where(eq(profiles.walletAddress, normalizedWallet))
         .returning();
       return updated;
     } else {
       const [inserted] = await db.insert(profiles).values({
-        walletAddress,
+        walletAddress: normalizedWallet,
         ...updateData,
         nicknameChangeCount: data.nickname !== undefined ? 1 : 0
       } as any).returning();
@@ -566,10 +615,10 @@ export class DatabaseStorage implements IStorage {
 
   async isNicknameAvailable(nickname: string, excludeWallet?: string): Promise<boolean> {
     const existing = await db.select().from(profiles).where(eq(profiles.nickname, nickname));
-    
+
     if (existing.length === 0) return true;
-    if (excludeWallet && existing[0].walletAddress === excludeWallet) return true;
-    
+    if (excludeWallet && existing[0].walletAddress === excludeWallet.toLowerCase()) return true;
+
     return false;
   }
 
@@ -596,17 +645,21 @@ export class DatabaseStorage implements IStorage {
   // ============================================
 
   async getReferralRelation(referredWallet: string): Promise<ReferralRelation | undefined> {
-    const [relation] = await db.select().from(referralRelations).where(eq(referralRelations.referredWallet, referredWallet));
+    const normalizedWallet = referredWallet.toLowerCase();
+    const [relation] = await db.select().from(referralRelations).where(eq(referralRelations.referredWallet, normalizedWallet));
     return relation;
   }
 
   async createReferralRelation(referredWallet: string, referrerWallet: string, source: string = 'link'): Promise<ReferralRelation | null> {
-    if (referredWallet === referrerWallet) {
+    const normalizedReferred = referredWallet.toLowerCase();
+    const normalizedReferrer = referrerWallet.toLowerCase();
+
+    if (normalizedReferred === normalizedReferrer) {
       console.log("[Referral] Rejected self-referral:", referredWallet);
       return null;
     }
 
-    const existing = await this.getReferralRelation(referredWallet);
+    const existing = await this.getReferralRelation(normalizedReferred);
     if (existing) {
       console.log("[Referral] Wallet already has referrer:", referredWallet);
       return null;
@@ -614,8 +667,8 @@ export class DatabaseStorage implements IStorage {
 
     try {
       const [relation] = await db.insert(referralRelations).values({
-        referredWallet,
-        referrerWallet,
+        referredWallet: normalizedReferred,
+        referrerWallet: normalizedReferrer,
         source
       }).returning();
       console.log("[Referral] Created relation:", referredWallet, "->", referrerWallet);
@@ -631,9 +684,10 @@ export class DatabaseStorage implements IStorage {
     totalEarned: string;
     totalClaimed: string;
   }> {
-    const invited = await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, referrerWallet));
+    const normalizedWallet = referrerWallet.toLowerCase();
+    const invited = await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, normalizedWallet));
 
-    const rewards = await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, referrerWallet));
+    const rewards = await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, normalizedWallet));
 
     const totalEarned = rewards.reduce((sum, r) => sum + BigInt(r.amountPending || "0") + BigInt(r.amountClaimed || "0"), BigInt(0));
     const totalClaimed = rewards.reduce((sum, r) => sum + BigInt(r.amountClaimed || "0"), BigInt(0));
@@ -646,11 +700,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReferralRewards(referrerWallet: string): Promise<ReferralReward[]> {
-    return await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, referrerWallet));
+    const normalizedWallet = referrerWallet.toLowerCase();
+    return await db.select().from(referralRewards).where(eq(referralRewards.referrerWallet, normalizedWallet));
   }
 
   async getInvitedUsers(referrerWallet: string): Promise<ReferralRelation[]> {
-    return await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, referrerWallet)).orderBy(desc(referralRelations.createdAt));
+    const normalizedWallet = referrerWallet.toLowerCase();
+    return await db.select().from(referralRelations).where(eq(referralRelations.referrerWallet, normalizedWallet)).orderBy(desc(referralRelations.createdAt));
   }
 
   async allocateReferralRewards(poolId: number, tokenMint: string, totalFeeAmount: string): Promise<void> {
@@ -684,15 +740,17 @@ export class DatabaseStorage implements IStorage {
     console.log("[Referral] Allocating", totalFeeAmount, "to", referrers.length, "referrers (", sharePerReferrer.toString(), "each)");
 
     for (const referrerWallet of referrers) {
+      const normalizedReferrer = referrerWallet.toLowerCase();
+
       await db.insert(referralRewardEvents).values({
         poolId,
         tokenMint,
-        referrerWallet,
+        referrerWallet: normalizedReferrer,
         amount: sharePerReferrer.toString()
       });
 
       const [existingReward] = await db.select().from(referralRewards)
-        .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
+        .where(and(eq(referralRewards.referrerWallet, normalizedReferrer), eq(referralRewards.tokenMint, tokenMint)));
 
       if (existingReward) {
         const newPending = BigInt(existingReward.amountPending || "0") + sharePerReferrer;
@@ -701,7 +759,7 @@ export class DatabaseStorage implements IStorage {
           .where(eq(referralRewards.id, existingReward.id));
       } else {
         await db.insert(referralRewards).values({
-          referrerWallet,
+          referrerWallet: normalizedReferrer,
           tokenMint,
           amountPending: sharePerReferrer.toString(),
           amountClaimed: "0"
@@ -779,14 +837,185 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setLastClaimTimestamp(referrerWallet: string, tokenMint: string, timestamp: number): Promise<void> {
+    const normalizedWallet = referrerWallet.toLowerCase();
     const [existing] = await db.select().from(referralRewards)
-      .where(and(eq(referralRewards.referrerWallet, referrerWallet), eq(referralRewards.tokenMint, tokenMint)));
-    
+      .where(and(eq(referralRewards.referrerWallet, normalizedWallet), eq(referralRewards.tokenMint, tokenMint)));
+
     if (existing) {
       await db.update(referralRewards)
         .set({ lastClaimTimestamp: timestamp })
         .where(eq(referralRewards.id, existing.id));
     }
+  }
+
+  // ============================================
+  // NOTIFICATIONS
+  // ============================================
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    try {
+      const normalizedNotification = {
+        ...notification,
+        walletAddress: notification.walletAddress.toLowerCase()
+      };
+      const [created] = await db.insert(notifications).values(normalizedNotification).returning();
+      return created;
+    } catch (err: any) {
+      // If table doesn't exist, log warning but don't crash
+      if (err.message?.includes('relation "notifications" does not exist')) {
+        console.warn('[NOTIFICATIONS] Table does not exist - run migration: npx drizzle-kit push');
+      }
+      throw err;
+    }
+  }
+
+  async getNotifications(walletAddress: string, limit: number = 50): Promise<Notification[]> {
+    try {
+      return await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.walletAddress, walletAddress.toLowerCase()))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+    } catch (err: any) {
+      // If table doesn't exist, return empty array
+      if (err.message?.includes('relation "notifications" does not exist')) {
+        console.warn('[NOTIFICATIONS] Table does not exist - returning empty notifications');
+        return [];
+      }
+      throw err;
+    }
+  }
+
+  async markNotificationAsRead(id: number, walletAddress: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ read: 1 })
+      .where(
+        and(
+          eq(notifications.id, id),
+          eq(notifications.walletAddress, walletAddress.toLowerCase())
+        )
+      );
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async markAllNotificationsAsRead(walletAddress: string): Promise<number> {
+    const result = await db
+      .update(notifications)
+      .set({ read: 1 })
+      .where(eq(notifications.walletAddress, walletAddress.toLowerCase()));
+    return result.rowCount || 0;
+  }
+
+  async getUnreadCount(walletAddress: string): Promise<number> {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.walletAddress, walletAddress.toLowerCase()),
+          eq(notifications.read, 0)
+        )
+      );
+    return count;
+  }
+
+  async deleteNotification(id: number, walletAddress: string): Promise<boolean> {
+    const result = await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.id, id),
+          eq(notifications.walletAddress, walletAddress.toLowerCase())
+        )
+      );
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async deleteAllNotifications(walletAddress: string): Promise<number> {
+    const result = await db
+      .delete(notifications)
+      .where(eq(notifications.walletAddress, walletAddress.toLowerCase()));
+    return result.rowCount || 0;
+  }
+
+  // ============================================
+  // POOL CHAT MESSAGES
+  // ============================================
+
+  async createChatMessage(message: InsertPoolChatMessage): Promise<PoolChatMessage> {
+    const normalizedMessage = {
+      ...message,
+      walletAddress: message.walletAddress.toLowerCase()
+    };
+    const [created] = await db.insert(poolChatMessages).values(normalizedMessage).returning();
+    return created;
+  }
+
+  async getChatMessages(poolId: number, limit: number = 100): Promise<PoolChatMessage[]> {
+    return await db
+      .select()
+      .from(poolChatMessages)
+      .where(eq(poolChatMessages.poolId, poolId))
+      .orderBy(desc(poolChatMessages.createdAt))
+      .limit(limit);
+  }
+
+  async deletePoolChatMessages(poolId: number): Promise<number> {
+    const result = await db
+      .delete(poolChatMessages)
+      .where(eq(poolChatMessages.poolId, poolId));
+    return result.rowCount || 0;
+  }
+
+  // ============================================
+  // WINNERS FEED
+  // ============================================
+
+  async createWinnerFeedEntry(entry: InsertWinnerFeedEntry): Promise<WinnerFeedEntry> {
+    const [created] = await db.insert(winnersFeed).values(entry).returning();
+    return created;
+  }
+
+  async getRecentWinners(limit: number = 15): Promise<WinnerFeedEntry[]> {
+    return await db
+      .select()
+      .from(winnersFeed)
+      .orderBy(desc(winnersFeed.createdAt))
+      .limit(limit);
+  }
+
+  // ============================================
+  // PRICE TRACKING
+  // ============================================
+
+  async updatePoolPrice(poolId: number, priceUsd: number): Promise<void> {
+    await db.update(pools)
+      .set({ currentPriceUsd: priceUsd })
+      .where(eq(pools.id, poolId));
+  }
+
+  async getParticipantByWallet(poolId: number, wallet: string): Promise<Participant | null> {
+    const [result] = await db.select()
+      .from(participants)
+      .where(and(
+        eq(participants.poolId, poolId),
+        eq(participants.walletAddress, wallet.toLowerCase())
+      ))
+      .limit(1);
+    return result || null;
+  }
+
+  async getActivePoolsForPriceTracking(): Promise<Pool[]> {
+    return await db.select()
+      .from(pools)
+      .where(
+        or(
+          eq(pools.status, 'open'),
+          eq(pools.status, 'locked')
+        )
+      );
   }
 }
 

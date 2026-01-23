@@ -13,6 +13,13 @@ function formatTokenAmount(amount: number, decimals: number = 4) {
   return amount.toFixed(decimals);
 }
 
+function formatUsdAmount(amount: number) {
+  if (amount >= 1000000) return `$${(amount / 1000000).toFixed(2)}M`;
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(2)}K`;
+  if (amount >= 1) return `$${amount.toFixed(2)}`;
+  return `$${amount.toFixed(4)}`;
+}
+
 function LeaderboardAvatar({ wallet, isTop3 }: { wallet: string; isTop3: boolean }) {
   const { data: profile, isLoading } = useProfile(wallet);
   
@@ -158,12 +165,15 @@ function WinnersLeaderboard({ winners, currentWallet }: { winners: TopWinner[]; 
               <div className="text-lg font-bold text-yellow-400">{winner.winsCount}</div>
             </div>
             <div className="text-right min-w-[100px]">
+              <div className="text-xs text-muted-foreground font-tech uppercase">Total Bet</div>
+              <div className="text-sm font-bold text-muted-foreground">
+                {formatUsdAmount(winner.totalUsdBet)}
+              </div>
+            </div>
+            <div className="text-right min-w-[120px]">
               <div className="text-xs text-muted-foreground font-tech uppercase">Total Won</div>
               <div className="text-lg font-bold text-primary">
-                {formatTokenAmount(winner.totalTokensWon)}
-                {winner.tokenSymbol && (
-                  <span className="text-xs text-muted-foreground ml-1">{winner.tokenSymbol}</span>
-                )}
+                {formatUsdAmount(winner.totalUsdWon)}
               </div>
             </div>
             {winner.lastWinAt && (
@@ -207,10 +217,10 @@ function ReferrersLeaderboard({ referrers, currentWallet }: { referrers: TopRefe
               <div className="text-xs text-muted-foreground font-tech uppercase">Referrals</div>
               <div className="text-lg font-bold text-purple-400">{referrer.referralsCount}</div>
             </div>
-            <div className="text-right min-w-[100px]">
+            <div className="text-right min-w-[120px]">
               <div className="text-xs text-muted-foreground font-tech uppercase">Earned</div>
               <div className="text-lg font-bold text-primary">
-                {formatTokenAmount(referrer.totalTokensEarned)}
+                {formatUsdAmount(referrer.totalUsdEarned)}
               </div>
             </div>
             {referrer.lastReferralAt && (

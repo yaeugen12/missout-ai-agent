@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/blog",
+      "destination": "https://medium.com/@ya.eugen12/missout-turning-meme-coin-volatility-into-a-game-you-can-actually-win-2ad228edffe8",
+      "permanent": true
+    },
+    {
+      "source": "/socials",
+      "destination": "https://x.com/missout_fun",
+      "permanent": true
+    }
+  ]
+}
