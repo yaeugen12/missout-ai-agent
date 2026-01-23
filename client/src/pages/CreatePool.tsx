@@ -129,18 +129,6 @@ export default function CreatePool() {
         creator: publicKey.toBase58(),
       });
 
-      const sdkResult = await createPoolOnChain({
-        mint: mintPubkey,
-        amount: entryAmount,
-        maxParticipants: participants,
-        lockDurationSeconds,
-        devWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        devFeeBps: 0,
-        burnFeeBps: 0,
-        treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        treasuryFeeBps: 0,
-      });
-
 
       signature = sdkResult?.tx;
       poolAddress = sdkResult?.poolId;
