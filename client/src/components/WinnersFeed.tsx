@@ -138,7 +138,7 @@ function WinnerCard({ winner }: { winner: WinnerFeedEntry }) {
   const isPositiveROI = winner.roiPercent > 0;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.03] backdrop-blur-sm rounded-lg border border-white/10 hover:border-primary/30 transition-all min-w-[260px] hover-elevate group">
+    <div className="flex items-center gap-3 px-4 py-2 bg-white/[0.03] backdrop-blur-sm rounded-lg border-none hover:bg-white/[0.06] transition-all min-w-[260px] group">
       {/* Avatar */}
       <Avatar className="w-10 h-10 border-2 border-primary/30">
         <AvatarImage src={avatarUrl} alt={winner.displayName} />
