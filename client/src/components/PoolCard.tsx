@@ -15,7 +15,7 @@ import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 
-import poolCardBg from "@assets/images/pool-card-bg.png";
+import poolCardBg from "../assets/images/pool-card-bg.png";
 
 interface PoolCardProps {
   pool: Pool;
