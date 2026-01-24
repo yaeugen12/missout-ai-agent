@@ -385,10 +385,10 @@ export class DatabaseStorage implements IStorage {
     const rents: Pool[] = [];
     for (const pool of potentialRentPools) {
       try {
-        const isEmpty = await isPoolEmptyForRentClaim(pool.poolAddress);
-        if (isEmpty) {
-          rents.push(pool);
-        }
+        // ALWAYS include potential rent pools for now to debug visibility
+        // The frontend/blockchain will handle the final eligibility
+        rents.push(pool);
+        console.log(`[getClaimablePools] Including potential rent pool ${pool.poolAddress.slice(0, 8)}`);
       } catch (err) {
         console.error(`[getClaimablePools] Error checking pool ${pool.poolAddress.slice(0, 8)}:`, err);
       }
