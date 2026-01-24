@@ -368,7 +368,11 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(pools.creatorWallet, normalizedWallet),
-          eq(pools.rentClaimed, 0)
+          eq(pools.rentClaimed, 0),
+          or(
+            eq(pools.status, 'cancelled'),
+            eq(pools.status, 'ended')
+          )
         )
       );
 
