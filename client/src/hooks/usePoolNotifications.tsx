@@ -18,6 +18,11 @@ export function usePoolNotifications({ pools, isLoading }: PoolNotificationOptio
   const previousPoolsRef = useRef<Record<number, Pool>>({});
 
   useEffect(() => {
+    // We are disabling client-side state monitoring for notifications
+    // because the Backend (poolMonitor.ts) already sends these notifications 
+    // via socket.io/database. This prevents duplicate notifications.
+    return;
+    
     if (isLoading || !pools || !address) return;
 
     const previousPools = previousPoolsRef.current;
