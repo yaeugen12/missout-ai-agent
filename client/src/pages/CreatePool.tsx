@@ -496,7 +496,7 @@ export default function CreatePool() {
                     <div className="p-3 bg-black/40 rounded-lg space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">You Receive</span>
-                        <button onClick={handleGetQuote} className="p-1 hover:bg-white/10 rounded transition-colors">
+                        <button onClick={handleGetQuote} className="p-1 hover:bg-white/10 rounded transition-colors" data-testid="button-refresh-quote">
                           <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isQuoting && "animate-spin")} />
                         </button>
                       </div>
@@ -519,10 +519,22 @@ export default function CreatePool() {
                     </div>
                   )}
 
+                  {!jupiterQuote && solAmount && parseFloat(solAmount) > 0 && !isQuoting && (
+                    <Button
+                      onClick={handleGetQuote}
+                      className="w-full h-10 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/50 font-bold"
+                      data-testid="button-get-quote"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Get Swap Quote
+                    </Button>
+                  )}
+
                   <Button
                     onClick={handleSwap}
                     disabled={!jupiterQuote || isSwapping || !isConnected}
                     className="w-full h-10 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold"
+                    data-testid="button-swap-jupiter"
                   >
                     {isSwapping ? (
                       <>

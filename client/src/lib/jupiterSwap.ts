@@ -37,6 +37,8 @@ export async function getJupiterQuote(
       outputMint,
       amount: amountInLamports.toString(),
       slippageBps: slippageBps.toString(),
+      onlyDirectRoutes: "false",
+      asLegacyTransaction: "false",
       swapMode: "ExactIn",
       platformFeeBps: PLATFORM_FEE_BPS.toString(),
     });
