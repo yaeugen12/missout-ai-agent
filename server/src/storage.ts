@@ -317,14 +317,50 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
-    const refunds = refundResults.map(row => ({
-      ...row.pool,
-      participants: [row.participant]
-    }));
+    // REFACTORED: Filter based on on-chain participants list
+    // Only return pools where wallet is ACTUALLY in the on-chain participants list
+    const { isWalletInParticipantsList } = await import("./pool-monitor/solanaServices.js");
+
+    const refundPoolsMap = new Map<number, Pool & { participants: Participant[] }>();
+
+    for (const row of refundResults) {
+      try {
+        // Verify wallet is in on-chain participants list
+        const isParticipant = await isWalletInParticipantsList(row.pool.poolAddress, normalizedWallet);
+
+        if (isParticipant) {
+          if (!refundPoolsMap.has(row.pool.id)) {
+            refundPoolsMap.set(row.pool.id, {
+              ...row.pool,
+              participants: []
+            });
+          }
+          refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
+        } else {
+          console.log(`[getClaimablePools] Skipping pool ${row.pool.poolAddress.slice(0, 8)} - wallet not in on-chain participants list (likely already claimed)`);
+
+          // Database sync: Mark as claimed if not in on-chain list
+          // This prevents repeated checks for already-claimed refunds
+          try {
+            await db
+              .update(participants)
+              .set({ refundClaimed: 1 })
+              .where(eq(participants.id, row.participant.id));
+            console.log(`[getClaimablePools] Marked participant ${row.participant.id} refund as claimed (DB sync)`);
+          } catch (dbErr) {
+            console.error(`[getClaimablePools] Failed to update participant ${row.participant.id}:`, dbErr);
+          }
+        }
+      } catch (err) {
+        console.error(`[getClaimablePools] Error checking on-chain participants for pool ${row.pool.poolAddress.slice(0, 8)}:`, err);
+      }
+    }
+
+    const refunds = Array.from(refundPoolsMap.values());
 
     // Query 2: Get pools where user is creator and can claim rent
     // REFACTORED: Now checks on-chain state instead of status field
-    // const { isPoolEmptyForRentClaim } = await import("./pool-monitor/solanaServices.js");
+    const { isPoolEmptyForRentClaim } = await import("./pool-monitor/solanaServices.js");
 
     const potentialRentPools = await db
       .select()
@@ -332,16 +368,22 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(pools.creatorWallet, normalizedWallet),
-          eq(pools.rentClaimed, 0),
-          or(
-            eq(pools.status, 'cancelled'),
-            eq(pools.status, 'ended')
-          )
+          eq(pools.rentClaimed, 0)
         )
       );
 
     // Filter pools based on on-chain state: pool_token.amount == 0 AND participants.count == 0
-    const rents: Pool[] = potentialRentPools;
+    const rents: Pool[] = [];
+    for (const pool of potentialRentPools) {
+      try {
+        const isEmpty = await isPoolEmptyForRentClaim(pool.poolAddress);
+        if (isEmpty) {
+          rents.push(pool);
+        }
+      } catch (err) {
+        console.error(`[getClaimablePools] Error checking pool ${pool.poolAddress.slice(0, 8)}:`, err);
+      }
+    }
 
     return { refunds, rents };
   }

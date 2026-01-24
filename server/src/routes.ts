@@ -1057,12 +1057,6 @@ export async function registerRoutes(
         // Update pool status to cancelled
         await storage.updatePoolStatus(poolId, 'cancelled');
 
-        // FORCE DATABASE SYNC: 
-        // We need to ensure participants are visible as "claimable" 
-        // getClaimablePools checks for cancelled status and refundClaimed=0
-        // No additional step needed here as storage.updatePoolStatus marks it in DB,
-        // and getClaimablePools dynamically checks participants.
-
         // Record transaction
         await storage.addTransaction({
           poolId,
