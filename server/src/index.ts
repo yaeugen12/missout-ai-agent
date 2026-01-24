@@ -41,7 +41,7 @@ try {
 
 // Load .env file only in development (production uses Render environment variables)
 if (process.env.NODE_ENV !== "production") {
-  const envPath = resolve(__dirname, "../.env");
+  const envPath = resolve(process.cwd(), ".env");
 
   try {
     const envFile = readFileSync(envPath, "utf8");
@@ -56,7 +56,22 @@ if (process.env.NODE_ENV !== "production") {
     });
     console.log("[ENV] ✅ Loaded .env file from:", envPath);
   } catch (err: any) {
-    console.log("[ENV] ⚠️  No .env file found at:", envPath, "- using system environment variables");
+    const serverEnvPath = resolve(__dirname, "../.env");
+    try {
+      const envFile = readFileSync(serverEnvPath, "utf8");
+      envFile.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#")) {
+          const [key, ...values] = trimmed.split("=");
+          if (key && values.length) {
+            process.env[key.trim()] = values.join("=").trim();
+          }
+        }
+      });
+      console.log("[ENV] ✅ Loaded .env file from:", serverEnvPath);
+    } catch (innerErr) {
+      console.log("[ENV] ⚠️  No .env file found - using system environment variables");
+    }
   }
 } else {
   console.log("[ENV] ✅ Production mode - using system environment variables");
@@ -323,9 +338,16 @@ app.use((req, res, next) => {
   await seedDatabase();
 
   // Setup Vite dev server for frontend in development mode
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === "development" || !process.env.NODE_ENV) {
     await setupVite(httpServer, app);
     console.log("[VITE] ✅ Vite dev server setup complete");
+  } else {
+    // Production static serving - fallback for index.html
+    const publicPath = resolve(process.cwd(), "client", "dist");
+    app.use(express.static(publicPath));
+    app.get("*", (_req, res) => {
+      res.sendFile(resolve(publicPath, "index.html"));
+    });
   }
 
   // Sentry error handler (must be after all routes)
