@@ -623,6 +623,12 @@ export class MissoutClient {
           console.warn("Failed to fetch balance diffs", e);
         }
 
+        // CRITICAL: Short stabilization delay after successful transaction
+        // This helps the wallet adapter and RPC state to settle before rapid successive operations
+        // Without this delay, users experience "multiple signature required" issues
+        console.log("[TX] Post-transaction stabilization delay (500ms)...");
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         console.log("=== BUILD_AND_SEND_TX_SUCCESS ===");
         console.log("==============================================");
         return sig;

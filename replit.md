@@ -8,6 +8,15 @@ Missout is a decentralized lottery platform built on Solana blockchain. Users ca
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+### January 24, 2026 - Transaction Stabilization Fix
+- **Fixed "multiple signature required" issue**: Added stabilization delays between rapid successive blockchain transactions
+- **Batch claim improvements**: Added 2-second delay between transaction chunks in batch refund/rent claims
+- **Post-transaction cooldown**: Added 500ms stabilization delay after each confirmed transaction
+- **LSP fix**: Fixed missing `tokenProgramId` variable in `sweepExpiredPool` function
+- **Claims Center**: Improved case-insensitive wallet matching for claim visibility
+
 ## System Architecture
 
 ### Monorepo Structure

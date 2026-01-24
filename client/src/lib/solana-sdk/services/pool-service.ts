@@ -884,6 +884,7 @@ export async function sweepExpiredPool(poolId: string): Promise<{ tx: string }> 
   }
 
   const [participantsPda] = deriveParticipantsPda(poolPk);
+  const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
   const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const userPk = wallet.publicKey;
 
@@ -1138,6 +1139,13 @@ export async function claimRefundsBatch(
     const chunk = builtInstructions.slice(i, i + CHUNK_SIZE);
     const chunkPoolIds = chunk.map(c => c.poolId);
     
+    // CRITICAL: Wait between chunks to let wallet adapter and RPC state settle
+    // This prevents "multiple signature required" issues when sending rapid transactions
+    if (i > 0) {
+      console.log(`[BATCH_CLAIM] Waiting 2s between chunks for state to settle...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    
     try {
       chunk.forEach((c, idx) => onProgress?.({ 
         current: i + idx + 1, 
@@ -1195,6 +1203,13 @@ export async function claimRentsBatch(
   for (let i = 0; i < builtInstructions.length; i += CHUNK_SIZE) {
     const chunk = builtInstructions.slice(i, i + CHUNK_SIZE);
     const chunkPoolIds = chunk.map(c => c.poolId);
+    
+    // CRITICAL: Wait between chunks to let wallet adapter and RPC state settle
+    // This prevents "multiple signature required" issues when sending rapid transactions
+    if (i > 0) {
+      console.log(`[BATCH_CLAIM] Waiting 2s between chunks for state to settle...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
     
     try {
       chunk.forEach((c, idx) => onProgress?.({ 
