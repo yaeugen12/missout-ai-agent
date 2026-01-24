@@ -10,12 +10,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
-### January 24, 2026 - Mainnet Migration
+### January 24, 2026 - Mainnet Migration & Referral Payouts
 - **Network switched to mainnet-beta**: All Solana configuration now defaults to mainnet
 - **RPC endpoints**: Using Helius mainnet RPC (https://mainnet.helius-rpc.com)
 - **Switchboard mainnet**: Using mainnet Switchboard program and queue
 - **Environment variables**: Updated all env vars to point to mainnet configuration
 - **Default network**: Application now defaults to mainnet-beta instead of devnet
+- **Treasury wallet for payouts**: 4ZscUyoKFWfU7wjeZKpiuw7Nr8Q8ZdAQmr4YzHNQ74B3
+- **Referral payout system**: Added automatic SOL transfers from treasury wallet when users claim referral rewards
 
 ### January 24, 2026 - Transaction Stabilization Fix
 - **Fixed "multiple signature required" issue**: Added stabilization delays between rapid successive blockchain transactions

@@ -33,6 +33,7 @@ import { notificationService, NotificationType } from "./notifications/notificat
 import { logger } from "./logger.js";
 import { getPriceTrackingService } from "./index.js";
 import { fetchTokenPriceUsd } from "./utils/priceUtils.js";
+import { payReferralReward, isTreasuryPayoutEnabled } from "./pool-monitor/solanaServices.js";
 
 // ===========================================
 // SECURITY: Rate Limiting
@@ -1954,15 +1955,39 @@ export async function registerRoutes(
         
         console.log("[Referral] Signature verified for wallet:", wallet, "age:", now - timestamp, "ms");
         
+        // Check if treasury payouts are enabled
+        if (!isTreasuryPayoutEnabled()) {
+          console.log("[Referral] Treasury payouts not configured");
+          return res.status(503).json({ success: false, message: "Referral payouts are temporarily unavailable." });
+        }
+        
         // Pass timestamp to atomic claim function for replay protection
         const result = await storage.claimReferralReward(wallet, tokenMint, timestamp);
         
         if (result.success) {
-          res.json({ 
-            success: true, 
-            amount: result.amount,
-            message: "Claim initiated. Tokens will be sent to your wallet."
-          });
+          // Execute the actual payout from treasury wallet
+          const amountLamports = BigInt(result.amount);
+          console.log("[Referral] Processing payout of", amountLamports.toString(), "lamports to", wallet);
+          
+          const payoutResult = await payReferralReward(wallet, amountLamports);
+          
+          if (payoutResult.success) {
+            // Update claim status with transaction signature
+            console.log("[Referral] Payout successful:", payoutResult.signature);
+            res.json({ 
+              success: true, 
+              amount: result.amount,
+              signature: payoutResult.signature,
+              message: "Referral reward sent to your wallet!"
+            });
+          } else {
+            // Payout failed - the claim is already recorded, need to handle this
+            console.error("[Referral] Payout failed:", payoutResult.error);
+            res.status(500).json({ 
+              success: false, 
+              message: `Claim recorded but payout failed: ${payoutResult.error}. Please contact support.`
+            });
+          }
         } else {
           res.status(400).json({ success: false, message: result.error });
         }

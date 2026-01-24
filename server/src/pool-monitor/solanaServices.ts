@@ -1,4 +1,4 @@
-import { PublicKey, Connection, Keypair, SystemProgram, TransactionInstruction } from "@solana/web3.js/lib/index.cjs.js";
+import { PublicKey, Connection, Keypair, SystemProgram, TransactionInstruction, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js/lib/index.cjs.js";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
@@ -15,6 +15,7 @@ const log = (...args: any[]) => console.log("[MONITOR]", ...args);
 let program: Program | null = null;
 let devWallet: Keypair | null = null;
 let treasuryWallet: PublicKey | null = null;
+let treasuryKeypair: Keypair | null = null;
 let connection: Connection | null = null;
 
 // Network configuration - loads based on SOLANA_NETWORK environment variable
@@ -74,7 +75,28 @@ export async function initializeSolanaServices(): Promise<void> {
 
     // Parse treasury public key
     treasuryWallet = new PublicKey(treasuryPublicKey);
-    log("✅ Treasury wallet loaded:", treasuryWallet.toBase58());
+    log("✅ Treasury wallet (public) loaded:", treasuryWallet.toBase58());
+
+    // Load treasury keypair from private key if available (for referral payouts)
+    const treasuryPrivateKey = process.env.TREASURY_WALLET_PRIVATE_KEY;
+    if (treasuryPrivateKey) {
+      try {
+        let treasurySecretKey: Uint8Array;
+        if (treasuryPrivateKey.startsWith("[")) {
+          const keyArray = JSON.parse(treasuryPrivateKey);
+          treasurySecretKey = new Uint8Array(keyArray);
+        } else {
+          treasurySecretKey = bs58.decode(treasuryPrivateKey);
+        }
+        treasuryKeypair = Keypair.fromSecretKey(treasurySecretKey);
+        log("✅ Treasury keypair loaded for payouts:", treasuryKeypair.publicKey.toBase58());
+      } catch (err: any) {
+        log("⚠️ Treasury private key provided but failed to parse:", err.message);
+        log("⚠️ Referral payouts will not be available");
+      }
+    } else {
+      log("⚠️ TREASURY_WALLET_PRIVATE_KEY not set - referral payouts disabled");
+    }
 
     // Initialize connection and Anchor program using RPC failover manager
     connection = rpcManager.getConnection();
@@ -122,13 +144,80 @@ function getDevWallet(): Keypair {
 }
 
 /**
- * Get Treasury wallet
+ * Get Treasury wallet (public key)
  */
 function getTreasuryWallet(): PublicKey {
   if (!treasuryWallet) {
     throw new Error("Treasury wallet not initialized. Call initializeSolanaServices() first.");
   }
   return treasuryWallet;
+}
+
+/**
+ * Get Treasury keypair (for signing payout transactions)
+ */
+export function getTreasuryKeypair(): Keypair | null {
+  return treasuryKeypair;
+}
+
+/**
+ * Check if treasury payouts are enabled
+ */
+export function isTreasuryPayoutEnabled(): boolean {
+  return treasuryKeypair !== null;
+}
+
+/**
+ * Pay out referral reward from treasury wallet to recipient
+ * @param recipientWallet - The wallet address to send the reward to
+ * @param amountLamports - Amount in lamports to send
+ * @returns Transaction signature or error
+ */
+export async function payReferralReward(
+  recipientWallet: string,
+  amountLamports: bigint
+): Promise<{ success: boolean; signature?: string; error?: string }> {
+  if (!treasuryKeypair) {
+    return { success: false, error: "Treasury keypair not configured for payouts" };
+  }
+  
+  if (!connection) {
+    return { success: false, error: "Connection not initialized" };
+  }
+  
+  try {
+    const recipient = new PublicKey(recipientWallet);
+    const amount = Number(amountLamports);
+    
+    // Check treasury balance
+    const treasuryBalance = await connection.getBalance(treasuryKeypair.publicKey);
+    if (treasuryBalance < amount + 5000) { // 5000 lamports for fee
+      return { success: false, error: `Insufficient treasury balance: ${treasuryBalance} lamports, need ${amount + 5000}` };
+    }
+    
+    log(`💰 Sending ${amount} lamports (${amount / LAMPORTS_PER_SOL} SOL) to ${recipientWallet}`);
+    
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: treasuryKeypair.publicKey,
+        toPubkey: recipient,
+        lamports: amount,
+      })
+    );
+    
+    const signature = await sendAndConfirmTransaction(
+      connection,
+      transaction,
+      [treasuryKeypair],
+      { commitment: "confirmed" }
+    );
+    
+    log(`✅ Referral payout successful: ${signature}`);
+    return { success: true, signature };
+  } catch (err: any) {
+    log(`❌ Referral payout failed:`, err.message);
+    return { success: false, error: err.message };
+  }
 }
 
 /**
