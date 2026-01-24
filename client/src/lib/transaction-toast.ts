@@ -10,8 +10,34 @@ interface TransactionToastProps {
   type: "success" | "error" | "loading";
 }
 
+function simplifyErrorMessage(message: string): string {
+  if (!message) return "Unknown error occurred";
+  
+  // Solana specific errors
+  if (message.includes("0x0") || message.includes("AlreadyParticipated")) return "ALREADY PARTICIPATING";
+  if (message.includes("0x1") || message.includes("InsufficientFunds")) return "INSUFFICIENT FUNDS";
+  if (message.includes("User rejected")) return "TRANSACTION CANCELLED";
+  if (message.includes("PoolFull") || message.includes("0x3")) return "POOL IS FULL";
+  if (message.includes("NotCreator")) return "UNAUTHORIZED: NOT CREATOR";
+  if (message.includes("PoolLocked")) return "POOL IS LOCKED";
+  
+  // Generic cleanup
+  if (message.includes("Transaction failed")) return "TRANSACTION FAILED";
+  
+  // If it's a long technical string, take the first sentence or part before "Logs:"
+  let clean = message.split("Logs:")[0].split(".")[0].trim();
+  
+  // Limit length to keep it clean
+  if (clean.length > 60) {
+    return clean.substring(0, 57) + "...";
+  }
+  
+  return clean.toUpperCase();
+}
+
 export function showTransactionToast({ title, description, txHash, type }: TransactionToastProps) {
   const solscanUrl = txHash ? `https://solscan.io/tx/${txHash}` : null;
+  const cleanDescription = type === "error" ? simplifyErrorMessage(description) : description;
 
   const container = createElement("div", {
     className: cn(
@@ -38,9 +64,9 @@ export function showTransactionToast({ title, description, txHash, type }: Trans
           key: "title"
         }, title),
         createElement("p", { 
-          className: "text-xs text-slate-300 leading-relaxed font-medium",
+          className: "text-xs text-slate-300 leading-relaxed font-bold tracking-tight",
           key: "desc"
-        }, description)
+        }, cleanDescription)
       ])
     ]),
     solscanUrl && createElement("a", {
