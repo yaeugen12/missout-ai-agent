@@ -325,34 +325,43 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of refundResults) {
       try {
-        // Verify wallet is in on-chain participants list
-        const isParticipant = await isWalletInParticipantsList(row.pool.poolAddress, normalizedWallet);
+        // FIXED: Always include pools from database that have status=cancelled and refundClaimed=0
+        // The on-chain verification will happen when user actually tries to claim
+        // Previously, we were auto-marking as claimed when on-chain check failed, which was incorrect
+        
+        // Still try on-chain verification for logging purposes, but don't auto-mark as claimed
+        let isParticipantOnChain = false;
+        try {
+          isParticipantOnChain = await isWalletInParticipantsList(row.pool.poolAddress, normalizedWallet);
+        } catch (onChainErr) {
+          console.log(`[getClaimablePools] On-chain check failed for pool ${row.pool.poolAddress.slice(0, 8)} - including anyway: ${onChainErr}`);
+        }
 
-        if (isParticipant) {
-          if (!refundPoolsMap.has(row.pool.id)) {
-            refundPoolsMap.set(row.pool.id, {
-              ...row.pool,
-              participants: []
-            });
-          }
-          refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
+        // Include the pool regardless of on-chain status - let the claim attempt verify
+        if (!refundPoolsMap.has(row.pool.id)) {
+          refundPoolsMap.set(row.pool.id, {
+            ...row.pool,
+            participants: []
+          });
+        }
+        refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
+
+        // Log the verification result for debugging
+        if (isParticipantOnChain) {
+          console.log(`[getClaimablePools] Pool ${row.pool.poolAddress.slice(0, 8)} - wallet verified on-chain ✓`);
         } else {
-          console.log(`[getClaimablePools] Skipping pool ${row.pool.poolAddress.slice(0, 8)} - wallet not in on-chain participants list (likely already claimed)`);
-
-          // Database sync: Mark as claimed if not in on-chain list
-          // This prevents repeated checks for already-claimed refunds
-          try {
-            await db
-              .update(participants)
-              .set({ refundClaimed: 1 })
-              .where(eq(participants.id, row.participant.id));
-            console.log(`[getClaimablePools] Marked participant ${row.participant.id} refund as claimed (DB sync)`);
-          } catch (dbErr) {
-            console.error(`[getClaimablePools] Failed to update participant ${row.participant.id}:`, dbErr);
-          }
+          console.log(`[getClaimablePools] Pool ${row.pool.poolAddress.slice(0, 8)} - wallet NOT on-chain (may have already claimed, or account closed)`);
         }
       } catch (err) {
-        console.error(`[getClaimablePools] Error checking on-chain participants for pool ${row.pool.poolAddress.slice(0, 8)}:`, err);
+        console.error(`[getClaimablePools] Error processing pool ${row.pool.poolAddress.slice(0, 8)}:`, err);
+        // Still include the pool even if there's an error - let claim attempt verify
+        if (!refundPoolsMap.has(row.pool.id)) {
+          refundPoolsMap.set(row.pool.id, {
+            ...row.pool,
+            participants: []
+          });
+        }
+        refundPoolsMap.get(row.pool.id)!.participants.push(row.participant);
       }
     }
 
