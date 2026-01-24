@@ -1,6 +1,6 @@
 import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
 
-const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6";
+const JUPITER_QUOTE_API = "https://api.jup.ag/swap/v6";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const PLATFORM_FEE_BPS = 50; // 0.5% fee
 

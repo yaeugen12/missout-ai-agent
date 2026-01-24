@@ -195,19 +195,20 @@ export const protocolAdapter = {
   async fetchTokenPriceUsd(mint: string): Promise<number | null> {
     console.log("[protocolAdapter] Fetching price for:", mint);
 
-    // Try Jupiter API v6 first (most reliable for Solana tokens)
+    // Try Jupiter API v2 Price API (newest)
     try {
-      console.log("[protocolAdapter] Trying Jupiter v6 API...");
-      const jupiterRes = await fetch(`https://price.jup.ag/v6/price?ids=${mint}`);
-      const jupiterData = await jupiterRes.json();
-
-      if (jupiterData.data && jupiterData.data[mint] && jupiterData.data[mint].price) {
-        const price = jupiterData.data[mint].price;
-        console.log("[protocolAdapter] ✓ Jupiter v6 price found:", price);
-        return price;
+      console.log("[protocolAdapter] Trying Jupiter v2 Price API...");
+      const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
+      if (response.ok) {
+        const data = await response.json();
+        const price = data.data[mint]?.price;
+        if (price) {
+          console.log("[protocolAdapter] ✓ Jupiter v2 price found:", price);
+          return parseFloat(price);
+        }
       }
     } catch (e) {
-      console.warn("[protocolAdapter] Jupiter v6 failed:", e);
+      console.warn("[protocolAdapter] Jupiter v2 failed:", e);
     }
 
     // Try Helius DAS API for price (includes pump.fun tokens)
