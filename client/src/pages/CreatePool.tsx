@@ -258,7 +258,7 @@ export default function CreatePool() {
       showTransactionToast({ 
         type: "error",
         title: "Swap Failed", 
-        description: error.message 
+        description: error.message || "Failed to swap SOL for tokens"
       });
     } finally {
       setIsSwapping(false);
