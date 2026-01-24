@@ -11,7 +11,29 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Trophy, Clock, Users, Coins, AlertTriangle, Ban, RefreshCw, Zap, Gift, XCircle, Heart } from "lucide-react";
+import {
+  XCircle,
+  Ban,
+  Clock,
+  Coins,
+  Gift,
+  AlertTriangle,
+  Heart,
+  Trophy,
+  Users,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQueries } from "@tanstack/react-query";
@@ -283,6 +305,8 @@ export default function PoolDetails() {
     }
   }, [isConnected, address, poolAddress, pool, poolId, donateAmount, donateToPool, toast, connect, invalidateQueries]);
 
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  
   const handleCancel = useCallback(async () => {
     if (!poolAddress) {
       toast({ variant: "destructive", title: "Error", description: "Pool address not available" });
@@ -556,16 +580,69 @@ export default function PoolDetails() {
               {isCreator && (
                 <div className="mt-4 pt-4 border-t border-white/5">
                   {canCancel ? (
-                    <Button
-                      variant="destructive"
-                      onClick={handleCancel}
-                      disabled={isCancelling || !sdkConnected}
-                      className="w-full gap-2"
-                      data-testid="button-cancel-pool"
-                    >
-                      {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
-                      Cancel Pool
-                    </Button>
+                    <>
+                      <Button
+                        variant="destructive"
+                        onClick={() => setIsCancelDialogOpen(true)}
+                        disabled={isCancelling || !sdkConnected}
+                        className="w-full h-12 gap-2 text-sm font-black uppercase tracking-[0.2em] bg-rose-500/10 border border-rose-500/20 text-rose-500 hover:bg-rose-500/20 hover:border-rose-500/40 transition-all duration-300"
+                        data-testid="button-cancel-pool"
+                      >
+                        {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                        Collapse Singularity
+                      </Button>
+
+                      <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+                        <AlertDialogContent className="bg-[#050505] border border-rose-500/30 shadow-[0_0_50px_rgba(244,63,94,0.15)] backdrop-blur-3xl max-w-md">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="text-xl font-black tracking-tighter text-rose-500 flex items-center gap-3">
+                              <AlertTriangle className="w-6 h-6 animate-pulse" />
+                              CRITICAL PROTOCOL
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-300 space-y-5 pt-4">
+                              <div className="space-y-2">
+                                <p className="font-bold text-sm leading-relaxed uppercase tracking-wide">
+                                  You are about to initiate <span className="text-rose-400 underline decoration-rose-500/50">Singularity Collapse</span>.
+                                </p>
+                                <p className="text-[11px] text-slate-400 leading-normal">
+                                  To prevent temporal spam and void instability, a protocol fee is required for all manual cancellations.
+                                </p>
+                              </div>
+                              
+                              <div className="bg-rose-500/5 border border-rose-500/10 p-4 rounded-lg space-y-3 relative overflow-hidden group">
+                                <div className="absolute inset-0 bg-gradient-to-r from-rose-500/0 via-rose-500/5 to-rose-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">Recovery Amount</span>
+                                  <span className="text-sm font-mono font-bold text-emerald-400">95%</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-black tracking-widest uppercase text-rose-400">Anti-Spam Burn</span>
+                                  <span className="text-sm font-mono font-bold text-rose-500">-5%</span>
+                                </div>
+                              </div>
+
+                              <p className="text-[10px] text-slate-500 italic leading-tight">
+                                * The 5% anti-spam fee is permanently incinerated and cannot be recovered under any circumstances.
+                              </p>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter className="mt-6 flex flex-col sm:flex-row gap-3">
+                            <AlertDialogCancel className="flex-1 bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white uppercase tracking-[0.2em] text-[10px] font-black h-12 transition-all">
+                              Abort
+                            </AlertDialogCancel>
+                            <AlertDialogAction 
+                              onClick={() => {
+                                setIsCancelDialogOpen(false);
+                                handleCancel();
+                              }}
+                              className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black uppercase tracking-[0.2em] text-[10px] border-none shadow-[0_0_20px_rgba(225,29,72,0.4)] h-12 transition-all active:scale-95"
+                            >
+                              Confirm Collapse
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
                   ) : (
                     <Button
                       variant="outline"
