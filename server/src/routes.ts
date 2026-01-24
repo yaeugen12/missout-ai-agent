@@ -588,9 +588,84 @@ export async function registerRoutes(
         });
       }
 
+      // Handle lockDuration if it's sent as a string from frontend
+      const finalInput = {
+        ...input,
+        lockDuration: typeof input.lockDuration === 'string' ? parseInt(input.lockDuration) : input.lockDuration
+      };
+
+      console.log("FINAL_INPUT_FOR_STORAGE:", finalInput);
+
       // Validate txHash format (should be a Solana transaction signature)
       if (!input.txHash.match(/^[1-9A-HJ-NP-Za-km-z]{87,88}$/)) {
         console.log("[ANTI-FAKE] Rejected pool creation - invalid txHash format:", input.txHash);
+        return res.status(400).json({
+          message: "Invalid transaction signature format.",
+          field: "txHash"
+        });
+      }
+
+      // Check if txHash already used
+      const txUsed = await isTxHashUsed(input.txHash);
+      if (txUsed) {
+        console.log("[ANTI-FAKE] Rejected pool creation - txHash already used:", input.txHash);
+        return res.status(400).json({
+          message: "This transaction has already been used to create a pool.",
+          field: "txHash"
+        });
+      }
+
+      // Verify on-chain (using the original input for verification)
+      const verification = await verifyPoolCreationTransaction(
+        input.txHash,
+        input.creatorWallet,
+        input.poolAddress,
+        input.tokenMint,
+        input.entryAmount,
+        input.maxParticipants
+      );
+
+      if (!verification.valid) {
+        console.log("[ANTI-FAKE] Transaction verification failed:", verification.reason);
+        return res.status(400).json({
+          message: verification.reason || "Transaction verification failed.",
+          field: "txHash"
+        });
+      }
+
+      // 🔐 ATOMIC CREATE: Save to DB + mark tx as used
+      const client = await pgPool.connect();
+      try {
+        await client.query("BEGIN");
+
+        const pool = await storage.createPool(finalInput);
+        await markTxHashUsed(input.txHash, pool.id, input.creatorWallet, "create_pool");
+
+        await client.query("COMMIT");
+        client.release();
+
+        console.log("[CREATE] Pool synced to DB successfully:", { poolId: pool.id, txHash: input.txHash.slice(0, 20) });
+
+        // Invalidate cache
+        invalidateCache(api.pools.list.path);
+
+        // Notify
+        await notificationService.createNotification({
+          walletAddress: input.creatorWallet,
+          type: NotificationType.JOIN,
+          title: "Black Hole Initialized",
+          message: `You successfully created a pool for ${input.tokenSymbol}.`,
+          poolId: pool.id,
+          poolName: input.tokenSymbol
+        });
+
+        res.json(pool);
+      } catch (dbErr: any) {
+        await client.query("ROLLBACK");
+        client.release();
+        console.error("[CREATE] Database error during pool creation:", dbErr);
+        throw dbErr;
+      }
         return res.status(400).json({
           message: "Invalid transaction signature format",
           field: "txHash"
