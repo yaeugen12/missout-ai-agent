@@ -264,7 +264,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
       entryAmount: parseFloat(entryAmount),
       minParticipants: 2,
       maxParticipants: participants,
-      lockDuration: lockDuration,
+      lockDuration: Number(lockDuration),
       creatorWallet: address,
     };
 
