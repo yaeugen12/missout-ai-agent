@@ -680,28 +680,33 @@ export async function registerRoutes(
 
         await client.query("COMMIT");
         client.release();
-
+        
         console.log("[CREATE] Pool synced to DB successfully:", { poolId: pool.id, txHash: input.txHash.slice(0, 20) });
 
-        // Start real-time price tracking for this pool
-        const priceTrackingService = getPriceTrackingService();
-        if (priceTrackingService && input.tokenMint) {
-          await priceTrackingService.startTracking(pool.id, input.tokenMint);
-          console.log(`[POOL CREATE] Started price tracking for pool ${pool.id}`);
+        // Operations after DB commit (non-critical, don't fail the request)
+        try {
+          // Start real-time price tracking for this pool
+          const priceTrackingService = getPriceTrackingService();
+          if (priceTrackingService && input.tokenMint) {
+            await priceTrackingService.startTracking(pool.id, input.tokenMint);
+            console.log(`[POOL CREATE] Started price tracking for pool ${pool.id}`);
+          }
+
+          // Invalidate cache
+          await invalidateCache("api:GET:/api/pools*");
+
+          // Notify
+          await notificationService.createNotification({
+            walletAddress: input.creatorWallet,
+            type: NotificationType.JOIN,
+            title: "Black Hole Initialized",
+            message: `You successfully created a pool for ${input.tokenSymbol}.`,
+            poolId: pool.id,
+            poolName: input.tokenSymbol
+          });
+        } catch (postCommitErr) {
+          console.error("[CREATE] Non-critical post-commit error:", postCommitErr);
         }
-
-        // Invalidate cache
-        await invalidateCache("api:GET:/api/pools*");
-
-        // Notify
-        await notificationService.createNotification({
-          walletAddress: input.creatorWallet,
-          type: NotificationType.JOIN,
-          title: "Black Hole Initialized",
-          message: `You successfully created a pool for ${input.tokenSymbol}.`,
-          poolId: pool.id,
-          poolName: input.tokenSymbol
-        });
 
         res.status(201).json(pool);
       } catch (dbErr: any) {
