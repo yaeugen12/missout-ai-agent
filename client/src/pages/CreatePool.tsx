@@ -178,7 +178,7 @@ export default function CreatePool() {
       entryAmount: parseFloat(entryAmount),
       minParticipants: 2,
       maxParticipants: participants,
-      lockDuration: lockDuration,
+      lockDuration: lockDuration.toString(),
       creatorWallet: address,
     }, {
       onSuccess: (pool) => {
