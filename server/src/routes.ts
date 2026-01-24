@@ -618,11 +618,8 @@ export async function registerRoutes(
       // Verify on-chain (using the original input for verification)
       const verification = await verifyPoolCreationTransaction(
         input.txHash,
-        input.creatorWallet,
         input.poolAddress,
-        input.tokenMint,
-        input.entryAmount,
-        input.maxParticipants
+        input.creatorWallet
       );
 
       if (!verification.valid) {
@@ -633,21 +630,68 @@ export async function registerRoutes(
         });
       }
 
+      // Fetch initial token price from mainnet
+      let initialPrice: number | null = null;
+      try {
+        initialPrice = await fetchTokenPriceUsd(input.tokenMint);
+        if (initialPrice && initialPrice > 0) {
+          console.log(`[POOL CREATE] Token price fetched: $${initialPrice.toFixed(6)}`);
+        } else {
+          console.warn(`[POOL CREATE] Token price not available for ${input.tokenMint}`);
+        }
+      } catch (err: any) {
+        console.warn(`[POOL CREATE] Failed to fetch token price: ${err.message}`);
+      }
+
       // 🔐 ATOMIC CREATE: Save to DB + mark tx as used
       const client = await pgPool.connect();
       try {
         await client.query("BEGIN");
 
-        const pool = await storage.createPool(finalInput);
+        // Create pool with initial price
+        const poolInput = {
+          ...finalInput,
+          initialPriceUsd: initialPrice,
+          currentPriceUsd: initialPrice,
+        };
+        const pool = await storage.createPool(poolInput);
+
+        // Mark transaction as used
         await markTxHashUsed(input.txHash, pool.id, input.creatorWallet, "create_pool");
+
+        // Creator is first participant
+        console.log("[POOL CREATE] Adding creator as first participant:", input.creatorWallet);
+        const betUsd = initialPrice && pool.entryAmount ? pool.entryAmount * initialPrice : null;
+        await storage.addParticipant({
+          poolId: pool.id,
+          walletAddress: input.creatorWallet,
+          betUsd: betUsd,
+          priceAtJoinUsd: initialPrice,
+        });
+
+        // Add transaction record for creator
+        await storage.addTransaction({
+          poolId: pool.id,
+          walletAddress: input.creatorWallet,
+          type: 'CREATE',
+          amount: pool.entryAmount,
+          txHash: input.txHash
+        });
 
         await client.query("COMMIT");
         client.release();
 
         console.log("[CREATE] Pool synced to DB successfully:", { poolId: pool.id, txHash: input.txHash.slice(0, 20) });
 
+        // Start real-time price tracking for this pool
+        const priceTrackingService = getPriceTrackingService();
+        if (priceTrackingService && input.tokenMint) {
+          await priceTrackingService.startTracking(pool.id, input.tokenMint);
+          console.log(`[POOL CREATE] Started price tracking for pool ${pool.id}`);
+        }
+
         // Invalidate cache
-        invalidateCache(api.pools.list.path);
+        await invalidateCache("api:GET:/api/pools*");
 
         // Notify
         await notificationService.createNotification({
@@ -659,7 +703,7 @@ export async function registerRoutes(
           poolName: input.tokenSymbol
         });
 
-        res.json(pool);
+        res.status(201).json(pool);
       } catch (dbErr: any) {
         await client.query("ROLLBACK");
         client.release();
