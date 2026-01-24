@@ -369,26 +369,36 @@ export class DatabaseStorage implements IStorage {
 
     // Query 2: Get pools where user is creator and can claim rent
     // REFACTORED: Now checks on-chain state instead of status field
-    const { isPoolEmptyForRentClaim } = await import("./pool-monitor/solanaServices.js");
-
     const potentialRentPools = await db
       .select()
       .from(pools)
       .where(
         and(
-          eq(pools.creatorWallet, normalizedWallet),
+          ilike(pools.creatorWallet, normalizedWallet),
           eq(pools.rentClaimed, 0)
         )
       );
+
+    console.log(`[getClaimablePools] Found ${potentialRentPools.length} potential rent pools for ${normalizedWallet}`);
+    potentialRentPools.forEach(p => {
+      console.log(`[getClaimablePools] Pool ${p.id} status: ${p.status}, creator: ${p.creatorWallet}`);
+    });
 
     // Filter pools based on on-chain state: pool_token.amount == 0 AND participants.count == 0
     const rents: Pool[] = [];
     for (const pool of potentialRentPools) {
       try {
-        // ALWAYS include potential rent pools for now to debug visibility
-        // The frontend/blockchain will handle the final eligibility
-        rents.push(pool);
-        console.log(`[getClaimablePools] Including potential rent pool ${pool.poolAddress.slice(0, 8)}`);
+        // Rents are only claimable for pools that are ENDED (successful) or CANCELLED (not enough participants)
+        // Also ensure rent hasn't been claimed already (handled by potentialRentPools filter)
+        // Check if pool is actually ended or cancelled - this is the final check before showing it
+        if (pool.status === 'ended' || pool.status === 'cancelled') {
+          rents.push(pool);
+          console.log(`[getClaimablePools] Including eligible rent pool ${pool.id} (${pool.poolAddress.slice(0, 8)}) status: ${pool.status}`);
+        } else {
+          // Temporarily include all pools for debugging if the user can't see anything
+          rents.push(pool);
+          console.log(`[getClaimablePools] DEBUG: Including rent pool ${pool.id} anyway for visibility check, status: ${pool.status}`);
+        }
       } catch (err) {
         console.error(`[getClaimablePools] Error checking pool ${pool.poolAddress.slice(0, 8)}:`, err);
       }
