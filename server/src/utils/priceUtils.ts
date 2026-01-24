@@ -11,7 +11,33 @@ import { logger } from "../logger.js";
 export async function fetchTokenPriceUsd(mint: string): Promise<number | null> {
   logger.debug(`[PriceUtils] Fetching price for: ${mint}`);
 
-  // Try Jupiter API v6 first (most reliable for Solana tokens)
+  // For pump.fun tokens, prioritize DexScreener (more accurate real-time prices)
+  const isPumpToken = mint.toLowerCase().includes('pump');
+
+  if (isPumpToken) {
+    // Try DexScreener first for pump.fun tokens (most accurate)
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.pairs && data.pairs.length > 0) {
+          const bestPair = data.pairs.sort((a: any, b: any) =>
+            (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+          )[0];
+
+          if (bestPair.priceUsd) {
+            const price = parseFloat(bestPair.priceUsd);
+            logger.debug(`[PriceUtils] DexScreener price (pump token): $${price}`);
+            return price;
+          }
+        }
+      }
+    } catch (err) {
+      logger.debug(`[PriceUtils] DexScreener failed:`, err);
+    }
+  }
+
+  // Try Jupiter API v6 first for non-pump tokens (most reliable for Solana tokens)
   try {
     const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
     if (response.ok) {
@@ -26,7 +52,30 @@ export async function fetchTokenPriceUsd(mint: string): Promise<number | null> {
     logger.debug(`[PriceUtils] Jupiter failed:`, err);
   }
 
-  // Try Helius DAS API (includes pump.fun tokens)
+  // Try DexScreener API for non-pump tokens as fallback
+  if (!isPumpToken) {
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.pairs && data.pairs.length > 0) {
+          const bestPair = data.pairs.sort((a: any, b: any) =>
+            (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+          )[0];
+
+          if (bestPair.priceUsd) {
+            const price = parseFloat(bestPair.priceUsd);
+            logger.debug(`[PriceUtils] DexScreener price: $${price}`);
+            return price;
+          }
+        }
+      }
+    } catch (err) {
+      logger.debug(`[PriceUtils] DexScreener failed:`, err);
+    }
+  }
+
+  // Try Helius DAS API as last resort (may have stale prices)
   try {
     const heliusUrl = process.env.VITE_HELIUS_RPC_URL || process.env.HELIUS_RPC_URL;
     if (heliusUrl && !heliusUrl.includes("api-key=YOUR_API_KEY")) {
@@ -78,28 +127,6 @@ export async function fetchTokenPriceUsd(mint: string): Promise<number | null> {
     }
   } catch (err) {
     logger.debug(`[PriceUtils] Birdeye failed:`, err);
-  }
-
-  // Try DexScreener API (DEX-listed tokens)
-  try {
-    const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-    if (response.ok) {
-      const data = await response.json();
-      if (data.pairs && data.pairs.length > 0) {
-        // Get the pair with highest liquidity
-        const bestPair = data.pairs.sort((a: any, b: any) =>
-          (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
-        )[0];
-
-        if (bestPair.priceUsd) {
-          const price = parseFloat(bestPair.priceUsd);
-          logger.debug(`[PriceUtils] DexScreener price: $${price}`);
-          return price;
-        }
-      }
-    }
-  } catch (err) {
-    logger.debug(`[PriceUtils] DexScreener failed:`, err);
   }
 
   logger.warn(`[PriceUtils] Could not fetch price for ${mint} from any source`);
