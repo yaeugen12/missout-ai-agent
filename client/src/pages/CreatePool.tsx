@@ -133,7 +133,6 @@ export default function CreatePool() {
         treasuryFeeBps: 0,
       });
 
-
       signature = sdkResult?.tx;
       poolAddress = sdkResult?.poolId;
 
@@ -178,7 +177,7 @@ export default function CreatePool() {
       entryAmount: parseFloat(entryAmount),
       minParticipants: 2,
       maxParticipants: participants,
-      lockDuration: lockDuration.toString(),
+      lockDuration: lockDuration.toString() as any,
       creatorWallet: address,
     }, {
       onSuccess: (pool) => {
