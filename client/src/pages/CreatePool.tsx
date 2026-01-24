@@ -512,10 +512,6 @@ export default function CreatePool() {
                           {parseFloat(jupiterQuote.priceImpactPct).toFixed(2)}%
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                        <span>Platform Fee</span>
-                        <span className="text-purple-400">0.5%</span>
-                      </div>
                     </div>
                   )}
 

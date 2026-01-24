@@ -2,7 +2,6 @@ import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
 
 const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
-const PLATFORM_FEE_BPS = 50; // 0.5% fee
 
 export interface JupiterQuote {
   inputMint: string;
@@ -27,34 +26,34 @@ export interface SwapResult {
 export async function getJupiterQuote(
   outputMint: string,
   solAmount: number,
-  slippageBps: number = 50
+  slippageBps: number = 100
 ): Promise<JupiterQuote | null> {
   try {
     const amountInLamports = Math.floor(solAmount * 1_000_000_000);
     
-    const params = new URLSearchParams({
-      inputMint: SOL_MINT,
-      outputMint,
-      amount: amountInLamports.toString(),
-      slippageBps: slippageBps.toString(),
-      onlyDirectRoutes: "false",
-      asLegacyTransaction: "false",
-      swapMode: "ExactIn",
-      platformFeeBps: PLATFORM_FEE_BPS.toString(),
-    });
-
-    const response = await fetch(`${JUPITER_QUOTE_API}/quote?${params}`);
+    const url = `${JUPITER_QUOTE_API}/quote?inputMint=${SOL_MINT}&outputMint=${outputMint}&amount=${amountInLamports}&slippageBps=${slippageBps}`;
+    
+    console.log("[Jupiter] Fetching quote from:", url);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[Jupiter] Quote error:", errorText);
+      console.error("[Jupiter] Quote API error:", response.status, errorText);
       return null;
     }
 
     const quote = await response.json();
+    
+    if (quote.error) {
+      console.error("[Jupiter] Quote returned error:", quote.error);
+      return null;
+    }
+    
+    console.log("[Jupiter] Quote received:", quote.outAmount, "tokens");
     return quote;
-  } catch (error) {
-    console.error("[Jupiter] Failed to get quote:", error);
+  } catch (error: any) {
+    console.error("[Jupiter] Failed to get quote:", error?.message || error);
     return null;
   }
 }
@@ -62,7 +61,7 @@ export async function getJupiterQuote(
 export async function executeJupiterSwap(
   quote: JupiterQuote,
   userPublicKey: string,
-  feeAccount: string,
+  _feeAccount: string,
   signTransaction: (tx: VersionedTransaction) => Promise<VersionedTransaction>,
   connection: Connection
 ): Promise<SwapResult> {
@@ -72,7 +71,6 @@ export async function executeJupiterSwap(
     body: JSON.stringify({
       quoteResponse: quote,
       userPublicKey,
-      feeAccount,
       wrapAndUnwrapSol: true,
       prioritizationFeeLamports: "auto",
       dynamicComputeUnitLimit: true,
