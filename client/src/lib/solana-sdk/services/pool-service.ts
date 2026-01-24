@@ -477,9 +477,26 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
   const conn = client.getConnection();
   const tokenProgramId = await resolveTokenProgramForMint(conn, poolState.mint);
   const poolToken = getAssociatedTokenAddressSync(poolState.mint, poolPk, true, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
-  const mintInfo = await conn.getAccountInfo(poolState.mint, "finalized");
   const userToken = getAssociatedTokenAddressSync(poolState.mint, userPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   const treasuryToken = getAssociatedTokenAddressSync(poolState.mint, poolState.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  // Build instructions array
+  const instructions: TransactionInstruction[] = [];
+
+  // Check if treasury token account exists, if not create it
+  const treasuryTokenInfo = await conn.getAccountInfo(treasuryToken);
+  if (!treasuryTokenInfo) {
+    console.log("[claimRefund] Creating treasury token account...");
+    const createTreasuryAtaIx = createAssociatedTokenAccountInstruction(
+      userPk,
+      treasuryToken,
+      poolState.treasuryWallet,
+      poolState.mint,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    instructions.push(createTreasuryAtaIx);
+  }
 
   // Claim Refund instruction - discriminator from IDL: [15, 16, 30, 161, 255, 228, 97, 60]
   // Account order from IDL: mint, pool, pool_token, user_token, treasury_token, user, token_program, participants
@@ -497,8 +514,9 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
       { pubkey: participantsPda, isSigner: false, isWritable: true },
     ]
   );
+  instructions.push(ix);
 
-  const sig = await client.buildAndSendTransaction([ix]);
+  const sig = await client.buildAndSendTransaction(instructions);
 
   return { tx: sig };
 }
