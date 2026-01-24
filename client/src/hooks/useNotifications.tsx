@@ -111,33 +111,58 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     ) => {
       if (!settings.enabled) return;
 
+      const now = Date.now();
+      const DEDUP_WINDOW_MS = 30000; // 30 seconds deduplication window
+
       const newNotification: AppNotification = {
         ...notification,
-        id: `${Date.now()}-${Math.random()}`,
-        timestamp: Date.now(),
+        id: `${now}-${Math.random()}`,
+        timestamp: now,
         read: false,
       };
 
-      setNotifications((prev) =>
-        [newNotification, ...prev].slice(0, 50)
+      setNotifications((prev) => {
+        // Check for duplicate: same type + poolId within 30 seconds
+        const isDuplicate = prev.some(existing => 
+          existing.type === notification.type &&
+          existing.poolId === notification.poolId &&
+          (now - existing.timestamp) < DEDUP_WINDOW_MS
+        );
+
+        if (isDuplicate) {
+          console.log('[Notifications] Skipping duplicate real-time notification:', notification.type, notification.poolId);
+          return prev;
+        }
+
+        return [newNotification, ...prev].slice(0, 50);
+      });
+
+      // Only play sound and show browser notification if not a duplicate
+      // We need to check again outside setState
+      const existingDuplicate = notifications.some(existing =>
+        existing.type === notification.type &&
+        existing.poolId === notification.poolId &&
+        (now - existing.timestamp) < DEDUP_WINDOW_MS
       );
 
-      playSound(notification.type);
+      if (!existingDuplicate) {
+        playSound(notification.type);
 
-      // Browser notification
-      if (
-        'Notification' in window &&
-        Notification.permission === 'granted'
-      ) {
-        new Notification(notification.title, {
-          body: notification.message,
-          icon: '/favicon.ico',
-          badge: '/favicon.ico',
-          tag: newNotification.id,
-        });
+        // Browser notification
+        if (
+          'Notification' in window &&
+          Notification.permission === 'granted'
+        ) {
+          new Notification(notification.title, {
+            body: notification.message,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag: `${notification.type}-${notification.poolId}`,
+          });
+        }
       }
     },
-    [settings.enabled, playSound]
+    [settings.enabled, playSound, notifications]
   );
 
   // Add past notification from database (already has id, timestamp, read status)
@@ -157,11 +182,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       };
 
       setNotifications((prev) => {
-        // Check if notification already exists (by database id)
-        const exists = prev.some(n => n.id === pastNotification.id);
+        // Check if notification already exists by:
+        // 1. Same database ID
+        // 2. Same type + poolId (content-based deduplication)
+        const existsById = prev.some(n => n.id === pastNotification.id);
+        const existsByContent = prev.some(n => 
+          n.type === pastNotification.type && 
+          n.poolId === pastNotification.poolId &&
+          n.title === pastNotification.title
+        );
 
-        if (exists) {
-          console.log('[Notifications] Skipping duplicate notification:', pastNotification.id);
+        if (existsById || existsByContent) {
+          console.log('[Notifications] Skipping duplicate past notification:', pastNotification.type, pastNotification.poolId);
           return prev;
         }
 
