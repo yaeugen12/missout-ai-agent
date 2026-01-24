@@ -1,19 +1,27 @@
 import BN from "bn.js";
 import { PublicKey, Connection } from "@solana/web3.js";
-import { getMint } from "@solana/spl-token";
+import { getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 const U64_MAX = 18_446_744_073_709_551_615n;
+const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 export async function getTokenDecimals(
   mint: PublicKey,
   connection: Connection
 ): Promise<number> {
   try {
-    const mintInfo = await getMint(connection, mint);
+    // Try standard token program first
+    const mintInfo = await getMint(connection, mint, "confirmed", TOKEN_PROGRAM_ID);
     return mintInfo.decimals;
   } catch (err) {
-    console.warn(`[getTokenDecimals] Failed to fetch mint ${mint.toBase58()}, defaulting to 9 decimals:`, err);
-    return 9; // Default to 9 decimals (standard for most SPL tokens)
+    try {
+      // Try Token-2022
+      const mint2022Info = await getMint(connection, mint, "confirmed", TOKEN_2022_PROGRAM_ID);
+      return mint2022Info.decimals;
+    } catch (err2) {
+      console.warn(`[getTokenDecimals] Failed to fetch mint ${mint.toBase58()}, defaulting to 9 decimals:`, err2);
+      return 9; // Default to 9 decimals (standard for most SPL tokens)
+    }
   }
 }
 
@@ -58,14 +66,22 @@ export class TokenAmount {
     mint: PublicKey,
     connection: Connection
   ): Promise<TokenAmount> {
-    let decimals: number;
+    let decimals: number = 9;
     try {
-      const mintInfo = await getMint(connection, mint);
+      // Try standard token program first
+      const mintInfo = await getMint(connection, mint, "confirmed", TOKEN_PROGRAM_ID);
       decimals = mintInfo.decimals;
     } catch (err) {
-      console.warn(`[TokenAmount.fromTokens] Failed to fetch mint ${mint.toBase58()}, defaulting to 9 decimals:`, err);
-      decimals = 9; // Default to 9 decimals (standard for most SPL tokens)
+      try {
+        // Try Token-2022
+        const mint2022Info = await getMint(connection, mint, "confirmed", TOKEN_2022_PROGRAM_ID);
+        decimals = mint2022Info.decimals;
+      } catch (err2) {
+        console.warn(`[TokenAmount.fromTokens] Failed to fetch mint ${mint.toBase58()}, defaulting to 9 decimals:`, err2);
+        decimals = 9; // Default
+      }
     }
+    
     const multiplier = 10n ** BigInt(decimals);
 
     let lamports: bigint;
