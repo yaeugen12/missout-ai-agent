@@ -15,7 +15,7 @@ export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
 
   // If BACKEND_URL is set (production), use it
-  if (BACKEND_URL) {
+  if (BACKEND_URL && !BACKEND_URL.includes('localhost')) {
     return `${BACKEND_URL}/${cleanPath}`;
   }
 
