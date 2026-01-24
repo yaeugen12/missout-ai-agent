@@ -666,149 +666,6 @@ export async function registerRoutes(
         console.error("[CREATE] Database error during pool creation:", dbErr);
         throw dbErr;
       }
-        return res.status(400).json({
-          message: "Invalid transaction signature format",
-          field: "txHash"
-        });
-      }
-
-      // Validate poolAddress format (should be a Solana public key)
-      if (!input.poolAddress.match(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/)) {
-        console.log("[ANTI-FAKE] Rejected pool creation - invalid poolAddress format:", input.poolAddress);
-        return res.status(400).json({
-          message: "Invalid pool address format",
-          field: "poolAddress"
-        });
-      }
-
-      // 🔐 REPLAY PROTECTION: Check if transaction hash already used
-      const txAlreadyUsed = await isTxHashUsed(input.txHash);
-      if (txAlreadyUsed) {
-        console.log("[SECURITY] Replay attack detected - tx already used:", { txHash: input.txHash.slice(0, 20), wallet: input.creatorWallet });
-        return res.status(409).json({
-          message: "Transaction hash already used",
-          field: "txHash"
-        });
-      }
-
-      // 🔐 SECURITY FIX: Verify transaction exists on-chain
-      // This prevents attackers from submitting fake pool creation requests
-      const verification = await verifyPoolCreationTransaction(
-        input.txHash,
-        input.poolAddress,
-        input.creatorWallet
-      );
-
-      if (!verification.valid) {
-        console.log("[ANTI-FAKE] Transaction verification failed:", verification.reason);
-        return res.status(400).json({
-          message: verification.reason || "Transaction verification failed",
-          field: "txHash"
-        });
-      }
-
-      // Check if pool already exists in database (prevent duplicate registrations)
-      const existingPoolByAddress = await storage.getPoolByAddress(input.poolAddress);
-      if (existingPoolByAddress) {
-        console.log("[ANTI-FAKE] Pool already registered:", input.poolAddress);
-        return res.status(409).json({
-          message: "Pool already registered in the system",
-          field: "poolAddress"
-        });
-      }
-
-      const existingPoolByTxHash = await storage.getPoolByTxHash(input.txHash);
-      if (existingPoolByTxHash) {
-        console.log("[ANTI-FAKE] Transaction already used:", input.txHash);
-        return res.status(409).json({
-          message: "Transaction already used to create a pool",
-          field: "txHash"
-        });
-      }
-
-      console.log("[POOL CREATE] ✅ Verified on-chain pool:", {
-        txHash: input.txHash.substring(0, 20) + "...",
-        poolAddress: input.poolAddress
-      });
-
-      // Fetch initial token price from mainnet
-      let initialPrice: number | null = null;
-      try {
-        initialPrice = await fetchTokenPriceUsd(input.tokenMint);
-        if (initialPrice && initialPrice > 0) {
-          console.log(`[POOL CREATE] ✅ Token price fetched: $${initialPrice.toFixed(6)}`);
-        } else {
-          console.warn(`[POOL CREATE] ⚠️  Token price not available for ${input.tokenMint}`);
-        }
-      } catch (err: any) {
-        console.warn(`[POOL CREATE] ⚠️  Failed to fetch token price: ${err.message}`);
-      }
-
-      // 🔐 ATOMIC TRANSACTION: Create pool + mark tx as used
-      const client = await pgPool.connect();
-
-      try {
-        await client.query("BEGIN");
-
-        // Create pool with initial price
-        const poolInput = {
-          ...input,
-          initialPriceUsd: initialPrice,
-          currentPriceUsd: initialPrice,
-        };
-        const pool = await storage.createPool(poolInput);
-
-        // Mark transaction as used
-        await markTxHashUsed(input.txHash, pool.id, input.creatorWallet, "create_pool");
-
-        // A) CREATOR MUST ALWAYS BE FIRST PARTICIPANT
-        console.log("[POOL CREATE] Adding creator as first participant:", input.creatorWallet);
-        const betUsd = initialPrice && pool.entryAmount ? pool.entryAmount * initialPrice : null;
-        await storage.addParticipant({
-          poolId: pool.id,
-          walletAddress: input.creatorWallet,
-          betUsd: betUsd,
-          priceAtJoinUsd: initialPrice,
-          // Avatar will be fetched from profile when participants are retrieved
-        });
-
-        // Add transaction record for creator (CREATE)
-        await storage.addTransaction({
-          poolId: pool.id,
-          walletAddress: input.creatorWallet,
-          type: 'CREATE',
-          amount: pool.entryAmount,
-          txHash: input.txHash
-        });
-
-        await client.query("COMMIT");
-        client.release();
-
-        // Start real-time price tracking for this pool
-        const priceTrackingService = getPriceTrackingService();
-        if (priceTrackingService && input.tokenMint) {
-          await priceTrackingService.startTracking(pool.id, input.tokenMint);
-          console.log(`[POOL CREATE] ✅ Started price tracking for pool ${pool.id}`);
-        }
-
-        // Invalidate pools cache
-        await invalidateCache("api:GET:/api/pools*");
-
-        res.status(201).json(pool);
-      } catch (err: any) {
-        await client.query("ROLLBACK");
-        client.release();
-
-        if (err.message.includes("already used")) {
-          console.log("[SECURITY] Race condition prevented by UNIQUE constraint:", { txHash: input.txHash.slice(0, 20) });
-          return res.status(409).json({
-            message: "Transaction already processed",
-            field: "txHash"
-          });
-        }
-
-        throw err;
-      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
@@ -816,7 +673,8 @@ export async function registerRoutes(
           field: err.errors[0].path.join('.'),
         });
       }
-      throw err;
+      console.error("[CREATE] Unexpected error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
