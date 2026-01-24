@@ -8,7 +8,7 @@ import {
   type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim,
   type WinnerFeedEntry, type InsertWinnerFeedEntry
 } from "@shared/schema";
-import { eq, desc, sql, and, or } from "drizzle-orm";
+import { eq, desc, sql, and, or, ilike } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {
@@ -297,7 +297,7 @@ export class DatabaseStorage implements IStorage {
     refunds: Array<Pool & { participants: Participant[] }>;
     rents: Pool[];
   }> {
-    const normalizedWallet = wallet.toLowerCase();
+    const normalizedWallet = wallet.trim().toLowerCase();
 
     // Query 1: Get cancelled pools where user can claim refund
     // Uses JOIN to get pool + participant data in one query
@@ -312,7 +312,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(pools.status, 'cancelled'),
-          eq(participants.walletAddress, normalizedWallet),
+          ilike(participants.walletAddress, normalizedWallet),
           eq(participants.refundClaimed, 0)
         )
       );
@@ -390,14 +390,9 @@ export class DatabaseStorage implements IStorage {
       try {
         // Rents are only claimable for pools that are ENDED (successful) or CANCELLED (not enough participants)
         // Also ensure rent hasn't been claimed already (handled by potentialRentPools filter)
-        // Check if pool is actually ended or cancelled - this is the final check before showing it
         if (pool.status === 'ended' || pool.status === 'cancelled') {
           rents.push(pool);
           console.log(`[getClaimablePools] Including eligible rent pool ${pool.id} (${pool.poolAddress.slice(0, 8)}) status: ${pool.status}`);
-        } else {
-          // Temporarily include all pools for debugging if the user can't see anything
-          rents.push(pool);
-          console.log(`[getClaimablePools] DEBUG: Including rent pool ${pool.id} anyway for visibility check, status: ${pool.status}`);
         }
       } catch (err) {
         console.error(`[getClaimablePools] Error checking pool ${pool.poolAddress.slice(0, 8)}:`, err);
