@@ -57,6 +57,12 @@ export function useWalletBalances(): WalletBalances {
         { programId: TOKEN_PROGRAM_ID }
       );
 
+      const token2022Accounts = await connection.getParsedTokenAccountsByOwner(
+        publicKey,
+        { programId: new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") }
+      );
+
+      const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
       const tokenBalances: TokenBalance[] = [];
 
       // Check if on mainnet (default to mainnet)
@@ -64,7 +70,7 @@ export function useWalletBalances(): WalletBalances {
                         import.meta.env.VITE_SOLANA_CLUSTER === "mainnet-beta" ||
                         true; // Default to mainnet
 
-      for (const account of tokenAccounts.value) {
+      for (const account of allAccounts) {
         const parsedInfo = account.account.data.parsed.info;
         const mintAddress = parsedInfo.mint;
         const tokenAmount = parsedInfo.tokenAmount;

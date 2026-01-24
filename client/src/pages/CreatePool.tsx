@@ -168,18 +168,18 @@ export default function CreatePool() {
     }
 
 
-    createPoolBackend({
-      tokenSymbol: tokenInfo.symbol,
-      tokenName: tokenInfo.name,
-      tokenMint: tokenInfo.mint,
-      poolAddress: poolAddress,
-      txHash: signature,
-      entryAmount: parseFloat(entryAmount),
-      minParticipants: 2,
-      maxParticipants: participants,
-      lockDuration: lockDuration.toString() as any,
-      creatorWallet: address,
-    }, {
+      createPoolBackend({
+        tokenSymbol: tokenInfo.symbol,
+        tokenName: tokenInfo.name,
+        tokenMint: tokenInfo.mint,
+        poolAddress: poolAddress,
+        txHash: signature,
+        entryAmount: parseFloat(entryAmount),
+        minParticipants: 2,
+        maxParticipants: participants,
+        lockDuration: lockDuration.toString(),
+        creatorWallet: address,
+      }, {
       onSuccess: (pool) => {
         showTransactionToast({ 
           type: "success",
