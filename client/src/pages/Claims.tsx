@@ -182,17 +182,18 @@ export default function Claims() {
       const failed = results.filter(r => !r.success).length;
 
       if (successful > 0) {
-        toast({
+        showTransactionToast({
+          type: "success",
           title: "Batch Refund Complete!",
-          description: `${successful} refund${successful > 1 ? 's' : ''} claimed${failed > 0 ? `, ${failed} failed` : ''}`,
+          description: `${successful} refund${successful > 1 ? 's' : ''} claimed${failed > 0 ? `, ${failed} failed` : ''}. Your tokens escaped the collapsed pools.`,
         });
       }
 
       if (failed > 0 && successful === 0) {
-        toast({
+        showTransactionToast({
+          type: "error",
           title: "Batch Refund Failed",
-          description: `All ${failed} claims failed`,
-          variant: "destructive",
+          description: `All ${failed} claims failed. The void is holding onto your tokens.`,
         });
       }
 
@@ -241,17 +242,18 @@ export default function Claims() {
       const failed = results.filter(r => !r.success).length;
 
       if (successful > 0) {
-        toast({
+        showTransactionToast({
+          type: "success",
           title: "Batch Rent Claim Complete!",
-          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}`,
+          description: `${successful} rent claim${successful > 1 ? 's' : ''} processed${failed > 0 ? `, ${failed} failed` : ''}. Gravitational costs recovered.`,
         });
       }
 
       if (failed > 0 && successful === 0) {
-        toast({
+        showTransactionToast({
+          type: "error",
           title: "Batch Rent Claim Failed",
-          description: `All ${failed} claims failed`,
-          variant: "destructive",
+          description: `All ${failed} claims failed. The void still holds the rent.`,
         });
       }
 
