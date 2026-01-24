@@ -45,15 +45,17 @@ waitForPort = 5000
 [userenv]
 
 [userenv.shared]
-VITE_HELIUS_RPC_URL = "https://devnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
-VITE_NETWORK = "devnet"
+VITE_HELIUS_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
+VITE_NETWORK = "mainnet-beta"
 VITE_HELIUS_API_KEY = "3c5e3da7-9230-4336-9060-3b2aae17eb07"
-VITE_SOLANA_CLUSTER = "devnet"
-VITE_SOLANA_RPC_FALLBACK = "https://api.devnet.solana.com"
-VITE_SOLANA_RPC_PRIMARY = "https://devnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
+VITE_SOLANA_CLUSTER = "mainnet-beta"
+VITE_SOLANA_RPC_FALLBACK = "https://api.mainnet-beta.solana.com"
+VITE_SOLANA_RPC_PRIMARY = "https://mainnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
 VITE_DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3"
-SOLANA_RPC_URL = "https://api.devnet.solana.com"
-VITE_BACKEND_URL = "https://19bcdec2-82b5-4b83-b693-5924166c6a2c-00-3h719vsfvrfbd.picard.replit.dev"
+SOLANA_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"
+VITE_BACKEND_URL = ""
+VITE_SWITCHBOARD_QUEUE = "A43DyUGA7s8eXPxqEjJY6EBu1KKbNgfxF8h17VAHn13w"
+SOLANA_NETWORK = "mainnet-beta"
 
 [agent]
 expertMode = true

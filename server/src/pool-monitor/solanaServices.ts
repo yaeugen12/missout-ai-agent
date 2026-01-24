@@ -46,7 +46,7 @@ log(`🔀 Switchboard Queue: ${SWITCHBOARD_QUEUE.toString()}`);
 export async function initializeSolanaServices(): Promise<void> {
   const devPrivateKey = process.env.DEV_WALLET_PRIVATE_KEY;
   const treasuryPublicKey = process.env.TREASURY_WALLET_PUBKEY || process.env.TREASURY_WALLET_PUBLIC_KEY;
-  const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+  const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
   if (!devPrivateKey) {
     throw new Error("DEV_WALLET_PRIVATE_KEY not found in environment variables");

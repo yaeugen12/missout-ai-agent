@@ -289,7 +289,7 @@ export class PoolMonitor {
       // 📢 NOTIFY: Randomness revealed - notify all participants + creator
       const poolParticipants = await storage.getParticipants(pool.id);
       if (poolParticipants && poolParticipants.length > 0) {
-        const explorerUrl = `https://explorer.solana.com/address/${pool.poolAddress}?cluster=${process.env.SOLANA_NETWORK || 'devnet'}`;
+        const explorerUrl = `https://explorer.solana.com/address/${pool.poolAddress}?cluster=${process.env.SOLANA_NETWORK || 'mainnet-beta'}`;
 
         await notificationService.notifyPoolParticipants(
           pool.creatorWallet,

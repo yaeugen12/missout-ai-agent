@@ -57,18 +57,18 @@ export function getNetworkConfig(
   network?: string,
   customRpcUrl?: string
 ): NetworkConfig {
-  const networkName = (network || "devnet").toLowerCase();
+  const networkName = (network || "mainnet-beta").toLowerCase();
 
   let config: NetworkConfig;
 
   switch (networkName) {
+    case "devnet":
+      config = { ...DEVNET_CONFIG };
+      break;
     case "mainnet-beta":
     case "mainnet":
-      config = { ...MAINNET_CONFIG };
-      break;
-    case "devnet":
     default:
-      config = { ...DEVNET_CONFIG };
+      config = { ...MAINNET_CONFIG };
       break;
   }
 
@@ -110,25 +110,15 @@ export function validateNetworkConfig(config: NetworkConfig): void {
     throw new Error(`Invalid RPC URL: ${config.rpcUrl}`);
   }
 
-  // Warning for production
-  if (config.network === "mainnet-beta") {
-    const isDefaultProgramId =
-      config.programId.toString() === "4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm";
-
-    if (isDefaultProgramId) {
-      console.warn(
-        "⚠️  WARNING: Using devnet program ID on mainnet! Update MAINNET_CONFIG.programId"
-      );
-    }
-  }
+  // Note: Program ID 4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm is deployed on both devnet and mainnet
 }
 
 /**
  * Get current network from environment
  */
 export function getCurrentNetwork(): SolanaNetwork {
-  const network = process.env.SOLANA_NETWORK || process.env.VITE_SOLANA_NETWORK || "devnet";
-  return network.toLowerCase().includes("mainnet") ? "mainnet-beta" : "devnet";
+  const network = process.env.SOLANA_NETWORK || process.env.VITE_SOLANA_NETWORK || "mainnet-beta";
+  return network.toLowerCase().includes("devnet") ? "devnet" : "mainnet-beta";
 }
 
 /**

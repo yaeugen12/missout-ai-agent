@@ -226,7 +226,7 @@ export async function registerRoutes(
   // Helper function to fetch token logo from Helius DAS API
   async function getTokenLogo(mintAddress: string): Promise<string | undefined> {
     try {
-      const HELIUS_DAS_RPC = process.env.HELIUS_DAS_API_URL || process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+      const HELIUS_DAS_RPC = process.env.HELIUS_DAS_API_URL || process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
       const response = await fetch(HELIUS_DAS_RPC, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

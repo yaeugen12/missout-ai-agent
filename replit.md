@@ -10,6 +10,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+### January 24, 2026 - Mainnet Migration
+- **Network switched to mainnet-beta**: All Solana configuration now defaults to mainnet
+- **RPC endpoints**: Using Helius mainnet RPC (https://mainnet.helius-rpc.com)
+- **Switchboard mainnet**: Using mainnet Switchboard program and queue
+- **Environment variables**: Updated all env vars to point to mainnet configuration
+- **Default network**: Application now defaults to mainnet-beta instead of devnet
+
 ### January 24, 2026 - Transaction Stabilization Fix
 - **Fixed "multiple signature required" issue**: Added stabilization delays between rapid successive blockchain transactions
 - **Batch claim improvements**: Added 2-second delay between transaction chunks in batch refund/rent claims

@@ -1,10 +1,10 @@
 import { Connection, Commitment, PublicKey } from "@solana/web3.js";
 
-// Dynamic network configuration based on environment
-const NETWORK = import.meta.env.VITE_SOLANA_NETWORK || "devnet";
-const IS_MAINNET = NETWORK.toLowerCase().includes("mainnet");
+// Dynamic network configuration based on environment - defaults to mainnet
+const NETWORK = import.meta.env.VITE_SOLANA_NETWORK || "mainnet-beta";
+const IS_MAINNET = !NETWORK.toLowerCase().includes("devnet");
 
-// Primary RPC URL from environment, with fallbacks
+// Primary RPC URL from environment, with fallbacks (mainnet by default)
 const PRIMARY_RPC = import.meta.env.VITE_SOLANA_RPC_PRIMARY ||
   (IS_MAINNET
     ? "https://mainnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-9060-3b2aae17eb07"

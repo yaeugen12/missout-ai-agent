@@ -1,11 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
 
 /**
- * Get network configuration from environment
+ * Get network configuration from environment - defaults to mainnet
  */
 function getNetwork(): "devnet" | "mainnet-beta" {
-  const network = import.meta.env.VITE_SOLANA_NETWORK || "mainnet-beta"; // DEFAULT TO MAINNET
-  return network.toLowerCase().includes("mainnet") ? "mainnet-beta" : "devnet";
+  const network = import.meta.env.VITE_SOLANA_NETWORK || "mainnet-beta";
+  return network.toLowerCase().includes("devnet") ? "devnet" : "mainnet-beta";
 }
 
 const currentNetwork = getNetwork();
