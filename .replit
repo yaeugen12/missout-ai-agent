@@ -56,6 +56,7 @@ SOLANA_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=3c5e3da7-9230-4336-906
 VITE_BACKEND_URL = ""
 VITE_SWITCHBOARD_QUEUE = "A43DyUGA7s8eXPxqEjJY6EBu1KKbNgfxF8h17VAHn13w"
 SOLANA_NETWORK = "mainnet-beta"
+TREASURY_WALLET_PUBKEY = "4ZscUyoKFWfU7wjeZKpiuw7Nr8Q8ZdAQmr4YzHNQ74B3"
 
 [agent]
 expertMode = true
