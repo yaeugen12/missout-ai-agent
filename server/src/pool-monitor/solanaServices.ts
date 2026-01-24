@@ -3,7 +3,7 @@ import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import bs58 from "bs58";
 import { IDL } from "@shared/idl.js";
-import { AnchorUtils, Randomness } from "@switchboard-xyz/on-demand";
+import { AnchorUtils, Randomness, getDefaultQueue, getDefaultDevnetQueue, Queue } from "@switchboard-xyz/on-demand";
 import { pool as dbPool } from "../db.js";
 import { rpcManager } from "../rpc-manager";
 import { resolveTokenProgramForMint } from "@shared/token-program-utils.js";
@@ -419,16 +419,29 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
     log(`pool=${poolAddress.slice(0, 8)} 🧪 MOCK MODE: Skipping Switchboard, using SystemProgram sentinel`);
     randomnessAccount = SystemProgram.programId;
   } else {
-    // REAL MODE: Create Switchboard Randomness Account
+    // REAL MODE: Create Switchboard Randomness Account using proper mainnet queue
     const wallet = new Wallet(payer);
-
-    log(`pool=${poolAddress.slice(0, 8)} Loading Switchboard program...`);
-    const sbProgram = await AnchorUtils.loadProgramFromConnection(conn, wallet, SWITCHBOARD_PROGRAM_ID);
+    
+    log(`pool=${poolAddress.slice(0, 8)} Loading Switchboard queue for ${networkConfig.network}...`);
+    
+    // Use SDK's getDefaultQueue for proper mainnet/devnet selection
+    let queue: Queue;
+    if (networkConfig.network === "devnet") {
+      queue = await getDefaultDevnetQueue(conn.rpcEndpoint);
+      log(`pool=${poolAddress.slice(0, 8)} Using DEVNET Switchboard queue`);
+    } else {
+      queue = await getDefaultQueue(conn.rpcEndpoint);
+      log(`pool=${poolAddress.slice(0, 8)} Using MAINNET Switchboard queue: ${queue.pubkey.toBase58().slice(0, 16)}...`);
+    }
+    
+    // Get the program from the queue (this ensures correct mainnet/devnet program)
+    const sbProgram = queue.program;
+    log(`pool=${poolAddress.slice(0, 8)} Switchboard program ID: ${sbProgram.programId.toBase58()}`);
 
     const rngKeypair = Keypair.generate();
     log(`pool=${poolAddress.slice(0, 8)} Creating Switchboard randomness account: ${rngKeypair.publicKey.toBase58().slice(0, 8)}...`);
 
-    const [rngObj, createIx] = await Randomness.create(sbProgram, rngKeypair, SWITCHBOARD_QUEUE);
+    const [rngObj, createIx] = await Randomness.create(sbProgram, rngKeypair, queue.pubkey);
 
     log(`pool=${poolAddress.slice(0, 8)} rngObj created, pubkey: ${rngObj.pubkey.toBase58().slice(0, 8)}`);
 
@@ -450,7 +463,7 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
 
       // Step 2: NOW create commitIx (account exists now)
       log(`pool=${poolAddress.slice(0, 8)} Creating commitIx...`);
-      const commitIx = await rngObj.commitIx(SWITCHBOARD_QUEUE);
+      const commitIx = await rngObj.commitIx(queue.pubkey);
 
       // Transaction 2: COMMIT randomness
       const tx2 = new Transaction();
@@ -535,10 +548,18 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
 
   // Always use real Switchboard randomness (no mock mode)
 
-  // Load Switchboard program
+  // Load Switchboard program using getDefaultQueue for proper mainnet/devnet selection
   const wallet = new Wallet(payer);
-  log(`pool=${poolAddress.slice(0, 8)} Loading Switchboard program for reveal...`);
-  const sbProgram = await AnchorUtils.loadProgramFromConnection(conn, wallet, SWITCHBOARD_PROGRAM_ID);
+  log(`pool=${poolAddress.slice(0, 8)} Loading Switchboard program for reveal (${networkConfig.network})...`);
+  
+  let queue: Queue;
+  if (networkConfig.network === "devnet") {
+    queue = await getDefaultDevnetQueue(conn.rpcEndpoint);
+  } else {
+    queue = await getDefaultQueue(conn.rpcEndpoint);
+  }
+  const sbProgram = queue.program;
+  log(`pool=${poolAddress.slice(0, 8)} Switchboard program ID for reveal: ${sbProgram.programId.toBase58()}`);
 
   // Create Randomness object
   const rng = new Randomness(sbProgram, randomnessAccount);
