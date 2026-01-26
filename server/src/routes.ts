@@ -22,6 +22,13 @@ import {
   verifyDonateTransaction
 } from "./transactionVerifier.js";
 import {
+  getAuxiliaryWallet,
+  getAuxiliaryWalletCount,
+  isSponsoredPoolsEnabled
+} from "./pool-monitor/solanaServices.js";
+import { PublicKey, Transaction, SystemProgram, TransactionInstruction, sendAndConfirmTransaction } from "@solana/web3.js/lib/index.cjs.js";
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import {
   isTxHashUsed,
   markTxHashUsed
 } from "./transactionHashTracker.js";
@@ -156,6 +163,61 @@ function verifyWalletSignature(walletAddress: string, message: string, signature
   }
 }
 
+// ===========================================
+// FREE POOLS: Helper functions for on-chain join
+// ===========================================
+
+const PROGRAM_ID = new PublicKey("4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm");
+
+/**
+ * Derives the participants PDA for a pool
+ * Seeds: ["participants", pool]
+ */
+function deriveParticipantsPda(pool: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("participants"), pool.toBuffer()],
+    PROGRAM_ID
+  );
+}
+
+/**
+ * Builds the join_pool instruction for sponsored pools
+ * Discriminator: [14, 65, 62, 16, 116, 17, 195, 107]
+ */
+function buildJoinPoolInstruction(params: {
+  mint: PublicKey;
+  pool: PublicKey;
+  poolToken: PublicKey;
+  userToken: PublicKey;
+  user: PublicKey;
+  tokenProgramId: PublicKey;
+  amount: bigint;
+}): TransactionInstruction {
+  const [participantsPda] = deriveParticipantsPda(params.pool);
+
+  // Serialize instruction args: amount u64 (8 bytes)
+  const dataBuffer = Buffer.alloc(8);
+  dataBuffer.writeBigUInt64LE(params.amount, 0);
+
+  // Prepend discriminator
+  const discriminator = Buffer.from([14, 65, 62, 16, 116, 17, 195, 107]);
+  const fullData = Buffer.concat([discriminator, dataBuffer]);
+
+  return new TransactionInstruction({
+    programId: PROGRAM_ID,
+    keys: [
+      { pubkey: params.mint, isSigner: false, isWritable: true },
+      { pubkey: params.pool, isSigner: false, isWritable: true },
+      { pubkey: params.poolToken, isSigner: false, isWritable: true },
+      { pubkey: params.userToken, isSigner: false, isWritable: true },
+      { pubkey: params.user, isSigner: true, isWritable: true },
+      { pubkey: params.tokenProgramId, isSigner: false, isWritable: false },
+      { pubkey: participantsPda, isSigner: false, isWritable: true },
+    ],
+    data: fullData,
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -212,14 +274,30 @@ export async function registerRoutes(
   // Pools
   app.get(api.pools.list.path, cacheMiddleware({ ttl: 30 }), async (req, res) => {
     const pagination = parsePaginationParams(req);
-    const { pools: allPools, total: totalPools } = await storage.getPools(pagination.limit, pagination.offset);
+    const showHistory = req.query.history === 'true';
+    const { pools: allPools } = await storage.getPools();
 
-    // Filter out ended and cancelled pools from Pool Terminal
-    // Keep only active pools (open, locked, unlocking, randomness, winnerSelected)
-    const activePools = allPools.filter(pool => pool.status !== 'cancelled' && pool.status !== 'ended');
+    let filteredPools: typeof allPools;
 
-    // Create paginated response
-    const response = createPaginatedResponse(activePools, totalPools, pagination);
+    if (showHistory) {
+      // Show ALL pools including ended/cancelled for history view
+      filteredPools = allPools;
+    } else {
+      // Filter out ended, cancelled, and rent-claimed pools from Pool Terminal
+      // Keep only active pools (open, locked, unlocking, randomness, winnerSelected)
+      // Hide pools where rent was already claimed by creator
+      filteredPools = allPools.filter(pool =>
+        pool.status !== 'cancelled' &&
+        pool.status !== 'ended' &&
+        pool.rentClaimed !== 1
+      );
+    }
+
+    // Apply pagination to filtered results
+    const paginatedPools = filteredPools.slice(pagination.offset, pagination.offset + pagination.limit);
+
+    // Create paginated response with CORRECT total (filtered count, not database count)
+    const response = createPaginatedResponse(paginatedPools, filteredPools.length, pagination);
 
     res.json(response);
   });
@@ -533,6 +611,9 @@ export async function registerRoutes(
         await client.query("COMMIT");
         client.release();
 
+        // Invalidate pools list cache so rent-claimed pool disappears from frontend
+        await invalidateCache("api:GET:/api/pools*");
+
         console.log("[CLAIM] Rent marked as claimed (verified):", { poolId, wallet, txHash: txHash.substring(0, 20) + "..." });
         res.json({ success: true });
       } catch (err: any) {
@@ -572,7 +653,12 @@ export async function registerRoutes(
     try {
       const input = api.pools.create.input.parse(req.body);
 
-      console.log("PARSED_INPUT:", { txHash: input.txHash, poolAddress: input.poolAddress, creatorWallet: input.creatorWallet });
+      console.log("PARSED_INPUT:", {
+        txHash: input.txHash,
+        poolAddress: input.poolAddress,
+        creatorWallet: input.creatorWallet,
+        tokenLogoUrl: input.tokenLogoUrl
+      });
 
       // CRITICAL: Block pool creation without on-chain transaction proof
       // This prevents fake pools from cached frontend code
@@ -628,6 +714,20 @@ export async function registerRoutes(
           message: verification.reason || "Transaction verification failed.",
           field: "txHash"
         });
+      }
+
+      // Validate free pool creation (only sponsor wallet can create free pools)
+      const SPONSOR_WALLET = process.env.SPONSOR_WALLET_PUBKEY || "HeXjPXForQumceDJHA6w5d4vPR11mPMDGmtcz5ZHezBZ";
+      const inputAny = input as any;
+      if (inputAny.isFree === 1) {
+        if (input.creatorWallet.toLowerCase() !== SPONSOR_WALLET.toLowerCase()) {
+          console.log("[POOL CREATE] Rejected free pool - not sponsor wallet:", input.creatorWallet);
+          return res.status(403).json({
+            message: "Only the sponsor wallet can create free pools.",
+            field: "isFree"
+          });
+        }
+        console.log("[POOL CREATE] ✅ Free pool creation authorized for sponsor wallet");
       }
 
       // Fetch initial token price from mainnet
@@ -975,6 +1075,270 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0].message });
       }
       throw err;
+    }
+  });
+
+  // ============================================
+  // FREE POOLS: Gasless Join Endpoint
+  // ============================================
+  app.post("/api/pools/:id/join-free", async (req, res) => {
+    console.log("=== FREE_JOIN_RECEIVED ===");
+    console.log("RAW_BODY:", JSON.stringify(req.body, null, 2));
+
+    try {
+      const poolId = Number(req.params.id);
+      const input = z.object({
+        walletAddress: z.string(),
+        signature: z.string(),
+        message: z.string(),
+      }).parse(req.body);
+
+      // Get pool details
+      const pool = await storage.getPool(poolId);
+      if (!pool) return res.status(404).json({ message: "Pool not found" });
+      if (!pool.poolAddress) return res.status(400).json({ message: "Pool has no on-chain address" });
+      if (pool.status !== 'open') return res.status(400).json({ message: "Pool is not open" });
+      if ((pool.participantsCount || 0) >= pool.maxParticipants) return res.status(400).json({ message: "Pool is full" });
+
+      // Verify pool is free
+      if (pool.isFree !== 1) {
+        console.log("[FREE_JOIN] Rejected - pool is not free");
+        return res.status(400).json({ message: "This pool is not a free pool" });
+      }
+
+      // Verify sponsored pools are enabled
+      if (!isSponsoredPoolsEnabled()) {
+        console.log("[FREE_JOIN] Rejected - sponsored pools not enabled");
+        return res.status(503).json({ message: "Free pools are temporarily unavailable" });
+      }
+
+      // SECURITY: Verify wallet signature to prove ownership
+      if (!verifyWalletSignature(input.walletAddress, input.message, input.signature)) {
+        console.log("[SECURITY] Free join rejected - invalid signature");
+        return res.status(401).json({ message: "Invalid wallet signature" });
+      }
+
+      // Validate message format (prevent replay attacks)
+      const expectedMessagePattern = `join-free:${poolId}:`;
+      if (!input.message.startsWith(expectedMessagePattern)) {
+        console.log("[SECURITY] Free join rejected - invalid message format");
+        return res.status(400).json({ message: "Invalid join message format" });
+      }
+
+      // Check if user already joined (as real participant or in sponsored table)
+      const existingParticipant = await storage.getParticipants(poolId);
+      const alreadyJoined = existingParticipant.some(
+        p => p.walletAddress.toLowerCase() === input.walletAddress.toLowerCase()
+      );
+      if (alreadyJoined) {
+        console.log("[FREE_JOIN] User already joined this pool:", input.walletAddress);
+        return res.status(409).json({ message: "You have already joined this pool" });
+      }
+
+      const existingSponsored = await storage.getSponsoredParticipant(poolId, input.walletAddress);
+      if (existingSponsored) {
+        console.log("[FREE_JOIN] User already joined as sponsored participant:", input.walletAddress);
+        return res.status(409).json({ message: "You have already joined this pool" });
+      }
+
+      // Find available auxiliary wallet
+      const usedIndexes = await storage.getUsedAuxiliaryIndexes(poolId);
+      const maxAuxiliaryWallets = getAuxiliaryWalletCount();
+      let availableIndex = -1;
+
+      for (let i = 0; i < maxAuxiliaryWallets; i++) {
+        if (!usedIndexes.includes(i)) {
+          availableIndex = i;
+          break;
+        }
+      }
+
+      if (availableIndex === -1) {
+        console.log("[FREE_JOIN] No available auxiliary wallets (max 9 free joins)");
+        return res.status(400).json({ message: "Free pool is full (maximum 10 participants: 1 creator + 9 free joins)" });
+      }
+
+      const auxiliaryKeypair = getAuxiliaryWallet(availableIndex);
+      if (!auxiliaryKeypair) {
+        console.log("[FREE_JOIN] Failed to load auxiliary wallet:", availableIndex);
+        return res.status(500).json({ message: "Failed to load auxiliary wallet" });
+      }
+
+      console.log("[FREE_JOIN] Using auxiliary wallet:", auxiliaryKeypair.publicKey.toBase58(), "index:", availableIndex);
+
+      // Prepare on-chain join transaction
+      try {
+        const { rpcManager } = await import("./rpc-manager");
+
+        const connection = rpcManager.getConnection();
+        const mint = new PublicKey(pool.tokenMint!);
+        const poolPubkey = new PublicKey(pool.poolAddress);
+
+        // Resolve token program inline to avoid type issues
+        console.log("[FREE_JOIN] Resolving token program for mint:", mint.toBase58());
+        const mintInfo = await connection.getAccountInfo(mint, "confirmed");
+        if (!mintInfo) {
+          throw new Error(`Mint account not found: ${mint.toBase58()}`);
+        }
+
+        const mintOwner = mintInfo.owner;
+        if (!mintOwner.equals(TOKEN_PROGRAM_ID) && !mintOwner.equals(TOKEN_2022_PROGRAM_ID)) {
+          throw new Error(`Invalid mint owner: ${mintOwner.toBase58()}`);
+        }
+
+        const tokenProgramId = mintOwner;
+        console.log("[FREE_JOIN] Token program:", tokenProgramId.toBase58());
+
+        // Derive accounts
+        const poolToken = getAssociatedTokenAddressSync(
+          mint,
+          poolPubkey,
+          true, // allowOwnerOffCurve
+          tokenProgramId
+        );
+
+        const auxiliaryToken = getAssociatedTokenAddressSync(
+          mint,
+          auxiliaryKeypair.publicKey,
+          false,
+          tokenProgramId
+        );
+
+        console.log("[FREE_JOIN] Pool token:", poolToken.toBase58());
+        console.log("[FREE_JOIN] Auxiliary token:", auxiliaryToken.toBase58());
+
+        // Get token decimals from mint account
+        const { getMint } = await import("@solana/spl-token");
+        const mintData = await getMint(connection, mint, "confirmed", tokenProgramId);
+        const decimals = mintData.decimals;
+        console.log("[FREE_JOIN] Token decimals:", decimals);
+
+        // Convert amount to smallest units with proper precision (avoid floating point errors)
+        // Split on decimal point, pad fractional part to match decimals
+        const amountStr = pool.entryAmount.toString();
+        const [wholePart, fractionalPart = ""] = amountStr.split(".");
+        const paddedFraction = fractionalPart.padEnd(decimals, "0").slice(0, decimals);
+        const entryAmountLamports = BigInt(wholePart + paddedFraction);
+
+        console.log("[FREE_JOIN] Entry amount from DB:", pool.entryAmount);
+        console.log("[FREE_JOIN] Entry amount (smallest units):", entryAmountLamports.toString());
+
+        const joinInstruction = buildJoinPoolInstruction({
+          mint,
+          pool: poolPubkey,
+          poolToken,
+          userToken: auxiliaryToken,
+          user: auxiliaryKeypair.publicKey,
+          tokenProgramId,
+          amount: entryAmountLamports,
+        });
+
+        // Build and send transaction
+        const transaction = new Transaction();
+        transaction.add(joinInstruction);
+        transaction.feePayer = auxiliaryKeypair.publicKey;
+        transaction.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+
+        console.log("[FREE_JOIN] Sending transaction...");
+        const signature = await sendAndConfirmTransaction(
+          connection,
+          transaction,
+          [auxiliaryKeypair],
+          { commitment: "confirmed" }
+        );
+
+        console.log("[FREE_JOIN] ✅ Transaction confirmed:", signature);
+
+        // Save to database
+        const client = await pgPool.connect();
+        try {
+          await client.query("BEGIN");
+
+          // Save sponsored participant mapping
+          await storage.addSponsoredParticipant({
+            poolId,
+            realWallet: input.walletAddress, // Keep original case for Solana PublicKey
+            auxiliaryWallet: auxiliaryKeypair.publicKey.toBase58().toLowerCase(),
+            auxiliaryIndex: availableIndex,
+          });
+
+          // Add participant to pool (using auxiliary wallet for on-chain tracking)
+          const currentPrice = pool.currentPriceUsd || await fetchTokenPriceUsd(pool.tokenMint || '');
+          const betUsd = currentPrice && pool.entryAmount ? pool.entryAmount * currentPrice : null;
+
+          await storage.addParticipant({
+            poolId,
+            walletAddress: auxiliaryKeypair.publicKey.toBase58().toLowerCase(),
+            betUsd,
+            priceAtJoinUsd: currentPrice,
+          });
+
+          // Record transaction
+          await storage.addTransaction({
+            poolId,
+            walletAddress: input.walletAddress,
+            type: 'JOIN',
+            amount: pool.entryAmount,
+            txHash: signature,
+          });
+
+          await client.query("COMMIT");
+          client.release();
+
+          console.log("[FREE_JOIN] ✅ Saved to database");
+
+          // Invalidate cache
+          await invalidateCache(`api:GET:/api/pools/${poolId}*`);
+          await invalidateCache("api:GET:/api/pools*");
+
+          // Get updated pool
+          const updatedPool = await storage.getPool(poolId);
+
+          // Send notifications
+          const poolParticipants = await storage.getParticipants(poolId);
+          if (updatedPool && poolParticipants && poolParticipants.length > 0) {
+            const existingParticipants = poolParticipants.filter(
+              p => p.walletAddress.toLowerCase() !== auxiliaryKeypair.publicKey.toBase58().toLowerCase()
+            );
+
+            const walletsToNotify = Array.from(new Set([
+              updatedPool.creatorWallet.toLowerCase(),
+              ...existingParticipants.map(p => p.walletAddress.toLowerCase())
+            ]));
+
+            await notificationService.notifyWallets(walletsToNotify, {
+              type: NotificationType.JOIN,
+              title: 'New Participant (FREE)',
+              message: `Someone joined the FREE ${updatedPool.tokenName} pool! (${updatedPool.participantsCount}/${updatedPool.maxParticipants})`,
+              poolId: updatedPool.id,
+              poolName: `${updatedPool.tokenName} Pool`,
+            });
+          }
+
+          res.json({
+            success: true,
+            message: "Successfully joined free pool!",
+            txHash: signature,
+            pool: updatedPool,
+          });
+        } catch (dbErr: any) {
+          await client.query("ROLLBACK");
+          client.release();
+          console.error("[FREE_JOIN] Database error:", dbErr);
+          throw dbErr;
+        }
+      } catch (onChainErr: any) {
+        console.error("[FREE_JOIN] On-chain transaction failed:", onChainErr);
+        return res.status(500).json({
+          message: `Failed to join pool on-chain: ${onChainErr.message}`,
+        });
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("[FREE_JOIN] Unexpected error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -1948,16 +2312,34 @@ export async function registerRoutes(
         
         if (result.success) {
           // Execute the actual payout from treasury wallet
-          const amountLamports = BigInt(result.amount);
-          console.log("[Referral] Processing payout of", amountLamports.toString(), "lamports to", wallet);
-          
-          const payoutResult = await payReferralReward(wallet, amountLamports);
-          
+          const amountTokens = BigInt(result.amount);
+          console.log("[Referral] Processing payout of", amountTokens.toString(), "tokens to", wallet);
+
+          // Fetch token decimals (default to 9 if not found)
+          let decimals = 9;
+          try {
+            const { Connection, PublicKey } = await import("@solana/web3.js/lib/index.cjs.js");
+            const { getMint } = await import("@solana/spl-token");
+            const { resolveTokenProgramForMint } = await import("@shared/token-program-utils.js");
+            const { rpcManager } = await import("./rpc-manager");
+
+            const connection = rpcManager.getConnection();
+            const mint = new PublicKey(tokenMint);
+            const tokenProgramId = await resolveTokenProgramForMint(connection, mint);
+            const mintInfo = await getMint(connection, mint, "confirmed", tokenProgramId);
+            decimals = mintInfo.decimals;
+            console.log("[Referral] Token decimals:", decimals);
+          } catch (err: any) {
+            console.warn("[Referral] Failed to fetch token decimals, using default 9:", err.message);
+          }
+
+          const payoutResult = await payReferralReward(wallet, tokenMint, amountTokens, decimals);
+
           if (payoutResult.success) {
             // Update claim status with transaction signature
             console.log("[Referral] Payout successful:", payoutResult.signature);
-            res.json({ 
-              success: true, 
+            res.json({
+              success: true,
               amount: result.amount,
               signature: payoutResult.signature,
               message: "Referral reward sent to your wallet!"
@@ -1965,8 +2347,8 @@ export async function registerRoutes(
           } else {
             // Payout failed - the claim is already recorded, need to handle this
             console.error("[Referral] Payout failed:", payoutResult.error);
-            res.status(500).json({ 
-              success: false, 
+            res.status(500).json({
+              success: false,
               message: `Claim recorded but payout failed: ${payoutResult.error}. Please contact support.`
             });
           }
@@ -1995,6 +2377,65 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[Winners Feed] Error:", err);
       res.status(500).json({ message: "Failed to fetch winners feed" });
+    }
+  });
+
+  // ============================================
+  // JUPITER API PROXY (DNS workaround for Windows)
+  // ============================================
+
+  app.get("/api/jupiter/quote", async (req, res) => {
+    try {
+      const { inputMint, outputMint, amount, slippageBps } = req.query;
+
+      if (!inputMint || !outputMint || !amount) {
+        return res.status(400).json({ error: "Missing required parameters: inputMint, outputMint, amount" });
+      }
+
+      const jupiterUrl = `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps || 100}`;
+
+      console.log("[Jupiter Proxy] Fetching quote:", jupiterUrl);
+
+      const response = await fetch(jupiterUrl);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[Jupiter Proxy] Quote error:", response.status, data);
+        return res.status(response.status).json(data);
+      }
+
+      console.log("[Jupiter Proxy] Quote successful");
+      res.json(data);
+    } catch (err: any) {
+      console.error("[Jupiter Proxy] Quote fetch error:", err);
+      res.status(500).json({ error: "Failed to fetch quote from Jupiter", details: err.message });
+    }
+  });
+
+  app.post("/api/jupiter/swap", async (req, res) => {
+    try {
+      const jupiterUrl = "https://quote-api.jup.ag/v6/swap";
+
+      console.log("[Jupiter Proxy] Forwarding swap request");
+
+      const response = await fetch(jupiterUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[Jupiter Proxy] Swap error:", response.status, data);
+        return res.status(response.status).json(data);
+      }
+
+      console.log("[Jupiter Proxy] Swap successful");
+      res.json(data);
+    } catch (err: any) {
+      console.error("[Jupiter Proxy] Swap fetch error:", err);
+      res.status(500).json({ error: "Failed to execute swap with Jupiter", details: err.message });
     }
   });
 

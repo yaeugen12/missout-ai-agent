@@ -16,18 +16,22 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ArrowRight, ArrowLeft, Loader2, Check, Rocket, CircleDot, FlaskConical } from "lucide-react";
+import { ArrowRight, ArrowLeft, Loader2, Check, Rocket, CircleDot, FlaskConical, AlertTriangle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
 const DEV_WALLET_PUBKEY = "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
+// Treasury wallet that receives fees for referral rewards
+const TREASURY_WALLET_PUBKEY = "4ZscUyoKFWfU7wjeZKpiuw7Nr8Q8ZdAQmr4YzHNQ74B3";
+// Sponsor wallet that can create FREE pools
+const SPONSOR_WALLET_PUBKEY = "HeXjPXForQumceDJHA6w5d4vPR11mPMDGmtcz5ZHezBZ";
 import { apiFetch } from "@/lib/api";
 import { useLocation } from "wouter";
 import { useWallet } from "@/hooks/use-wallet";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { PublicKey } from "@solana/web3.js";
-import { protocolAdapter } from "@/lib/protocolAdapter";
+import { protocolAdapter, type TokenInfo, type TokenPriceData } from "@/lib/protocolAdapter";
 import type { Pool } from "@/types/shared";
 
 interface CreatePoolWizardProps {
@@ -67,8 +71,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
   const [lockDuration, setLockDuration] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
-  const [tokenPriceUSD, setTokenPriceUSD] = useState<number | null>(null);
+  const [tokenPriceData, setTokenPriceData] = useState<TokenPriceData | null>(null);
   const [isLoadingPrice, setIsLoadingPrice] = useState(false);
+  const [isFreePool, setIsFreePool] = useState(false);
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -99,16 +104,17 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         setStep(1);
         setMintAddress("");
         setTokenInfo(null);
-        setTokenPriceUSD(null);
+        setTokenPriceData(null);
         setEntryAmount("1");
         setParticipants(10);
         setLockDuration(5);
+        setIsFreePool(false);
       }, 300);
     }
   }, [open]);
 
-  // Fetch token price using protocolAdapter (tries multiple sources)
-  const fetchTokenPrice = async (mintAddress: string): Promise<number | null> => {
+  // Fetch token price using protocolAdapter (tries multiple sources with accuracy checking)
+  const fetchTokenPrice = async (mintAddress: string): Promise<TokenPriceData | null> => {
     try {
       return await protocolAdapter.fetchTokenPriceUsd(mintAddress);
     } catch (error) {
@@ -134,20 +140,20 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
             });
 
             // Fetch price
-            const price = await fetchTokenPrice(mintAddress);
-            setTokenPriceUSD(price);
+            const priceData = await fetchTokenPrice(mintAddress);
+            setTokenPriceData(priceData);
           }
         } catch (error) {
           console.error("Token fetch error:", error);
           setTokenInfo(null);
-          setTokenPriceUSD(null);
+          setTokenPriceData(null);
         } finally {
           setIsLoadingToken(false);
           setIsLoadingPrice(false);
         }
       } else {
         setTokenInfo(null);
-        setTokenPriceUSD(null);
+        setTokenPriceData(null);
       }
     };
     checkToken();
@@ -209,10 +215,10 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
         maxParticipants: participants,
         lockDurationSeconds,
         devWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        devFeeBps: 500,  // 5% to dev wallet
-        burnFeeBps: 350,  // 3.5% burn
-        treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        treasuryFeeBps: 150,  // 1.5% to treasury, winner gets 90% (remainder)
+        devFeeBps: 500,      // 5% dev fee
+        burnFeeBps: 350,     // 3.5% burn fee
+        treasuryWallet: new PublicKey(TREASURY_WALLET_PUBKEY),
+        treasuryFeeBps: 150, // 1.5% treasury fee for referral rewards
       });
 
       console.log("=== SDK_RETURNED ===");
@@ -255,10 +261,13 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
 
     toast({ title: "On-Chain Success", description: `TX: ${signature.slice(0, 8)}...` });
 
+    console.log("[CREATE POOL] tokenInfo.logoURI:", tokenInfo.logoURI);
+
     const postBody = {
       tokenSymbol: tokenInfo.symbol,
       tokenName: tokenInfo.name,
       tokenMint: tokenInfo.mint,
+      tokenLogoUrl: tokenInfo.logoURI || null,
       poolAddress: poolAddress,
       txHash: signature,
       entryAmount: parseFloat(entryAmount),
@@ -266,6 +275,10 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
       maxParticipants: participants,
       lockDuration: Number(lockDuration),
       creatorWallet: address,
+      ...(isFreePool && {
+        isFree: 1,
+        sponsoredBy: address,
+      }),
     };
 
     console.log("=== POST_BODY ===");
@@ -294,6 +307,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
     setEntryAmount("1");
     setParticipants(10);
     setLockDuration(5);
+    setIsFreePool(false);
   };
 
   const canProceedStep1 = mintAddress.length >= 32 && tokenInfo !== null;
@@ -304,8 +318,8 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
     if (amount <= 0) return false;
 
     // If price is available, enforce $5 USD minimum
-    if (tokenPriceUSD !== null) {
-      const usdValue = amount * tokenPriceUSD;
+    if (tokenPriceData?.priceUsd) {
+      const usdValue = amount * tokenPriceData.priceUsd;
       return usdValue >= 5;
     }
 
@@ -429,12 +443,56 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span>Loading price...</span>
                       </div>
-                    ) : tokenPriceUSD !== null ? (
-                      <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">Current Price</p>
-                        <p className="text-lg font-mono font-bold text-primary">
-                          ${tokenPriceUSD.toFixed(Math.max(3, -Math.floor(Math.log10(tokenPriceUSD)) + 2))}
-                        </p>
+                    ) : tokenPriceData ? (
+                      <div className="space-y-2">
+                        {/* Price Discrepancy Warning */}
+                        {tokenPriceData.priceDiscrepancy && (
+                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                            <div className="flex items-center gap-2 text-xs text-amber-400">
+                              <AlertTriangle className="w-3 h-3" />
+                              <span>Price varies across sources - using {tokenPriceData.source}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Price */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm text-muted-foreground">Current Price</p>
+                            <p className="text-xs text-muted-foreground/60">via {tokenPriceData.source}</p>
+                          </div>
+                          <p className="text-lg font-mono font-bold text-primary">
+                            ${tokenPriceData.priceUsd.toFixed(Math.max(3, -Math.floor(Math.log10(tokenPriceData.priceUsd)) + 2))}
+                          </p>
+                        </div>
+
+                        {/* Market Cap and Liquidity */}
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {tokenPriceData.marketCapUsd && (
+                            <div className="p-2 rounded-lg bg-background/50">
+                              <p className="text-muted-foreground mb-0.5">Market Cap</p>
+                              <p className="font-mono font-semibold text-foreground">
+                                {tokenPriceData.marketCapUsd >= 1000000
+                                  ? `$${(tokenPriceData.marketCapUsd / 1000000).toFixed(2)}M`
+                                  : tokenPriceData.marketCapUsd >= 1000
+                                  ? `$${(tokenPriceData.marketCapUsd / 1000).toFixed(2)}K`
+                                  : `$${tokenPriceData.marketCapUsd.toFixed(2)}`}
+                              </p>
+                            </div>
+                          )}
+                          {tokenPriceData.liquidityUsd && (
+                            <div className="p-2 rounded-lg bg-background/50">
+                              <p className="text-muted-foreground mb-0.5">Liquidity</p>
+                              <p className="font-mono font-semibold text-foreground">
+                                {tokenPriceData.liquidityUsd >= 1000000
+                                  ? `$${(tokenPriceData.liquidityUsd / 1000000).toFixed(2)}M`
+                                  : tokenPriceData.liquidityUsd >= 1000
+                                  ? `$${(tokenPriceData.liquidityUsd / 1000).toFixed(2)}K`
+                                  : `$${tokenPriceData.liquidityUsd.toFixed(2)}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="text-sm text-amber-400">
@@ -461,14 +519,14 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   />
 
                   {/* USD Value and Validation */}
-                  {tokenPriceUSD !== null && entryAmount && parseFloat(entryAmount) > 0 && (
+                  {tokenPriceData?.priceUsd !== null && entryAmount && parseFloat(entryAmount) > 0 && (
                     <div className="mt-2">
                       {(() => {
                         const amountNum = parseFloat(entryAmount);
-                        const usdValue = amountNum * tokenPriceUSD;
+                        const usdValue = amountNum * tokenPriceData?.priceUsd;
                         const minUSD = 5;
                         const isValid = usdValue >= minUSD;
-                        const suggestedAmount = minUSD / tokenPriceUSD;
+                        const suggestedAmount = minUSD / tokenPriceData?.priceUsd;
 
                         return (
                           <div className={`p-3 rounded-lg border ${isValid ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
@@ -498,7 +556,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   )}
 
                   {/* Warning when price is unavailable */}
-                  {tokenPriceUSD === null && !isLoadingPrice && (
+                  {tokenPriceData?.priceUsd === null && !isLoadingPrice && (
                     <div className="mt-2 p-3 rounded-lg border bg-amber-500/10 border-amber-500/30">
                       <div className="text-sm text-amber-400">
                         ⚠ Price unavailable - unable to enforce $5 minimum
@@ -529,11 +587,16 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                     value={[participants]}
                     onValueChange={([v]) => setParticipants(v)}
                     min={2}
-                    max={100}
+                    max={isFreePool ? 10 : 100}
                     step={1}
                     className="w-full"
                     data-testid="slider-participants"
                   />
+                  {isFreePool && (
+                    <p className="text-xs text-green-400">
+                      Free pools limited to 10 participants (1 creator + 9 free joins)
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -552,6 +615,41 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   />
                 </div>
 
+                {/* FREE Pool Toggle (only for sponsor wallet) */}
+                {address?.toLowerCase() === SPONSOR_WALLET_PUBKEY.toLowerCase() && (
+                  <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <Label htmlFor="free-pool" className="text-foreground font-medium flex items-center gap-2">
+                          <FlaskConical className="w-4 h-4 text-green-400" />
+                          FREE Pool (Gasless Join)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Users join without paying. You sponsor all entries. Max 10 participants (1 creator + 9 free).
+                        </p>
+                      </div>
+                      <Switch
+                        id="free-pool"
+                        checked={isFreePool}
+                        onCheckedChange={(checked) => {
+                          setIsFreePool(checked);
+                          if (checked && participants > 10) {
+                            setParticipants(10);
+                          }
+                        }}
+                        data-testid="switch-free-pool"
+                      />
+                    </div>
+                    {isFreePool && (
+                      <div className="text-xs text-green-400 space-y-1">
+                        <p>✓ Backend will handle on-chain joins</p>
+                        <p>✓ Max 10 participants (1 creator + 9 free joins)</p>
+                        <p>✓ Winners receive rewards to their real wallet</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="p-4 rounded-lg bg-muted/50 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Token</span>
@@ -561,9 +659,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                     <span className="text-muted-foreground">Entry</span>
                     <div className="text-right">
                       <div className="font-medium">{entryAmount} {tokenInfo?.symbol}</div>
-                      {tokenPriceUSD !== null && (
+                      {tokenPriceData?.priceUsd !== null && (
                         <div className="text-xs text-muted-foreground">
-                          ≈ ${(parseFloat(entryAmount) * tokenPriceUSD).toFixed(2)} USD
+                          ≈ ${(parseFloat(entryAmount) * tokenPriceData?.priceUsd).toFixed(2)} USD
                         </div>
                       )}
                     </div>
@@ -574,9 +672,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                       <div className="font-medium text-primary">
                         {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo?.symbol}
                       </div>
-                      {tokenPriceUSD !== null && (
+                      {tokenPriceData?.priceUsd !== null && (
                         <div className="text-xs text-primary/70">
-                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceUSD).toFixed(2)} USD
+                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceData?.priceUsd).toFixed(2)} USD
                         </div>
                       )}
                     </div>
@@ -613,7 +711,7 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                   
                   <h3 className="text-xl font-bold mb-2">Ready to Create Singularity</h3>
                   <p className="text-muted-foreground text-sm">
-                    Your wallet will sign a transaction to create this Black Hole on Solana Devnet.
+                    Your wallet will sign a transaction to create this Black Hole on Solana.
                   </p>
                 </div>
 
@@ -626,9 +724,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                     <span className="text-muted-foreground">Entry Amount</span>
                     <div className="text-right">
                       <div className="font-medium">{entryAmount} {tokenInfo.symbol}</div>
-                      {tokenPriceUSD !== null && (
+                      {tokenPriceData?.priceUsd !== null && (
                         <div className="text-xs text-muted-foreground">
-                          ≈ ${(parseFloat(entryAmount) * tokenPriceUSD).toFixed(2)} USD
+                          ≈ ${(parseFloat(entryAmount) * tokenPriceData?.priceUsd).toFixed(2)} USD
                         </div>
                       )}
                     </div>
@@ -647,9 +745,9 @@ export function CreatePoolWizard({ open, onOpenChange, prefillMintAddress }: Cre
                       <div className="font-medium text-primary">
                         {(parseFloat(entryAmount) * participants).toLocaleString()} {tokenInfo.symbol}
                       </div>
-                      {tokenPriceUSD !== null && (
+                      {tokenPriceData?.priceUsd !== null && (
                         <div className="text-xs text-primary/70">
-                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceUSD).toFixed(2)} USD
+                          ≈ ${(parseFloat(entryAmount) * participants * tokenPriceData?.priceUsd).toFixed(2)} USD
                         </div>
                       )}
                     </div>

@@ -10,6 +10,7 @@ import {
   revealRandomnessOnChain,
   selectWinnerOnChain,
   payoutWinnerOnChain,
+  getPoolEconomicsReport,
 } from "./solanaServices";
 import { notificationService, NotificationType } from "../notifications/notificationService.js";
 import { getPriceTrackingService } from "../index.js";
@@ -350,15 +351,34 @@ export class PoolMonitor {
       return;
     }
 
-    try {
-      await payoutWinnerOnChain(pool.poolAddress!);
-      log(`Pool ${pool.id} ✅ payoutWinner() succeeded, winner=${winnerPubkey.slice(0, 16)}`);
+    // 🆓 FREE POOLS: Check if this is a sponsored pool and resolve real winner wallet
+    let realWinnerWallet = winnerPubkey;
+    const poolAny = pool as any;
+    if (poolAny.isFree === 1) {
+      log(`Pool ${pool.id} 🆓 FREE pool detected, looking up real participant for auxiliary wallet: ${winnerPubkey.slice(0, 16)}`);
+      try {
+        const sponsoredParticipant = await storage.getSponsoredParticipantByAuxiliary(pool.id, winnerPubkey);
+        if (sponsoredParticipant) {
+          realWinnerWallet = sponsoredParticipant.realWallet;
+          log(`Pool ${pool.id} ✅ Resolved real winner: ${realWinnerWallet.slice(0, 16)} (was auxiliary: ${winnerPubkey.slice(0, 16)})`);
+        } else {
+          log(`Pool ${pool.id} ⚠️ No sponsored participant mapping found for ${winnerPubkey.slice(0, 16)}, using on-chain winner`);
+        }
+      } catch (lookupErr) {
+        log(`Pool ${pool.id} ❌ Failed to lookup sponsored participant:`, lookupErr);
+        // Continue with on-chain winner as fallback
+      }
+    }
 
-      // Record PAYOUT transaction in database
+    try {
+      await payoutWinnerOnChain(pool.poolAddress!, realWinnerWallet);
+      log(`Pool ${pool.id} ✅ payoutWinner() succeeded, winner=${winnerPubkey.slice(0, 16)}, realWinner=${realWinnerWallet.slice(0, 16)}`);
+
+      // Record PAYOUT transaction in database (use REAL wallet for free pools)
       try {
         await db.insert(transactions).values({
           poolId: pool.id,
-          walletAddress: winnerPubkey,
+          walletAddress: realWinnerWallet,
           type: 'PAYOUT',
           amount: (pool.totalPot || 0) * 0.90, // 90% payout as defined in IDL/UI
           txHash: null, // We don't have the payout txHash easily here
@@ -367,11 +387,11 @@ export class PoolMonitor {
         log(`Pool ${pool.id} ⚠️ Failed to record payout transaction:`, txErr);
       }
 
-      // Sync DB state
+      // Sync DB state (use REAL wallet for free pools)
       await db.update(pools)
         .set({
           status: "ended",
-          winnerWallet: winnerPubkey,
+          winnerWallet: realWinnerWallet,
           endTime: new Date()
         })
         .where(eq(pools.id, pool.id));
@@ -383,11 +403,11 @@ export class PoolMonitor {
         log(`Pool ${pool.id} ✅ Price tracking stopped`);
       }
 
-      // 📢 NOTIFY: Send WIN notification ONLY to winner (with 5s delay for frontend animation)
+      // 📢 NOTIFY: Send WIN notification to REAL winner (with 5s delay for frontend animation)
       setTimeout(async () => {
         try {
-          log(`Pool ${pool.id} 📢 Sending WIN notification to ${winnerPubkey.slice(0, 16)}`);
-          await notificationService.notifyWallets([winnerPubkey], {
+          log(`Pool ${pool.id} 📢 Sending WIN notification to ${realWinnerWallet.slice(0, 16)}`);
+          await notificationService.notifyWallets([realWinnerWallet], {
             type: NotificationType.WIN,
             title: '🎉 VICTORY!',
             message: `You won ${pool.totalPot ? (pool.totalPot * 0.9).toFixed(2) : pool.currentPot} ${pool.tokenSymbol}!`,
@@ -400,10 +420,10 @@ export class PoolMonitor {
         }
       }, 5000); // 5 second delay to let frontend animation complete
 
-      // 🏆 WINNERS FEED: Create entry for live feed ticker
+      // 🏆 WINNERS FEED: Create entry for live feed ticker (use REAL wallet for free pools)
       try {
-        const winnerProfile = await storage.getProfile(winnerPubkey);
-        const displayName = winnerProfile?.nickname || `${winnerPubkey.slice(0, 4)}...${winnerPubkey.slice(-4)}`;
+        const winnerProfile = await storage.getProfile(realWinnerWallet);
+        const displayName = winnerProfile?.nickname || `${realWinnerWallet.slice(0, 4)}...${realWinnerWallet.slice(-4)}`;
         const avatarUrl = winnerProfile?.avatarUrl || null;
 
         // Get winner's participant record to get their bet USD value
@@ -422,7 +442,7 @@ export class PoolMonitor {
 
         const winnerEntry = await storage.createWinnerFeedEntry({
           poolId: pool.id,
-          winnerWallet: winnerPubkey.toLowerCase(),
+          winnerWallet: realWinnerWallet.toLowerCase(),
           displayName,
           avatarUrl,
           tokenSymbol: pool.tokenSymbol,
@@ -456,6 +476,12 @@ export class PoolMonitor {
         }
       } catch (refErr: any) {
         log(`Pool ${pool.id} ⚠️ Failed to allocate referral rewards: ${refErr.message}`);
+      }
+
+      // 📊 ECONOMICS REPORT: Print final cost breakdown
+      if (pool.poolAddress) {
+        const report = getPoolEconomicsReport(pool.poolAddress);
+        console.log(report);
       }
 
       // 🗑️ DELETE CHAT: Clean up chat messages when pool ends

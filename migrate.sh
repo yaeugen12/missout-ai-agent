@@ -65,7 +65,7 @@ fi
 # Frontend .env
 if [ ! -f "client/.env" ]; then
     cp client/.env.example client/.env 2>/dev/null || echo "VITE_API_URL=http://localhost:5000
-VITE_SOLANA_NETWORK=devnet" > client/.env
+VITE_SOLANA_NETWORK=mainnet-beta" > client/.env
     echo "  ✅ Created client/.env"
 fi
 

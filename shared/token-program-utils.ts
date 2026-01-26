@@ -5,7 +5,7 @@
  * for both client and server code.
  */
 
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js/lib/index.cjs.js";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 /**

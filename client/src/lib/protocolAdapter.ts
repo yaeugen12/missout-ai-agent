@@ -13,6 +13,15 @@ export interface TokenInfo {
   error?: string;
 }
 
+export interface TokenPriceData {
+  priceUsd: number;
+  marketCapUsd?: number;
+  liquidityUsd?: number;
+  source: string;
+  allPrices?: { source: string; price: number; marketCap?: number; liquidity?: number }[];
+  priceDiscrepancy?: boolean;
+}
+
 export interface PoolCreateParams {
   tokenSymbol: string;
   tokenName: string;
@@ -23,7 +32,7 @@ export interface PoolCreateParams {
   creatorWallet: string;
 }
 
-const HELIUS_RPC_URL = import.meta.env.VITE_SOLANA_RPC_PRIMARY || import.meta.env.VITE_SOLANA_RPC_FALLBACK;
+const HELIUS_RPC_URL = import.meta.env.VITE_SOLANA_RPC_URL || import.meta.env.VITE_SOLANA_RPC_FALLBACK;
 
 const KNOWN_TOKENS: Record<string, { name: string; symbol: string; logoUrl: string }> = {
   "So11111111111111111111111111111111111111112": {
@@ -140,17 +149,50 @@ export const protocolAdapter = {
             })
           });
           const dasData = await dasResponse.json();
-          console.log("[protocolAdapter] DAS response:", JSON.stringify(dasData).slice(0, 500));
-          
+          console.log("[protocolAdapter] DAS full response:", JSON.stringify(dasData, null, 2));
+
           if (dasData.result?.content?.metadata) {
             const meta = dasData.result.content.metadata;
             name = meta.name || name;
             symbol = meta.symbol || symbol;
-            if (dasData.result.content?.links?.image) {
-              logoUrl = dasData.result.content.links.image;
+
+            // Try multiple paths for logo
+            const content = dasData.result.content;
+
+            // Path 1: links.image (most common)
+            if (content?.links?.image) {
+              logoUrl = content.links.image;
+              console.log("[protocolAdapter] Found logo via links.image:", logoUrl);
             }
+            // Path 2: files[0].uri (NFT style)
+            else if (content?.files && content.files.length > 0 && content.files[0].uri) {
+              logoUrl = content.files[0].uri;
+              console.log("[protocolAdapter] Found logo via files[0].uri:", logoUrl);
+            }
+            // Path 3: json_uri metadata (needs additional fetch)
+            else if (content?.json_uri) {
+              console.log("[protocolAdapter] Trying json_uri for metadata:", content.json_uri);
+              try {
+                const jsonMetaRes = await fetch(content.json_uri);
+                const jsonMeta = await jsonMetaRes.json();
+                if (jsonMeta.image) {
+                  logoUrl = jsonMeta.image;
+                  console.log("[protocolAdapter] Found logo via json_uri.image:", logoUrl);
+                }
+              } catch (jsonErr) {
+                console.warn("[protocolAdapter] json_uri fetch failed:", jsonErr);
+              }
+            }
+            // Path 4: Check in metadata.image
+            else if (meta.image) {
+              logoUrl = meta.image;
+              console.log("[protocolAdapter] Found logo via metadata.image:", logoUrl);
+            }
+
             metadataFound = true;
-            console.log("[protocolAdapter] Found DAS metadata:", name, symbol);
+            console.log("[protocolAdapter] Found DAS metadata:", name, symbol, logoUrl ? "with logo" : "no logo");
+          } else {
+            console.warn("[protocolAdapter] DAS returned no content.metadata");
           }
         } catch (dasErr) {
           console.warn("[protocolAdapter] DAS API failed (this is normal for new tokens):", dasErr);
@@ -192,29 +234,26 @@ export const protocolAdapter = {
     }
   },
 
-  async fetchTokenPriceUsd(mint: string): Promise<number | null> {
+  async fetchTokenPriceUsd(mint: string): Promise<TokenPriceData | null> {
     console.log("[protocolAdapter] Fetching price for:", mint);
+    console.log("[protocolAdapter] Fetching from ALL sources in parallel for accuracy...");
 
-    // Try Jupiter API v2 Price API (newest)
-    try {
-      console.log("[protocolAdapter] Trying Jupiter v2 Price API...");
-      const response = await fetch(`https://api.jup.ag/price/v2?ids=${mint}`);
-      if (response.ok) {
-        const data = await response.json();
-        const price = data.data[mint]?.price;
-        if (price) {
-          console.log("[protocolAdapter] ✓ Jupiter v2 price found:", price);
-          return parseFloat(price);
-        }
-      }
-    } catch (e) {
-      console.warn("[protocolAdapter] Jupiter v2 failed:", e);
-    }
+    // Fetch from all sources in parallel
+    const [jupiterResult, heliusResult, birdeyeResult, dexScreenerResult] = await Promise.allSettled([
+      // Jupiter API v2
+      fetch(`https://api.jup.ag/price/v2?ids=${mint}`)
+        .then(async (res) => {
+          if (!res.ok) return null;
+          const data = await res.json();
+          const price = data.data[mint]?.price;
+          if (!price) return null;
+          console.log("[protocolAdapter] ✓ Jupiter v2:", parseFloat(price));
+          return { source: "Jupiter", price: parseFloat(price) };
+        })
+        .catch(() => null),
 
-    // Try Helius DAS API for price (includes pump.fun tokens)
-    try {
-      console.log("[protocolAdapter] Trying Helius DAS API for price...");
-      const heliusRes = await fetch(HELIUS_RPC_URL, {
+      // Helius DAS API
+      fetch(HELIUS_RPC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -223,61 +262,118 @@ export const protocolAdapter = {
           method: "getAsset",
           params: { id: mint }
         })
-      });
-      const heliusData = await heliusRes.json();
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          const price = data.result?.token_info?.price_info?.price_per_token;
+          const marketCap = data.result?.token_info?.price_info?.total_price;
+          if (!price) return null;
+          console.log("[protocolAdapter] ✓ Helius:", price, marketCap ? `(mcap: $${(marketCap / 1000000).toFixed(2)}M)` : "");
+          return { source: "Helius", price, marketCap };
+        })
+        .catch(() => null),
 
-      if (heliusData.result?.token_info?.price_info?.price_per_token) {
-        const price = heliusData.result.token_info.price_info.price_per_token;
-        console.log("[protocolAdapter] ✓ Helius DAS price found:", price);
-        return price;
-      }
-    } catch (e) {
-      console.warn("[protocolAdapter] Helius DAS price fetch failed:", e);
-    }
+      // Birdeye API
+      fetch(`https://public-api.birdeye.so/public/price?address=${mint}`, {
+        headers: { "X-API-KEY": "public" }
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          const price = data.data?.value;
+          if (!price) return null;
+          console.log("[protocolAdapter] ✓ Birdeye:", price);
+          return { source: "Birdeye", price };
+        })
+        .catch(() => null),
 
-    // Try Birdeye API (good for pump.fun and new tokens)
-    try {
-      console.log("[protocolAdapter] Trying Birdeye API...");
-      const birdeyeRes = await fetch(`https://public-api.birdeye.so/public/price?address=${mint}`, {
-        headers: {
-          "X-API-KEY": "public" // Using public endpoint
-        }
-      });
-      const birdeyeData = await birdeyeRes.json();
+      // DexScreener API (most comprehensive - includes liquidity and market cap)
+      fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`)
+        .then(async (res) => {
+          const data = await res.json();
+          if (!data.pairs || data.pairs.length === 0) return null;
 
-      if (birdeyeData.data && birdeyeData.data.value) {
-        const price = birdeyeData.data.value;
-        console.log("[protocolAdapter] ✓ Birdeye price found:", price);
-        return price;
-      }
-    } catch (e) {
-      console.warn("[protocolAdapter] Birdeye failed:", e);
-    }
+          // Get the pair with highest liquidity
+          const bestPair = data.pairs.sort((a: any, b: any) =>
+            (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
+          )[0];
 
-    // Try DexScreener API (works for most DEX-listed tokens)
-    try {
-      console.log("[protocolAdapter] Trying DexScreener API...");
-      const dexRes = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-      const dexData = await dexRes.json();
+          if (!bestPair.priceUsd) return null;
 
-      if (dexData.pairs && dexData.pairs.length > 0) {
-        // Get the pair with highest liquidity
-        const bestPair = dexData.pairs.sort((a: any, b: any) =>
-          (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
-        )[0];
-
-        if (bestPair.priceUsd) {
           const price = parseFloat(bestPair.priceUsd);
-          console.log("[protocolAdapter] ✓ DexScreener price found:", price);
-          return price;
-        }
-      }
-    } catch (e) {
-      console.warn("[protocolAdapter] DexScreener failed:", e);
+          const liquidity = bestPair.liquidity?.usd;
+          const marketCap = bestPair.fdv || bestPair.marketCap; // fdv = fully diluted valuation
+
+          console.log(
+            "[protocolAdapter] ✓ DexScreener:",
+            price,
+            marketCap ? `(mcap: $${(marketCap / 1000000).toFixed(2)}M)` : "",
+            liquidity ? `(liq: $${(liquidity / 1000).toFixed(2)}K)` : ""
+          );
+
+          return { source: "DexScreener", price, marketCap, liquidity };
+        })
+        .catch(() => null),
+    ]);
+
+    // Collect all successful prices
+    const allPrices: { source: string; price: number; marketCap?: number; liquidity?: number }[] = [];
+
+    if (jupiterResult.status === "fulfilled" && jupiterResult.value) allPrices.push(jupiterResult.value);
+    if (heliusResult.status === "fulfilled" && heliusResult.value) allPrices.push(heliusResult.value);
+    if (birdeyeResult.status === "fulfilled" && birdeyeResult.value) allPrices.push(birdeyeResult.value);
+    if (dexScreenerResult.status === "fulfilled" && dexScreenerResult.value) allPrices.push(dexScreenerResult.value);
+
+    if (allPrices.length === 0) {
+      console.log("[protocolAdapter] ❌ No price data available from any source");
+      return null;
     }
 
-    console.log("[protocolAdapter] ❌ No price data available from any source");
-    return null;
+    console.log(`[protocolAdapter] 📊 Collected ${allPrices.length} price(s) from different sources`);
+
+    // Analyze price discrepancy
+    const prices = allPrices.map((p) => p.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const discrepancyPercent = ((maxPrice - minPrice) / minPrice) * 100;
+
+    console.log(`[protocolAdapter] 📈 Price range: $${minPrice.toExponential(4)} - $${maxPrice.toExponential(4)}`);
+    console.log(`[protocolAdapter] 📊 Average: $${avgPrice.toExponential(4)}, Discrepancy: ${discrepancyPercent.toFixed(2)}%`);
+
+    const hasDiscrepancy = discrepancyPercent > 10; // Flag if prices differ by more than 10%
+
+    if (hasDiscrepancy) {
+      console.warn(`[protocolAdapter] ⚠️ HIGH PRICE DISCREPANCY (${discrepancyPercent.toFixed(2)}%)`);
+    }
+
+    // Strategy: Prioritize DexScreener if available (most comprehensive with liquidity data)
+    // Otherwise use median price from available sources
+    let selectedPrice: typeof allPrices[0];
+    let selectionReason = "";
+
+    const dexPrice = allPrices.find((p) => p.source === "DexScreener");
+    if (dexPrice && dexPrice.liquidity && dexPrice.liquidity > 5000) {
+      // Use DexScreener if it has good liquidity (>$5k)
+      selectedPrice = dexPrice;
+      selectionReason = `highest liquidity ($${(dexPrice.liquidity / 1000).toFixed(2)}K)`;
+    } else {
+      // Use median price as most reliable
+      const sortedPrices = [...allPrices].sort((a, b) => a.price - b.price);
+      const medianIndex = Math.floor(sortedPrices.length / 2);
+      selectedPrice = sortedPrices[medianIndex];
+      selectionReason = "median of all sources";
+    }
+
+    console.log(`[protocolAdapter] ✅ Selected ${selectedPrice.source} price: $${selectedPrice.price.toExponential(4)} (${selectionReason})`);
+
+    return {
+      priceUsd: selectedPrice.price,
+      marketCapUsd: selectedPrice.marketCap,
+      liquidityUsd: selectedPrice.liquidity,
+      source: selectedPrice.source,
+      allPrices,
+      priceDiscrepancy: hasDiscrepancy,
+    };
   },
 
   suggestMinEntryAmount(priceUsd: number, minUsd = 5): number {

@@ -15,12 +15,15 @@ import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/hooks/use-wallet";
 import { useCreatePool } from "@/hooks/use-pools";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
-import { protocolAdapter, TokenInfo } from "@/lib/protocolAdapter";
+import { protocolAdapter, TokenInfo, TokenPriceData } from "@/lib/protocolAdapter";
 import { cn } from "@/lib/utils";
 import { PublicKey } from "@solana/web3.js";
 
 // Backend DEV wallet authorized for pool operations (unlock, randomness, select_winner, payout)
 const DEV_WALLET_PUBKEY = import.meta.env.VITE_DEV_WALLET_PUBKEY || "DCHhAjoVvJ4mUUkbQrsKrPztRhivrNV3fDJEZfHNQ8d3";
+const TREASURY_WALLET_PUBKEY = import.meta.env.VITE_TREASURY_WALLET_PUBKEY || "4ZscUyoKFWfU7wjeZKpiuw7Nr8Q8ZdAQmr4YzHNQ74B3";
+// Sponsor wallet that can create FREE pools
+const SPONSOR_WALLET_PUBKEY = "HeXjPXForQumceDJHA6w5d4vPR11mPMDGmtcz5ZHezBZ";
 import { showTransactionToast } from "@/lib/transaction-toast";
 import {
   Loader2,
@@ -29,6 +32,7 @@ import {
   Atom,
   Search,
   AlertCircle,
+  AlertTriangle,
   Check,
   Coins,
   Users,
@@ -51,12 +55,13 @@ export default function CreatePool() {
   const [mintAddress, setMintAddress] = useState("");
   const [isFetching, setIsFetching] = useState(false);
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
-  const [priceUsd, setPriceUsd] = useState<number | null>(null);
+  const [priceData, setPriceData] = useState<TokenPriceData | null>(null);
   
   const [participants, setParticipants] = useState(10);
   const [entryAmount, setEntryAmount] = useState<string>("");
   const [lockDuration, setLockDuration] = useState(60);
   const [customDuration, setCustomDuration] = useState("");
+  const [isFreePool, setIsFreePool] = useState(false);
 
   const [solAmount, setSolAmount] = useState<string>("");
   const [slippageBps, setSlippageBps] = useState<number>(100);
@@ -72,11 +77,11 @@ export default function CreatePool() {
   const { createPool: createPoolOnChain, sdkReady, publicKey, signTransaction } = useMissoutSDK();
   const { connection } = useConnection();
 
-  const currentPrice = priceUsd || 0;
+  const currentPrice = priceData?.priceUsd || 0;
   const entryUsd = parseFloat(entryAmount) * currentPrice;
   // If price is available, enforce $5 minimum. If unavailable, allow proceeding with warning.
-  const isValidEntry = priceUsd !== null ? entryUsd >= 5 : true;
-  const suggestedAmount = priceUsd ? protocolAdapter.suggestMinEntryAmount(priceUsd) : 0;
+  const isValidEntry = priceData?.priceUsd ? entryUsd >= 5 : true;
+  const suggestedAmount = priceData?.priceUsd ? protocolAdapter.suggestMinEntryAmount(priceData.priceUsd) : 0;
 
   const handleFetchToken = async () => {
     if (!protocolAdapter.isValidSolanaAddress(mintAddress)) {
@@ -89,7 +94,7 @@ export default function CreatePool() {
       const info = await protocolAdapter.fetchTokenInfo(mintAddress);
       const price = await protocolAdapter.fetchTokenPriceUsd(mintAddress);
       setTokenInfo(info);
-      setPriceUsd(price);
+      setPriceData(price);
       setStep(2);
     } catch (e: any) {
       toast({ variant: "destructive", title: "Fetch Failed", description: e.message });
@@ -127,10 +132,10 @@ export default function CreatePool() {
         maxParticipants: participants,
         lockDurationSeconds,
         devWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        devFeeBps: 0,
-        burnFeeBps: 0,
-        treasuryWallet: new PublicKey(DEV_WALLET_PUBKEY),
-        treasuryFeeBps: 0,
+        devFeeBps: 500,      // 5% dev fee
+        burnFeeBps: 350,     // 3.5% burn fee
+        treasuryWallet: new PublicKey(TREASURY_WALLET_PUBKEY),
+        treasuryFeeBps: 150, // 1.5% treasury fee for referral rewards
       });
 
       signature = sdkResult?.tx;
@@ -172,6 +177,7 @@ export default function CreatePool() {
         tokenSymbol: tokenInfo.symbol,
         tokenName: tokenInfo.name,
         tokenMint: tokenInfo.mint,
+        tokenLogoUrl: tokenInfo.logoUrl || null,
         poolAddress: poolAddress,
         txHash: signature,
         entryAmount: parseFloat(entryAmount),
@@ -179,6 +185,10 @@ export default function CreatePool() {
         maxParticipants: participants,
         lockDuration: lockDuration,
         creatorWallet: address,
+        ...(isFreePool && {
+          isFree: 1,
+          sponsoredBy: address,
+        }),
       }, {
       onSuccess: (pool) => {
         showTransactionToast({ 
@@ -403,19 +413,65 @@ export default function CreatePool() {
                     <p className="text-primary font-mono">${tokenInfo.symbol}</p>
                     <p className="text-xs text-muted-foreground mt-1">Decimals: {tokenInfo.decimals}</p>
                   </div>
-                  <div className="text-right">
-                    {priceUsd ? (
-                      <div>
-                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Price</div>
-                        <div className="text-lg font-mono font-bold text-primary">
-                          ${priceUsd.toFixed(Math.max(3, -Math.floor(Math.log10(priceUsd)) + 2))}
+                  <div className="text-right flex-shrink-0">
+                    {priceData ? (
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-end gap-1">
+                          Current Price
+                          {priceData.priceDiscrepancy && <AlertTriangle className="w-3 h-3 text-amber-400" />}
                         </div>
+                        <div className="text-lg font-mono font-bold text-primary">
+                          ${priceData.priceUsd.toFixed(Math.max(3, -Math.floor(Math.log10(priceData.priceUsd)) + 2))}
+                        </div>
+                        <div className="text-[9px] text-muted-foreground/60">via {priceData.source}</div>
                       </div>
                     ) : (
                       <div className="text-xs text-amber-400">⚠ Price unavailable</div>
                     )}
                   </div>
                 </div>
+
+                {/* Price Discrepancy Warning */}
+                {priceData?.priceDiscrepancy && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-[10px] text-amber-400 font-tech uppercase tracking-tighter flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Price varies across sources - using {priceData.source} data
+                    </p>
+                    <p className="text-[9px] text-amber-400/70 mt-1">
+                      Multiple price sources returned different values. Using highest liquidity source for accuracy.
+                    </p>
+                  </div>
+                )}
+
+                {/* Market Cap and Liquidity */}
+                {priceData && (priceData.marketCapUsd || priceData.liquidityUsd) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {priceData.marketCapUsd && (
+                      <div className="p-3 rounded-lg bg-background/30 border border-white/10">
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Market Cap</div>
+                        <div className="text-lg font-mono font-bold text-foreground">
+                          {priceData.marketCapUsd >= 1000000
+                            ? `$${(priceData.marketCapUsd / 1000000).toFixed(2)}M`
+                            : priceData.marketCapUsd >= 1000
+                            ? `$${(priceData.marketCapUsd / 1000).toFixed(2)}K`
+                            : `$${priceData.marketCapUsd.toFixed(2)}`}
+                        </div>
+                      </div>
+                    )}
+                    {priceData.liquidityUsd && (
+                      <div className="p-3 rounded-lg bg-background/30 border border-white/10">
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Liquidity</div>
+                        <div className="text-lg font-mono font-bold text-foreground">
+                          {priceData.liquidityUsd >= 1000000
+                            ? `$${(priceData.liquidityUsd / 1000000).toFixed(2)}M`
+                            : priceData.liquidityUsd >= 1000
+                            ? `$${(priceData.liquidityUsd / 1000).toFixed(2)}K`
+                            : `$${priceData.liquidityUsd.toFixed(2)}`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {!tokenInfo.metadataFound && (
                   <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
@@ -591,19 +647,24 @@ export default function CreatePool() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <Users className="w-3 h-3" /> Max Participants (2-20)
+                        <Users className="w-3 h-3" /> Max Participants (2-{isFreePool ? '10' : '20'})
                       </Label>
                       <span className="text-primary font-mono font-bold">{participants}</span>
                     </div>
-                    <Slider 
-                      value={[participants]} 
+                    <Slider
+                      value={[participants]}
                       onValueChange={([v]) => setParticipants(v)}
-                      min={2} 
-                      max={20} 
+                      min={2}
+                      max={isFreePool ? 10 : 20}
                       step={1}
                       className="py-4"
                       data-testid="slider-participants"
                     />
+                    {isFreePool && (
+                      <p className="text-[10px] text-green-400 font-tech uppercase tracking-tighter">
+                        Free pools limited to 10 participants (1 creator + 9 free joins)
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -620,12 +681,12 @@ export default function CreatePool() {
                         data-testid="input-entry-amount"
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-muted-foreground">
-                        {priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
+                        {priceData?.priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
                       </div>
                     </div>
-                    
+
                     {/* USD Value Display & Validation */}
-                    {priceUsd && entryAmount && parseFloat(entryAmount) > 0 && (
+                    {priceData?.priceUsd && entryAmount && parseFloat(entryAmount) > 0 && (
                       <div className={`p-3 rounded-lg border mt-2 ${entryUsd >= 5 ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">USD Value:</span>
@@ -661,7 +722,7 @@ export default function CreatePool() {
                     )}
 
                     {/* Warning when price unavailable */}
-                    {!priceUsd && (
+                    {!priceData?.priceUsd && (
                       <div className="mt-2 p-3 rounded-lg border bg-amber-500/10 border-amber-500/30">
                         <div className="text-[10px] text-amber-400 font-tech uppercase flex items-center gap-1">
                           <AlertCircle className="w-3 h-3" /> Price unavailable - unable to enforce $5 minimum
@@ -679,13 +740,13 @@ export default function CreatePool() {
                     </Label>
                     <div className="grid grid-cols-5 gap-2">
                       {[1, 5, 15, 30, 60].map((m) => (
-                        <Button 
+                        <Button
                           key={m}
                           size="sm"
                           variant="outline"
                           onClick={() => setLockDuration(m)}
                           className={cn(
-                            "h-8 text-[10px] font-mono border-white/5", 
+                            "h-8 text-[10px] font-mono border-white/5",
                             lockDuration === m && "bg-primary/20 border-primary text-primary"
                           )}
                           data-testid={`button-duration-${m}`}
@@ -695,7 +756,7 @@ export default function CreatePool() {
                       ))}
                     </div>
                     <div className="flex items-center gap-2 pt-2">
-                      <Input 
+                      <Input
                         type="number"
                         placeholder="Custom (min)"
                         value={customDuration}
@@ -709,6 +770,41 @@ export default function CreatePool() {
                       />
                     </div>
                   </div>
+
+                  {/* FREE Pool Toggle (only for sponsor wallet) */}
+                  {address?.toLowerCase() === SPONSOR_WALLET_PUBKEY.toLowerCase() && (
+                    <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label htmlFor="free-pool" className="text-[10px] font-tech uppercase tracking-widest text-white flex items-center gap-2">
+                            <FlaskConical className="w-4 h-4 text-green-400" />
+                            FREE Pool (Gasless Join)
+                          </Label>
+                          <p className="text-[9px] text-muted-foreground">
+                            Users join without paying. You sponsor all entries. Max 10 participants (1 creator + 9 free).
+                          </p>
+                        </div>
+                        <Switch
+                          id="free-pool"
+                          checked={isFreePool}
+                          onCheckedChange={(checked) => {
+                            setIsFreePool(checked);
+                            if (checked && participants > 10) {
+                              setParticipants(10);
+                            }
+                          }}
+                          data-testid="switch-free-pool"
+                        />
+                      </div>
+                      {isFreePool && (
+                        <div className="text-[9px] text-green-400 space-y-1 font-tech uppercase tracking-tighter">
+                          <p>✓ Backend will handle on-chain joins</p>
+                          <p>✓ Max 10 participants (1 creator + 9 free joins)</p>
+                          <p>✓ Winners receive rewards to their real wallet</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3">
@@ -756,7 +852,7 @@ export default function CreatePool() {
                     <div className="text-right">
                       <div className="font-mono text-sm font-black">{entryAmount} {tokenInfo.symbol}</div>
                       <div className="text-[10px] text-primary/70 font-mono">
-                        {priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
+                        {priceData?.priceUsd ? `≈ $${entryUsd.toFixed(2)}` : "Price Unknown"}
                       </div>
                     </div>
                   </div>

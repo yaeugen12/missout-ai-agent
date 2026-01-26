@@ -2,11 +2,13 @@ import { db } from "./db.js";
 import {
   pools, participants, transactions, profiles, notifications, poolChatMessages,
   referralRelations, referralRewards, referralRewardEvents, referralClaims, winnersFeed,
+  sponsoredParticipants,
   type Pool, type InsertPool, type Participant, type InsertParticipant,
   type Transaction, type InsertTransaction, type Profile, type Notification, type InsertNotification,
   type PoolChatMessage, type InsertPoolChatMessage,
   type ReferralRelation, type ReferralReward, type ReferralRewardEvent, type ReferralClaim,
-  type WinnerFeedEntry, type InsertWinnerFeedEntry
+  type WinnerFeedEntry, type InsertWinnerFeedEntry,
+  type SponsoredParticipant, type InsertSponsoredParticipant
 } from "@shared/schema";
 import { eq, desc, sql, and, or, ilike } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -167,10 +169,24 @@ export class DatabaseStorage implements IStorage {
   /**
    * OPTIMIZED: Get participants with profiles using single JOIN query
    * Fixes N+1 query problem - previously called getProfile() for each participant
+   * 🆓 FREE POOLS: Resolves auxiliary wallets to real wallets for sponsored participants
    */
   async getParticipantsWithProfiles(poolId: number): Promise<Array<Participant & { displayName?: string; displayAvatar?: string }>> {
     const generateDicebearAvatar = (wallet: string, style: string = "bottts") =>
       `https://api.dicebear.com/7.x/${style}/svg?seed=${wallet}`;
+
+    // Check if this is a FREE pool
+    const pool = await this.getPool(poolId);
+    const isFreePool = pool && (pool as any).isFree === 1;
+
+    // Get sponsored participants mapping for FREE pools
+    let sponsoredMap: Map<string, string> = new Map(); // auxiliary -> real
+    if (isFreePool) {
+      const sponsored = await this.getSponsoredParticipantsForPool(poolId);
+      sponsored.forEach(sp => {
+        sponsoredMap.set(sp.auxiliaryWallet.toLowerCase(), sp.realWallet.toLowerCase());
+      });
+    }
 
     // OPTIMIZED: Single query with LEFT JOIN - 1 query instead of N+1
     // Use case-insensitive matching for wallet addresses
@@ -184,10 +200,26 @@ export class DatabaseStorage implements IStorage {
       .where(eq(participants.poolId, poolId));
 
     // Map results and enrich with display data
-    const enrichedParticipants = results.map(({ participant, profile }) => ({
-      ...participant,
-      displayName: profile?.nickname || undefined,
-      displayAvatar: profile?.avatarUrl || generateDicebearAvatar(participant.walletAddress, profile?.avatarStyle || "bottts"),
+    // 🆓 FREE POOLS: Replace auxiliary wallet with real wallet for sponsored participants
+    const enrichedParticipants = await Promise.all(results.map(async ({ participant, profile }) => {
+      let displayWallet = participant.walletAddress;
+      let displayProfile = profile;
+
+      // If FREE pool and participant is auxiliary wallet, resolve to real wallet
+      if (isFreePool && sponsoredMap.has(participant.walletAddress.toLowerCase())) {
+        const realWallet = sponsoredMap.get(participant.walletAddress.toLowerCase())!;
+        displayWallet = realWallet;
+
+        // Fetch profile for real wallet
+        displayProfile = await this.getProfile(realWallet);
+      }
+
+      return {
+        ...participant,
+        walletAddress: displayWallet, // Show real wallet instead of auxiliary
+        displayName: displayProfile?.nickname || undefined,
+        displayAvatar: displayProfile?.avatarUrl || generateDicebearAvatar(displayWallet, displayProfile?.avatarStyle || "bottts"),
+      };
     }));
 
     return enrichedParticipants;
@@ -478,7 +510,7 @@ export class DatabaseStorage implements IStorage {
     `);
     const total = (countResult.rows[0] as any)?.total || 0;
 
-    // Query pools with winners, aggregate by wallet
+    // Query pools with winners, aggregate by wallet ONLY (not by token)
     // Using sql.raw() with validated integers to safely inject LIMIT/OFFSET
     // Calculate USD values using current_price_usd at payout time (when pool ended)
     // Calculate total bet amount from all pools where user participated (as participant or creator)
@@ -491,8 +523,8 @@ export class DatabaseStorage implements IStorage {
         COALESCE(MAX(p.total_pot), 0)::float as biggest_win_tokens,
         COALESCE(MAX(p.total_pot * COALESCE(p.current_price_usd, 0)), 0)::float as biggest_win_usd,
         MAX(p.end_time) as last_win_at,
-        p.token_mint,
-        p.token_symbol,
+        (SELECT p2.token_mint FROM pools p2 WHERE p2.winner_wallet = p.winner_wallet AND p2.status = 'ended' ORDER BY p2.end_time DESC LIMIT 1) as token_mint,
+        (SELECT p2.token_symbol FROM pools p2 WHERE p2.winner_wallet = p.winner_wallet AND p2.status = 'ended' ORDER BY p2.end_time DESC LIMIT 1) as token_symbol,
         (
           SELECT COALESCE(SUM(p2.entry_amount * COALESCE(p2.initial_price_usd, 0)), 0)
           FROM pools p2
@@ -503,7 +535,7 @@ export class DatabaseStorage implements IStorage {
       FROM pools p
       WHERE p.winner_wallet IS NOT NULL
         AND p.status = 'ended'
-      GROUP BY p.winner_wallet, p.token_mint, p.token_symbol
+      GROUP BY p.winner_wallet
       ORDER BY total_usd_won DESC
       LIMIT ${sql.raw(String(safeLimit))}
       OFFSET ${sql.raw(String(safeOffset))}
@@ -1030,6 +1062,51 @@ export class DatabaseStorage implements IStorage {
           eq(pools.status, 'locked')
         )
       );
+  }
+
+  // ============================================
+  // SPONSORED/FREE POOLS
+  // ============================================
+
+  async addSponsoredParticipant(data: InsertSponsoredParticipant): Promise<SponsoredParticipant> {
+    const [result] = await db.insert(sponsoredParticipants).values(data).returning();
+    return result;
+  }
+
+  async getSponsoredParticipant(poolId: number, realWallet: string): Promise<SponsoredParticipant | null> {
+    const [result] = await db.select()
+      .from(sponsoredParticipants)
+      .where(and(
+        eq(sponsoredParticipants.poolId, poolId),
+        eq(sponsoredParticipants.realWallet, realWallet.toLowerCase())
+      ))
+      .limit(1);
+    return result || null;
+  }
+
+  async getSponsoredParticipantByAuxiliary(poolId: number, auxiliaryWallet: string): Promise<SponsoredParticipant | null> {
+    // Use case-insensitive comparison to handle both old (mixed-case) and new (lowercase) entries
+    const [result] = await db.select()
+      .from(sponsoredParticipants)
+      .where(and(
+        eq(sponsoredParticipants.poolId, poolId),
+        sql`LOWER(${sponsoredParticipants.auxiliaryWallet}) = LOWER(${auxiliaryWallet})`
+      ))
+      .limit(1);
+    return result || null;
+  }
+
+  async getSponsoredParticipantsForPool(poolId: number): Promise<SponsoredParticipant[]> {
+    return await db.select()
+      .from(sponsoredParticipants)
+      .where(eq(sponsoredParticipants.poolId, poolId));
+  }
+
+  async getUsedAuxiliaryIndexes(poolId: number): Promise<number[]> {
+    const results = await db.select({ auxiliaryIndex: sponsoredParticipants.auxiliaryIndex })
+      .from(sponsoredParticipants)
+      .where(eq(sponsoredParticipants.poolId, poolId));
+    return results.map(r => r.auxiliaryIndex);
   }
 }
 

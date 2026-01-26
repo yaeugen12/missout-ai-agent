@@ -1,6 +1,7 @@
 import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
 
-const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6";
+// Use server proxy to work around DNS issues on Windows
+const JUPITER_QUOTE_API = "/api/jupiter";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 export interface JupiterQuote {

@@ -1,6 +1,6 @@
 import { PublicKey, Connection, Keypair, SystemProgram, TransactionInstruction, Transaction, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from "@solana/web3.js/lib/index.cjs.js";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
-import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction, createTransferCheckedInstruction, getAccount } from "@solana/spl-token";
 import bs58 from "bs58";
 import { IDL } from "@shared/idl.js";
 import { AnchorUtils, Randomness, getDefaultQueue, getDefaultDevnetQueue, Queue } from "@switchboard-xyz/on-demand";
@@ -17,6 +17,9 @@ let devWallet: Keypair | null = null;
 let treasuryWallet: PublicKey | null = null;
 let treasuryKeypair: Keypair | null = null;
 let connection: Connection | null = null;
+
+// Auxiliary wallets for sponsored/free pools (max 9 participants)
+const auxiliaryWallets: Keypair[] = [];
 
 // Network configuration - loads based on SOLANA_NETWORK environment variable
 const networkConfig = getNetworkConfig(
@@ -98,6 +101,23 @@ export async function initializeSolanaServices(): Promise<void> {
       log("⚠️ TREASURY_WALLET_PRIVATE_KEY not set - referral payouts disabled");
     }
 
+    // Load auxiliary wallets for sponsored/free pools (up to 9 wallets)
+    log("Loading auxiliary wallets for free pools...");
+    for (let i = 1; i <= 9; i++) {
+      const privateKeyEnv = process.env[`AUXILIARY_WALLET_${i}_PRIVATE_KEY`];
+      if (privateKeyEnv) {
+        try {
+          const secretKey = bs58.decode(privateKeyEnv);
+          const keypair = Keypair.fromSecretKey(secretKey);
+          auxiliaryWallets.push(keypair);
+          log(`✅ Auxiliary wallet ${i} loaded:`, keypair.publicKey.toBase58());
+        } catch (err: any) {
+          log(`⚠️ Failed to load auxiliary wallet ${i}:`, err.message);
+        }
+      }
+    }
+    log(`✅ Loaded ${auxiliaryWallets.length}/9 auxiliary wallets for free pools`);
+
     // Initialize connection and Anchor program using RPC failover manager
     connection = rpcManager.getConnection();
 
@@ -111,6 +131,106 @@ export async function initializeSolanaServices(): Promise<void> {
     log("❌ Failed to initialize Solana services:", err.message);
     throw err;
   }
+}
+
+// Pool economics tracking - stores costs per pool
+const poolEconomics = new Map<string, {
+  unlockCost: number;
+  randomnessCost: number;
+  revealCost: number;
+  selectWinnerCost: number;
+  payoutCost: number;
+  totalCost: number;
+  devFeeReceived: number;
+}>();
+
+/**
+ * Track SOL spent by DEV_WALLET for a transaction
+ */
+async function trackTransactionCost(
+  poolAddress: string,
+  action: 'unlock' | 'randomness' | 'reveal' | 'selectWinner' | 'payout',
+  txFunc: () => Promise<void>
+): Promise<void> {
+  const conn = getConnection();
+  const devWalletPubkey = getDevWallet().publicKey;
+
+  // Get balance before
+  const balanceBefore = await conn.getBalance(devWalletPubkey);
+  const balanceBeforeSOL = balanceBefore / LAMPORTS_PER_SOL;
+
+  log(`pool=${poolAddress.slice(0, 8)} action=${action} 💰 DEV_WALLET balance BEFORE: ${balanceBeforeSOL.toFixed(6)} SOL`);
+
+  // Execute transaction
+  await txFunc();
+
+  // Get balance after
+  const balanceAfter = await conn.getBalance(devWalletPubkey);
+  const balanceAfterSOL = balanceAfter / LAMPORTS_PER_SOL;
+  const costSOL = balanceBeforeSOL - balanceAfterSOL;
+
+  log(`pool=${poolAddress.slice(0, 8)} action=${action} 💰 DEV_WALLET balance AFTER: ${balanceAfterSOL.toFixed(6)} SOL`);
+  log(`pool=${poolAddress.slice(0, 8)} action=${action} 💸 COST: ${costSOL.toFixed(6)} SOL ($${(costSOL * 150).toFixed(2)} @ $150/SOL)`);
+
+  // Store cost
+  if (!poolEconomics.has(poolAddress)) {
+    poolEconomics.set(poolAddress, {
+      unlockCost: 0,
+      randomnessCost: 0,
+      revealCost: 0,
+      selectWinnerCost: 0,
+      payoutCost: 0,
+      totalCost: 0,
+      devFeeReceived: 0,
+    });
+  }
+
+  const economics = poolEconomics.get(poolAddress)!;
+
+  if (action === 'unlock') economics.unlockCost = costSOL;
+  else if (action === 'randomness') economics.randomnessCost = costSOL;
+  else if (action === 'reveal') economics.revealCost = costSOL;
+  else if (action === 'selectWinner') economics.selectWinnerCost = costSOL;
+  else if (action === 'payout') economics.payoutCost = costSOL;
+
+  economics.totalCost = economics.unlockCost + economics.randomnessCost +
+                        economics.revealCost + economics.selectWinnerCost + economics.payoutCost;
+}
+
+/**
+ * Get economics report for a pool
+ */
+export function getPoolEconomicsReport(poolAddress: string): string {
+  const economics = poolEconomics.get(poolAddress);
+
+  if (!economics) {
+    return `No economics data for pool ${poolAddress}`;
+  }
+
+  const lines = [
+    "",
+    "╔════════════════════════════════════════════════════════════╗",
+    `║  POOL ECONOMICS REPORT: ${poolAddress.slice(0, 12)}...          ║`,
+    "╠════════════════════════════════════════════════════════════╣",
+    "║ DEV_WALLET COSTS (Transaction Fees)                       ║",
+    `║   unlock_pool:        ${economics.unlockCost.toFixed(6)} SOL = $${(economics.unlockCost * 150).toFixed(2).padStart(6)}  ║`,
+    `║   request_randomness: ${economics.randomnessCost.toFixed(6)} SOL = $${(economics.randomnessCost * 150).toFixed(2).padStart(6)}  ║`,
+    `║   reveal_randomness:  ${economics.revealCost.toFixed(6)} SOL = $${(economics.revealCost * 150).toFixed(2).padStart(6)}  ║`,
+    `║   select_winner:      ${economics.selectWinnerCost.toFixed(6)} SOL = $${(economics.selectWinnerCost * 150).toFixed(2).padStart(6)}  ║`,
+    `║   payout_winner:      ${economics.payoutCost.toFixed(6)} SOL = $${(economics.payoutCost * 150).toFixed(2).padStart(6)}  ║`,
+    "║   " + "─".repeat(56) + " ║",
+    `║   TOTAL COST:         ${economics.totalCost.toFixed(6)} SOL = $${(economics.totalCost * 150).toFixed(2).padStart(6)}  ║`,
+    "╠════════════════════════════════════════════════════════════╣",
+    "║ DEV_WALLET REVENUE (5% Fee)                                ║",
+    `║   Dev Fee Received:   ${economics.devFeeReceived.toFixed(2)} tokens                  ║`,
+    "║                                                            ║",
+    "║ NOTE: Revenue in tokens - check token price to calculate  ║",
+    "║       if profitable. Break-even if fee value > total cost  ║",
+    "╚════════════════════════════════════════════════════════════╝",
+    "",
+  ];
+
+  return lines.join("\n");
 }
 
 /**
@@ -170,48 +290,106 @@ export function isTreasuryPayoutEnabled(): boolean {
 /**
  * Pay out referral reward from treasury wallet to recipient
  * @param recipientWallet - The wallet address to send the reward to
- * @param amountLamports - Amount in lamports to send
+ * @param tokenMint - The SPL token mint address
+ * @param amount - Amount in token's base units (e.g., lamports for SOL, smallest unit for tokens)
+ * @param decimals - Token decimals (default 9 for SOL)
  * @returns Transaction signature or error
  */
 export async function payReferralReward(
   recipientWallet: string,
-  amountLamports: bigint
+  tokenMint: string,
+  amount: bigint,
+  decimals: number = 9
 ): Promise<{ success: boolean; signature?: string; error?: string }> {
   if (!treasuryKeypair) {
     return { success: false, error: "Treasury keypair not configured for payouts" };
   }
-  
+
   if (!connection) {
     return { success: false, error: "Connection not initialized" };
   }
-  
+
   try {
     const recipient = new PublicKey(recipientWallet);
-    const amount = Number(amountLamports);
-    
-    // Check treasury balance
-    const treasuryBalance = await connection.getBalance(treasuryKeypair.publicKey);
-    if (treasuryBalance < amount + 5000) { // 5000 lamports for fee
-      return { success: false, error: `Insufficient treasury balance: ${treasuryBalance} lamports, need ${amount + 5000}` };
-    }
-    
-    log(`💰 Sending ${amount} lamports (${amount / LAMPORTS_PER_SOL} SOL) to ${recipientWallet}`);
-    
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: treasuryKeypair.publicKey,
-        toPubkey: recipient,
-        lamports: amount,
-      })
+    const mint = new PublicKey(tokenMint);
+    const amountNumber = Number(amount);
+
+    // Resolve token program for this mint (TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID)
+    const tokenProgramId = await resolveTokenProgramForMint(mint, connection);
+
+    // Get associated token accounts
+    const treasuryTokenAccount = getAssociatedTokenAddressSync(
+      mint,
+      treasuryKeypair.publicKey,
+      false,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
     );
-    
+
+    const recipientTokenAccount = getAssociatedTokenAddressSync(
+      mint,
+      recipient,
+      false,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    log(`💰 Sending ${amountNumber} (${Number(amount) / Math.pow(10, decimals)} tokens) of ${tokenMint} to ${recipientWallet}`);
+
+    const transaction = new Transaction();
+
+    // Check if recipient token account exists, create if not
+    try {
+      await getAccount(connection, recipientTokenAccount, "confirmed", tokenProgramId);
+      log(`✅ Recipient token account exists: ${recipientTokenAccount.toBase58()}`);
+    } catch (err) {
+      log(`⚠️ Creating recipient token account: ${recipientTokenAccount.toBase58()}`);
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          treasuryKeypair.publicKey,
+          recipientTokenAccount,
+          recipient,
+          mint,
+          tokenProgramId,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+    }
+
+    // Check treasury token balance
+    try {
+      const treasuryAccount = await getAccount(connection, treasuryTokenAccount, "confirmed", tokenProgramId);
+      if (BigInt(treasuryAccount.amount) < amount) {
+        return {
+          success: false,
+          error: `Insufficient treasury token balance: ${treasuryAccount.amount.toString()} available, need ${amount.toString()}`
+        };
+      }
+    } catch (err: any) {
+      return { success: false, error: `Treasury token account not found or inaccessible: ${err.message}` };
+    }
+
+    // Add transfer instruction
+    transaction.add(
+      createTransferCheckedInstruction(
+        treasuryTokenAccount,
+        mint,
+        recipientTokenAccount,
+        treasuryKeypair.publicKey,
+        amount,
+        decimals,
+        [],
+        tokenProgramId
+      )
+    );
+
     const signature = await sendAndConfirmTransaction(
       connection,
       transaction,
       [treasuryKeypair],
       { commitment: "confirmed" }
     );
-    
+
     log(`✅ Referral payout successful: ${signature}`);
     return { success: true, signature };
   } catch (err: any) {
@@ -339,10 +517,6 @@ function getPoolStatusString(status: any): string {
  * Uses unlock_pool instruction with correct accounts
  */
 export async function unlockPoolOnChain(poolAddress: string): Promise<void> {
-  const conn = getConnection();
-  const poolPk = new PublicKey(poolAddress);
-  const userPk = getDevWallet().publicKey;
-
   log(`pool=${poolAddress.slice(0, 8)} action=UNLOCK Starting...`);
 
   // PREVENTIVE: Check if already unlocked
@@ -354,20 +528,24 @@ export async function unlockPoolOnChain(poolAddress: string): Promise<void> {
     return;
   }
 
-  const [participantsPda] = deriveParticipantsPda(poolPk);
+  // Track cost of unlock transaction
+  await trackTransactionCost(poolAddress, 'unlock', async () => {
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+    const userPk = getDevWallet().publicKey;
+    const [participantsPda] = deriveParticipantsPda(poolPk);
 
-  // unlock_pool discriminator: [51, 19, 234, 156, 255, 183, 89, 254]
-  const ix = createInstructionWithDiscriminator(
-    [51, 19, 234, 156, 255, 183, 89, 254],
-    Buffer.alloc(0),
-    [
-      { pubkey: poolPk, isSigner: false, isWritable: true },
-      { pubkey: userPk, isSigner: true, isWritable: true },
-      { pubkey: participantsPda, isSigner: false, isWritable: false },
-    ]
-  );
+    // unlock_pool discriminator: [51, 19, 234, 156, 255, 183, 89, 254]
+    const ix = createInstructionWithDiscriminator(
+      [51, 19, 234, 156, 255, 183, 89, 254],
+      Buffer.alloc(0),
+      [
+        { pubkey: poolPk, isSigner: false, isWritable: true },
+        { pubkey: userPk, isSigner: true, isWritable: true },
+        { pubkey: participantsPda, isSigner: false, isWritable: false },
+      ]
+    );
 
-  try {
     const tx = await (getProgram().provider as AnchorProvider).sendAndConfirm(
       (await (getProgram().provider as AnchorProvider).wallet.signTransaction(
         await conn.getLatestBlockhash().then(async (blockhash) => {
@@ -383,10 +561,7 @@ export async function unlockPoolOnChain(poolAddress: string): Promise<void> {
     log(`pool=${poolAddress.slice(0, 8)} action=UNLOCK ✅ TX_SENT=${tx.slice(0, 16)}`);
     await conn.confirmTransaction(tx, "confirmed");
     log(`pool=${poolAddress.slice(0, 8)} action=UNLOCK ✅ TX_CONFIRMED=${tx.slice(0, 16)}`);
-  } catch (err: any) {
-    log(`pool=${poolAddress.slice(0, 8)} action=UNLOCK ❌ FAILED: ${err.message}`);
-    throw err;
-  }
+  });
 }
 
 /**
@@ -395,12 +570,13 @@ export async function unlockPoolOnChain(poolAddress: string): Promise<void> {
  * REAL MODE: Creates Switchboard Randomness Account, commits, and calls request_randomness instruction
  */
 export async function requestRandomnessOnChain(poolAddress: string): Promise<void> {
-  const conn = getConnection();
-  const poolPk = new PublicKey(poolAddress);
-  const userPk = getDevWallet().publicKey;
-  const payer = getDevWallet();
-
   log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS Starting...`);
+
+  await trackTransactionCost(poolAddress, 'randomness', async () => {
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+    const userPk = getDevWallet().publicKey;
+    const payer = getDevWallet();
 
   // PREVENTIVE: Check if already requested
   const poolData = await fetchPoolStateOnChain(poolAddress);
@@ -441,7 +617,7 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
     const rngKeypair = Keypair.generate();
     log(`pool=${poolAddress.slice(0, 8)} Creating Switchboard randomness account: ${rngKeypair.publicKey.toBase58().slice(0, 8)}...`);
 
-    const [rngObj, createIx] = await Randomness.create(sbProgram, rngKeypair, queue.pubkey);
+    const [rngObj, createIx] = await Randomness.create(sbProgram, rngKeypair, queue.pubkey, payer.publicKey);
 
     log(`pool=${poolAddress.slice(0, 8)} rngObj created, pubkey: ${rngObj.pubkey.toBase58().slice(0, 8)}`);
 
@@ -454,8 +630,8 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
       tx1.recentBlockhash = bh1.blockhash;
       tx1.feePayer = userPk;
       tx1.add(createIx);
+      tx1.sign(rngKeypair, payer);
 
-      tx1.sign(payer, rngKeypair);
       const sig1 = await conn.sendRawTransaction(tx1.serialize());
       log(`pool=${poolAddress.slice(0, 8)} action=SB_CREATE ✅ TX_SENT=${sig1.slice(0, 16)}`);
       await conn.confirmTransaction(sig1, "confirmed");
@@ -519,6 +695,7 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
     log(`pool=${poolAddress.slice(0, 8)} action=REQUEST_RANDOMNESS ❌ FAILED: ${err.message}`);
     throw err;
   }
+  });
 }
 
 /**
@@ -527,9 +704,6 @@ export async function requestRandomnessOnChain(poolAddress: string): Promise<voi
  * REAL MODE: Calls revealIx() on the Switchboard randomness account
  */
 export async function revealRandomnessOnChain(poolAddress: string): Promise<void> {
-  const conn = getConnection();
-  const payer = getDevWallet();
-
   log(`pool=${poolAddress.slice(0, 8)} action=REVEAL_RANDOMNESS Starting...`);
 
   // Get pool data to find randomness account
@@ -540,6 +714,10 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
     log(`pool=${poolAddress.slice(0, 8)} action=REVEAL_RANDOMNESS reason=SKIP_WRONG_STATUS status=${status}`);
     return;
   }
+
+  await trackTransactionCost(poolAddress, 'reveal', async () => {
+    const conn = getConnection();
+    const payer = getDevWallet();
 
   const randomnessAccount = poolData.randomnessAccount;
   if (!randomnessAccount) {
@@ -581,8 +759,23 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
   try {
     const { Transaction } = await import("@solana/web3.js");
 
-    // Create reveal instruction
-    const revealIx = await rng.revealIx();
+    // Create reveal instruction with payer
+    const revealIx = await rng.revealIx(payer.publicKey);
+
+    // FIX: Switchboard SDK marks System Program as signer (which is invalid)
+    // System Program (11111111111111111111111111111111) cannot sign
+    const { SystemProgram } = await import("@solana/web3.js");
+    revealIx.keys.forEach((key) => {
+      if (key.pubkey.toBase58() === SystemProgram.programId.toBase58() && key.isSigner) {
+        key.isSigner = false;
+        log(`pool=${poolAddress.slice(0, 8)} Fixed System Program isSigner: true->false`);
+      }
+      // Ensure payer is marked as signer
+      if (key.pubkey.toBase58() === payer.publicKey.toBase58() && !key.isSigner) {
+        key.isSigner = true;
+        log(`pool=${poolAddress.slice(0, 8)} Fixed payer isSigner: false->true`);
+      }
+    });
 
     // Send reveal transaction
     const tx = new Transaction();
@@ -615,6 +808,7 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
     log(`pool=${poolAddress.slice(0, 8)} action=REVEAL_RANDOMNESS ❌ FAILED: ${err.message}`);
     throw err;
   }
+  });
 }
 
 /**
@@ -623,10 +817,6 @@ export async function revealRandomnessOnChain(poolAddress: string): Promise<void
  * REAL MODE: Uses Switchboard randomness account
  */
 export async function selectWinnerOnChain(poolAddress: string): Promise<void> {
-  const conn = getConnection();
-  const poolPk = new PublicKey(poolAddress);
-  const userPk = getDevWallet().publicKey;
-
   log(`pool=${poolAddress.slice(0, 8)} action=SELECT_WINNER Starting...`);
 
   // PREVENTIVE: Check if already selected
@@ -637,6 +827,11 @@ export async function selectWinnerOnChain(poolAddress: string): Promise<void> {
     log(`pool=${poolAddress.slice(0, 8)} action=SELECT_WINNER reason=SKIP_ALREADY_${status}`);
     return;
   }
+
+  await trackTransactionCost(poolAddress, 'selectWinner', async () => {
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+    const userPk = getDevWallet().publicKey;
 
   const randomnessAccount = poolData.randomnessAccount;
   if (!randomnessAccount) {
@@ -684,17 +879,60 @@ export async function selectWinnerOnChain(poolAddress: string): Promise<void> {
     log(`pool=${poolAddress.slice(0, 8)} action=SELECT_WINNER ❌ FAILED: ${err.message}`);
     throw err;
   }
+  });
+}
+
+/**
+ * Ensure a token account exists, creating it if necessary
+ * @returns true if account was created, false if it already existed
+ */
+async function ensureTokenAccountExists(
+  mint: PublicKey,
+  owner: PublicKey,
+  payer: Keypair,
+  tokenProgramId: PublicKey
+): Promise<boolean> {
+  const conn = getConnection();
+  const ata = getAssociatedTokenAddressSync(mint, owner, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  // Check if account exists
+  const accountInfo = await conn.getAccountInfo(ata);
+  if (accountInfo) {
+    log(`Token account ${ata.toBase58().slice(0, 8)}... already exists for ${owner.toBase58().slice(0, 8)}...`);
+    return false;
+  }
+
+  log(`Creating token account ${ata.toBase58().slice(0, 8)}... for ${owner.toBase58().slice(0, 8)}...`);
+
+  // Create the account
+  const ix = createAssociatedTokenAccountInstruction(
+    payer.publicKey,  // payer
+    ata,              // ata
+    owner,            // owner
+    mint,             // mint
+    tokenProgramId,   // token program
+    ASSOCIATED_TOKEN_PROGRAM_ID  // ata program
+  );
+
+  const tx = new Transaction();
+  const bh = await conn.getLatestBlockhash();
+  tx.recentBlockhash = bh.blockhash;
+  tx.feePayer = payer.publicKey;
+  tx.add(ix);
+  tx.sign(payer);
+
+  const sig = await conn.sendRawTransaction(tx.serialize());
+  await conn.confirmTransaction(sig, "confirmed");
+
+  log(`✅ Token account created: ${ata.toBase58().slice(0, 8)}... TX: ${sig.slice(0, 16)}`);
+  return true;
 }
 
 /**
  * Payout winner on-chain
  * Uses payout_winner instruction with all required accounts
  */
-export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
-  const conn = getConnection();
-  const poolPk = new PublicKey(poolAddress);
-  const userPk = getDevWallet().publicKey;
-
+export async function payoutWinnerOnChain(poolAddress: string, realWinnerWallet?: string): Promise<void> {
   log(`pool=${poolAddress.slice(0, 8)} action=PAYOUT Starting...`);
 
   // PREVENTIVE: Check if already paid out
@@ -706,6 +944,11 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
     return;
   }
 
+  await trackTransactionCost(poolAddress, 'payout', async () => {
+    const conn = getConnection();
+    const poolPk = new PublicKey(poolAddress);
+    const userPk = getDevWallet().publicKey;
+
   const [participantsPda] = deriveParticipantsPda(poolPk);
   const tokenProgramId = await resolveTokenProgramForMint(conn, poolData.mint);
 
@@ -715,6 +958,12 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
   const devToken = getAssociatedTokenAddressSync(poolData.mint, poolData.devWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
   // CRITICAL: Use pool's treasury_wallet from on-chain state, not from ENV
   const treasuryToken = getAssociatedTokenAddressSync(poolData.mint, poolData.treasuryWallet, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+  // Ensure required token accounts exist (dev and treasury might not have accounts for this mint)
+  log(`pool=${poolAddress.slice(0, 8)} Ensuring token accounts exist...`);
+  await ensureTokenAccountExists(poolData.mint, poolData.devWallet, getDevWallet(), tokenProgramId);
+  await ensureTokenAccountExists(poolData.mint, poolData.treasuryWallet, getDevWallet(), tokenProgramId);
+  await ensureTokenAccountExists(poolData.mint, poolData.winner, getDevWallet(), tokenProgramId);
 
   // payout_winner discriminator: [192, 241, 157, 158, 130, 150, 10, 8]
   const ix = createInstructionWithDiscriminator(
@@ -750,10 +999,101 @@ export async function payoutWinnerOnChain(poolAddress: string): Promise<void> {
     log(`pool=${poolAddress.slice(0, 8)} action=PAYOUT ✅ TX_SENT=${tx.slice(0, 16)}`);
     await conn.confirmTransaction(tx, "confirmed");
     log(`pool=${poolAddress.slice(0, 8)} action=PAYOUT ✅ TX_CONFIRMED=${tx.slice(0, 16)} winner=${poolData.winner.toBase58().slice(0, 16)}`);
+
+    // 🆓 FREE POOLS: Transfer from auxiliary wallet to real winner
+    if (realWinnerWallet && realWinnerWallet.toLowerCase() !== poolData.winner.toBase58().toLowerCase()) {
+      log(`pool=${poolAddress.slice(0, 8)} 🆓 FREE pool - transferring from auxiliary ${poolData.winner.toBase58().slice(0, 8)} to real winner ${realWinnerWallet.slice(0, 8)}`);
+
+      try {
+        // Get pool ID from database to lookup auxiliary wallet index
+        const { storage } = await import("../storage");
+        const { db } = await import("../db");
+        const { pools } = await import("@shared/schema");
+        const { eq } = await import("drizzle-orm");
+
+        const [poolRecord] = await db.select().from(pools).where(eq(pools.poolAddress, poolAddress)).limit(1);
+        if (!poolRecord) {
+          log(`pool=${poolAddress.slice(0, 8)} ❌ Could not find pool in database`);
+          throw new Error("Pool not found in database");
+        }
+
+        // Lookup auxiliary wallet index from sponsored_participants table
+        const sponsoredParticipants = await storage.getSponsoredParticipantsForPool(poolRecord.id);
+        const auxiliaryParticipant = sponsoredParticipants.find(
+          sp => sp.auxiliaryWallet.toLowerCase() === poolData.winner.toBase58().toLowerCase()
+        );
+
+        if (!auxiliaryParticipant) {
+          log(`pool=${poolAddress.slice(0, 8)} ❌ Could not find auxiliary wallet mapping for ${poolData.winner.toBase58().slice(0, 8)}`);
+          throw new Error("Auxiliary wallet mapping not found");
+        }
+
+        const auxiliaryKeypair = getAuxiliaryWallet(auxiliaryParticipant.auxiliaryIndex);
+        if (!auxiliaryKeypair) {
+          log(`pool=${poolAddress.slice(0, 8)} ❌ Could not load auxiliary wallet keypair at index ${auxiliaryParticipant.auxiliaryIndex}`);
+          throw new Error("Auxiliary wallet keypair not found");
+        }
+
+        // Get auxiliary wallet's token account balance
+        const auxiliaryTokenAccount = getAssociatedTokenAddressSync(
+          poolData.mint,
+          poolData.winner,
+          false,
+          tokenProgramId,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        const auxiliaryBalance = await conn.getTokenAccountBalance(auxiliaryTokenAccount);
+        const transferAmount = BigInt(auxiliaryBalance.value.amount);
+
+        log(`pool=${poolAddress.slice(0, 8)} 💰 Transferring ${transferAmount} tokens to real winner`);
+
+        // Create real winner's token account if needed
+        const realWinnerPubkey = new PublicKey(realWinnerWallet);
+        await ensureTokenAccountExists(poolData.mint, realWinnerPubkey, getDevWallet(), tokenProgramId);
+
+        const realWinnerTokenAccount = getAssociatedTokenAddressSync(
+          poolData.mint,
+          realWinnerPubkey,
+          false,
+          tokenProgramId,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+
+        // Create transfer instruction
+        const { createTransferInstruction } = await import("@solana/spl-token");
+        const transferIx = createTransferInstruction(
+          auxiliaryTokenAccount,
+          realWinnerTokenAccount,
+          auxiliaryKeypair.publicKey,
+          transferAmount,
+          [],
+          tokenProgramId
+        );
+
+        const transferTx = new Transaction();
+        const transferBh = await conn.getLatestBlockhash();
+        transferTx.recentBlockhash = transferBh.blockhash;
+        transferTx.feePayer = getDevWallet().publicKey; // Dev wallet pays gas fee
+        transferTx.add(transferIx);
+
+        // Sign with both: dev wallet for fee, auxiliary for transfer authority
+        transferTx.sign(getDevWallet(), auxiliaryKeypair);
+
+        const transferSig = await conn.sendRawTransaction(transferTx.serialize());
+        await conn.confirmTransaction(transferSig, "confirmed");
+
+        log(`pool=${poolAddress.slice(0, 8)} ✅ Transfer to real winner confirmed: ${transferSig.slice(0, 16)}`);
+      } catch (transferErr: any) {
+        log(`pool=${poolAddress.slice(0, 8)} ❌ Failed to transfer to real winner: ${transferErr.message}`);
+        // Don't throw - payout already succeeded, transfer failure is secondary
+      }
+    }
   } catch (err: any) {
     log(`pool=${poolAddress.slice(0, 8)} action=PAYOUT ❌ FAILED: ${err.message}`);
     throw err;
   }
+  });
 }
 
 /**
@@ -954,3 +1294,35 @@ export async function getPoolRentEligibility(poolAddress: string): Promise<{
     };
   }
 }
+
+// ============================================
+// SPONSORED/FREE POOLS SUPPORT
+// ============================================
+
+/**
+ * Get an available auxiliary wallet for free pool join
+ * @param auxiliaryIndex - Index of the auxiliary wallet (0-8)
+ * @returns Keypair of the auxiliary wallet
+ */
+export function getAuxiliaryWallet(auxiliaryIndex: number): Keypair | null {
+  if (auxiliaryIndex < 0 || auxiliaryIndex >= auxiliaryWallets.length) {
+    log(`❌ Invalid auxiliary wallet index: ${auxiliaryIndex}`);
+    return null;
+  }
+  return auxiliaryWallets[auxiliaryIndex];
+}
+
+/**
+ * Get total number of loaded auxiliary wallets
+ */
+export function getAuxiliaryWalletCount(): number {
+  return auxiliaryWallets.length;
+}
+
+/**
+ * Check if sponsored pools are enabled (auxiliary wallets loaded)
+ */
+export function isSponsoredPoolsEnabled(): boolean {
+  return auxiliaryWallets.length > 0;
+}
+

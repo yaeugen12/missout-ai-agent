@@ -9,6 +9,7 @@ export interface Pool {
   tokenMint: string;
   tokenSymbol: string;
   tokenName: string;
+  tokenLogoUrl: string | null;
   entryAmount: number;
   currentParticipants: number;
   participantsCount: number;

@@ -29,6 +29,20 @@ import { apiFetch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 
+// Format large numbers compactly (1.48M instead of 1,487,210)
+function formatCompactNumber(num: number): string {
+  if (num >= 1_000_000_000) {
+    return (num / 1_000_000_000).toFixed(2) + 'B';
+  }
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(2) + 'M';
+  }
+  if (num >= 1_000) {
+    return (num / 1_000).toFixed(2) + 'K';
+  }
+  return num.toLocaleString();
+}
+
 import poolCardBg from "../assets/images/pool-card-bg-new.png";
 
 interface PoolCardProps {
@@ -112,11 +126,13 @@ function VortexRing({
   percentFull,
   accentColor,
   poolSize = 0,
+  poolSizeTokens = 0,
   symbol = "",
 }: {
   percentFull: number;
   accentColor: string;
   poolSize?: number;
+  poolSizeTokens?: number;
   symbol?: string;
 }) {
   const circumference = 2 * Math.PI * 38;
@@ -185,10 +201,13 @@ function VortexRing({
           />
 
           <div className="relative z-10 flex flex-col items-center justify-center text-center">
-            <span className="text-[18px] font-mono font-black text-amber-100 leading-none mb-1">
-              {(poolSize ?? 0).toLocaleString()}
+            <span className="text-[18px] font-mono font-black text-amber-100 leading-none tabular-nums">
+              {formatCompactNumber(poolSizeTokens ?? 0)}
             </span>
-            <span className="text-[8px] text-white/50 uppercase tracking-[0.25em] font-black leading-none">
+            <span className="text-[9px] font-mono font-bold text-white/40 leading-none tabular-nums mt-0.5">
+              ≈ ${(poolSize ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[8px] text-white/50 uppercase tracking-[0.25em] font-black leading-none mt-1">
               POOL SIZE
             </span>
           </div>
@@ -275,6 +294,11 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
   const participantsCount = pool.participantsCount ?? 0;
   const totalPot = pool.totalPot ?? 0;
+  const currentPrice = pool.currentPriceUsd || 0;
+
+  // Calculate USD values
+  const entryUsd = pool.entryAmount * currentPrice;
+  const poolSizeUsd = totalPot * currentPrice;
 
   const percentFull = Math.min(100, (participantsCount / pool.maxParticipants) * 100);
   const isFull = percentFull >= 100;
@@ -346,37 +370,107 @@ function PoolCardComponent({ pool }: PoolCardProps) {
         return;
       }
 
+      const poolAny = pool as any;
+      const isFreePool = poolAny.isFree === 1;
+
       setIsJoining(true);
       try {
-        const result = await sdkJoinPool({
-          poolId: poolAddress || pool.id.toString(),
-          amount: pool.entryAmount.toString(),
-        });
+        // FREE POOL: Gasless join (signature only)
+        if (isFreePool) {
+          // Import nacl for signing
+          const nacl = await import("tweetnacl");
+          const bs58 = await import("bs58");
 
-        if (!result?.tx) {
-          throw new Error("No transaction signature returned from wallet");
+          // Create message to sign (includes poolId and timestamp to prevent replay)
+          const timestamp = Date.now();
+          const message = `join-free:${pool.id}:${timestamp}`;
+          const messageBytes = new TextEncoder().encode(message);
+
+          // Request signature from wallet
+          let signatureBytes: Uint8Array;
+
+          try {
+            // Get wallet adapter from window (Phantom/Solflare)
+            const walletAdapter = (window as any).solana;
+            if (!walletAdapter || !walletAdapter.signMessage) {
+              throw new Error("Wallet does not support message signing");
+            }
+
+            // Phantom returns { signature: Uint8Array, publicKey: PublicKey }
+            const signResult = await walletAdapter.signMessage(messageBytes, "utf8");
+
+            // Extract signature (might be in .signature property or directly returned)
+            signatureBytes = signResult.signature || signResult;
+
+            if (!(signatureBytes instanceof Uint8Array)) {
+              console.error("Invalid signature format:", signatureBytes);
+              throw new Error("Wallet returned invalid signature format");
+            }
+          } catch (signErr: any) {
+            console.error("Signature error:", signErr);
+            throw new Error("Failed to sign message. Please approve the signature request.");
+          }
+
+          // Send to backend FREE join endpoint
+          const response = await apiFetch(`/api/pools/${pool.id}/join-free`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              walletAddress: walletAddress,
+              message: message,
+              signature: bs58.default.encode(signatureBytes),
+            }),
+            credentials: "include",
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || "Failed to join free pool");
+          }
+
+          showTransactionToast({
+            type: "success",
+            title: "FREE Join Success!",
+            description: "You joined the free pool! No tokens transferred.",
+            txHash: data.txHash
+          });
+
+          queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
+        } else {
+          // NORMAL POOL: Standard on-chain join
+          const result = await sdkJoinPool({
+            poolId: poolAddress || pool.id.toString(),
+            amount: pool.entryAmount.toString(),
+          });
+
+          if (!result?.tx) {
+            throw new Error("No transaction signature returned from wallet");
+          }
+
+          await apiFetch(`/api/pools/${pool.id}/join`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              walletAddress: walletAddress,
+              txHash: result.tx,
+            }),
+            credentials: "include",
+          });
+
+          showTransactionToast({
+            type: "success",
+            title: "Successfully Pulled In!",
+            description: "You have joined the void. Your tokens have been transferred.",
+            txHash: result.tx
+          });
+
+          queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
+          queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
         }
-
-        await apiFetch(`/api/pools/${pool.id}/join`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            walletAddress: walletAddress,
-            txHash: result.tx,
-          }),
-          credentials: "include",
-        });
-
-        showTransactionToast({
-          type: "success",
-          title: "Successfully Pulled In!",
-          description: "You have joined the void. Your tokens have been transferred.",
-          txHash: result.tx
-        });
-
-        queryClient.invalidateQueries({ queryKey: ["/api/pools"] });
-        queryClient.invalidateQueries({ queryKey: [`/api/pools/${pool.id}`] });
-        queryClient.invalidateQueries({ queryKey: ["/api/profile", walletAddress] });
       } catch (err: any) {
         console.error("Join error:", err);
         showTransactionToast({
@@ -462,7 +556,7 @@ function PoolCardComponent({ pool }: PoolCardProps) {
 
           {/* Header */}
           <div className="flex items-start gap-3 mb-3">
-            <TokenAvatar logoUrl={tokenMetadata?.logoUrl} symbol={pool.tokenSymbol} accentColor={accentColor} />
+            <TokenAvatar logoUrl={pool.tokenLogoUrl || tokenMetadata?.logoUrl} symbol={pool.tokenSymbol} accentColor={accentColor} />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1 flex-wrap">
@@ -475,6 +569,13 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                 >
                   {currentStatus.label}
                 </span>
+                {(pool as any).isFree === 1 && (
+                  <span
+                    className="px-1.5 py-0.5 text-[8px] font-black uppercase border rounded-md tracking-wider shrink-0 text-green-400 border-green-400/50 bg-green-400/10 animate-pulse"
+                  >
+                    FREE
+                  </span>
+                )}
               </div>
 
               <p className="text-white/45 text-sm truncate mb-3">{pool.tokenName}</p>
@@ -519,12 +620,15 @@ function PoolCardComponent({ pool }: PoolCardProps) {
           <div className="mb-6 relative min-h-[180px] flex items-center">
             <div className="bg-white/[0.04] border border-white/10 rounded-2xl px-6 py-5 backdrop-blur-md w-[58%] z-20">
               <div className="text-[11px] text-white/45 uppercase tracking-[0.35em] mb-2 font-black">ENTRY</div>
-              <div className="text-[44px] font-mono font-black text-amber-100 leading-none">
-                {pool.entryAmount.toLocaleString()}
+              <div className="text-[44px] font-mono font-black text-amber-100 leading-none tabular-nums mb-1">
+                {formatCompactNumber(pool.entryAmount)}
+              </div>
+              <div className="text-[14px] font-mono font-bold text-white/50 leading-none tabular-nums">
+                ≈ ${entryUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
 
-            <VortexRing percentFull={percentFull} accentColor={accentColor} poolSize={totalPot} symbol={pool.tokenSymbol} />
+            <VortexRing percentFull={percentFull} accentColor={accentColor} poolSize={poolSizeUsd} poolSizeTokens={totalPot} symbol={pool.tokenSymbol} />
           </div>
 
           {/* Slots line (like image) */}
@@ -575,9 +679,13 @@ function PoolCardComponent({ pool }: PoolCardProps) {
               <Button
                 className={cn(
                   "w-full h-[56px] rounded-2xl",
-                  "bg-cyan-300 hover:bg-cyan-200 text-black",
+                  (pool as any).isFree === 1
+                    ? "bg-green-400 hover:bg-green-300 text-black"
+                    : "bg-cyan-300 hover:bg-cyan-200 text-black",
                   "font-black uppercase tracking-[0.28em] text-[12px]",
-                  "shadow-[0_10px_30px_rgba(34,211,238,0.25)]",
+                  (pool as any).isFree === 1
+                    ? "shadow-[0_10px_30px_rgba(74,222,128,0.25)]"
+                    : "shadow-[0_10px_30px_rgba(34,211,238,0.25)]",
                   "group/btn"
                 )}
                 onClick={handleJoinClick}
@@ -588,6 +696,11 @@ function PoolCardComponent({ pool }: PoolCardProps) {
                   <>
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                     Joining...
+                  </>
+                ) : (pool as any).isFree === 1 ? (
+                  <>
+                    JOIN FREE (NO COST)
+                    <ArrowRight className="w-5 h-5 ml-3 transition-transform group-hover/btn:translate-x-0.5" />
                   </>
                 ) : (
                   <>

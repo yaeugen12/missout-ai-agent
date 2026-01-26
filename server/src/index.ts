@@ -551,8 +551,27 @@ app.use((req, res, next) => {
   });
 
   process.on("unhandledRejection", (reason: any) => {
+    const errorMessage = reason?.message || String(reason);
+
+    // Check if this is a recoverable database connection error
+    const isRecoverableDbError =
+      errorMessage.includes("Connection terminated unexpectedly") ||
+      errorMessage.includes("connection terminated") ||
+      errorMessage.includes("Connection refused") ||
+      errorMessage.includes("ECONNRESET") ||
+      errorMessage.includes("ETIMEDOUT") ||
+      errorMessage.includes("client has encountered a connection error");
+
+    if (isRecoverableDbError) {
+      // Log warning but DON'T shutdown - pool will recover automatically
+      logger.warn("Recoverable database connection error (pool will retry)", {
+        reason: errorMessage,
+      });
+      return; // Don't trigger shutdown for recoverable errors
+    }
+
     logger.error("Unhandled Rejection", {
-      reason: reason?.message || reason,
+      reason: errorMessage,
       stack: reason?.stack,
     });
     gracefulShutdown("UNHANDLED_REJECTION");

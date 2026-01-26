@@ -490,6 +490,73 @@ export default function PoolDetails() {
                     </div>
                   </div>
                 )}
+
+                {/* Distribution Breakdown */}
+                <div className="mt-4 pt-3 border-t border-primary/10 space-y-2">
+                  <div className="text-[9px] font-tech text-muted-foreground uppercase tracking-[0.3em] mb-3 opacity-60">
+                    Distribution
+                  </div>
+
+                  {/* Winner 90% */}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-tech text-amber-100 opacity-80">Winner 90%</span>
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-amber-100">
+                        {((pool.totalPot || 0) * 0.90).toFixed(2)}
+                      </div>
+                      {pool.currentPriceUsd && pool.currentPriceUsd > 0 && (
+                        <div className="text-[10px] text-green-400 opacity-70">
+                          ${(((pool.totalPot || 0) * 0.90) * pool.currentPriceUsd).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dev 5% */}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-tech text-blue-300 opacity-70">Dev 5%</span>
+                    <div className="text-right">
+                      <div className="font-mono text-blue-300 opacity-80">
+                        {((pool.totalPot || 0) * 0.05).toFixed(2)}
+                      </div>
+                      {pool.currentPriceUsd && pool.currentPriceUsd > 0 && (
+                        <div className="text-[10px] text-green-400 opacity-60">
+                          ${(((pool.totalPot || 0) * 0.05) * pool.currentPriceUsd).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Burn 3.5% */}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-tech text-orange-400 opacity-70">Burn 3.5%</span>
+                    <div className="text-right">
+                      <div className="font-mono text-orange-400 opacity-80">
+                        {((pool.totalPot || 0) * 0.035).toFixed(2)}
+                      </div>
+                      {pool.currentPriceUsd && pool.currentPriceUsd > 0 && (
+                        <div className="text-[10px] text-green-400 opacity-60">
+                          ${(((pool.totalPot || 0) * 0.035) * pool.currentPriceUsd).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Treasury 1.5% */}
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-tech text-primary opacity-70">Treasury 1.5%</span>
+                    <div className="text-right">
+                      <div className="font-mono text-primary opacity-80">
+                        {((pool.totalPot || 0) * 0.015).toFixed(2)}
+                      </div>
+                      {pool.currentPriceUsd && pool.currentPriceUsd > 0 && (
+                        <div className="text-[10px] text-green-400 opacity-60">
+                          ${(((pool.totalPot || 0) * 0.015) * pool.currentPriceUsd).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -12,6 +12,7 @@ export const pools = pgTable("pools", {
   tokenSymbol: text("token_symbol").notNull(),
   tokenName: text("token_name").notNull(),
   tokenMint: text("token_mint"),
+  tokenLogoUrl: text("token_logo_url"),
   entryAmount: doublePrecision("entry_amount").notNull(),
   minParticipants: integer("min_participants").notNull(),
   maxParticipants: integer("max_participants").notNull(),
@@ -38,6 +39,10 @@ export const pools = pgTable("pools", {
 
   // Flags
   rentClaimed: integer("rent_claimed").default(0),
+
+  // Sponsored/Free Pools
+  isFree: integer("is_free").default(0), // 0 = normal, 1 = free to join
+  sponsoredBy: text("sponsored_by"), // wallet that sponsors the pool
 });
 
 // ============================================
@@ -147,7 +152,9 @@ export const referralClaims = pgTable("referral_claims", {
 // DRIZZLE SCHEMAS
 // ============================================
 
-export const insertPoolSchema = createInsertSchema(pools).omit({
+export const insertPoolSchema = createInsertSchema(pools, {
+  tokenLogoUrl: z.string().nullish(), // Accept string | null | undefined
+}).omit({
   id: true,
   participantsCount: true,
   status: true,
@@ -266,3 +273,22 @@ export const winnersFeed = pgTable("winners_feed", {
 
 export type WinnerFeedEntry = typeof winnersFeed.$inferSelect;
 export type InsertWinnerFeedEntry = typeof winnersFeed.$inferInsert;
+
+// ============================================
+// SPONSORED PARTICIPANTS (Free Pool Mapping)
+// ============================================
+
+export const sponsoredParticipants = pgTable("sponsored_participants", {
+  id: serial("id").primaryKey(),
+  poolId: integer("pool_id").notNull().references(() => pools.id, { onDelete: "cascade" }),
+  realWallet: text("real_wallet").notNull(), // actual participant who will receive payout
+  auxiliaryWallet: text("auxiliary_wallet").notNull(), // wallet used on-chain for this participant
+  auxiliaryIndex: integer("auxiliary_index").notNull(), // which auxiliary wallet (0-8)
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (table) => ({
+  uniquePoolReal: unique().on(table.poolId, table.realWallet),
+  poolIdIdx: index("sponsored_participants_pool_id_idx").on(table.poolId),
+}));
+
+export type SponsoredParticipant = typeof sponsoredParticipants.$inferSelect;
+export type InsertSponsoredParticipant = typeof sponsoredParticipants.$inferInsert;
