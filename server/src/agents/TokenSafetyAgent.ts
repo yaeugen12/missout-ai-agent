@@ -61,8 +61,9 @@ export class TokenSafetyAgent extends EventEmitter {
     super();
     this.agent = agent;
     
-    // Path to Rust binary
-    this.analyzerPath = path.join(process.cwd(), '..', 'rust-analyzer', 'target', 'release', 'analyze-token');
+    // Path to Rust binary (works for both dev and production)
+    // In production on Render, cwd is project root
+    this.analyzerPath = path.join(process.cwd(), 'rust-analyzer', 'target', 'release', 'analyze-token');
     
     // Check if Claude AI is available
     this.claudeEnabled = !!process.env.ANTHROPIC_API_KEY;
@@ -106,7 +107,7 @@ export class TokenSafetyAgent extends EventEmitter {
    * Ensure Rust binary is compiled (optional - throws if not available)
    */
   private async ensureBinaryBuilt(): Promise<void> {
-    const rustDir = path.join(process.cwd(), '..', 'rust-analyzer');
+    const rustDir = path.join(process.cwd(), 'rust-analyzer');
     
     // Check if Rust is available first
     try {
