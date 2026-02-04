@@ -16,6 +16,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useCreatePool } from "@/hooks/use-pools";
 import { useMissoutSDK } from "@/hooks/useMissoutSDK";
 import { protocolAdapter, TokenInfo, TokenPriceData } from "@/lib/protocolAdapter";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PublicKey } from "@solana/web3.js";
 
@@ -115,7 +116,7 @@ export default function CreatePool() {
     setShowAnalysis(true);
     
     try {
-      const response = await fetch('/api/agent/analyze-token', {
+      const response = await apiFetch('/api/agent/analyze-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mintAddress }),

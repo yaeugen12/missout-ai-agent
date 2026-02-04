@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
+import { apiFetch } from "@/lib/api";
 import {
   Activity,
   TrendingUp,
@@ -103,9 +104,9 @@ export default function AgentDashboard() {
   const fetchDashboardData = async () => {
     try {
       const [statusRes, analyticsRes, securityRes] = await Promise.all([
-        fetch('/api/agent/status'),
-        fetch('/api/agent/analytics'),
-        fetch('/api/agent/security'),
+        apiFetch('/api/agent/status'),
+        apiFetch('/api/agent/analytics'),
+        apiFetch('/api/agent/security'),
       ]);
 
       const statusData = await statusRes.json();

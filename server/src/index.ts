@@ -378,7 +378,12 @@ app.use((req, res, next) => {
     
     if (existsSync(publicPath)) {
       app.use(express.static(publicPath));
-      app.get("*", (_req, res) => {
+      // Catch-all for SPA routing - but exclude API routes
+      app.get("*", (req, res) => {
+        // Don't intercept API routes
+        if (req.path.startsWith("/api/")) {
+          return res.status(404).json({ error: "API endpoint not found" });
+        }
         res.sendFile(resolve(publicPath, "index.html"));
       });
       logger.info('[Production] Serving frontend from client/dist');
