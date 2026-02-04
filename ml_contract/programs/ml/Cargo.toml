@@ -1,0 +1,44 @@
+[package]
+name = "ml"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "ml"
+path = "src/lib.rs"
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = "0.31.1"
+switchboard-on-demand = "0.9.3"
+sha2 = "0.10.8"
+constant_time_eq = "=0.3.1"
+blake3 = "=1.5.4"
+
+# Let anchor-spl manage spl-token versions
+spl-token = { version = "6", features = ["no-entrypoint"] }
+spl-token-2022 = { version = "6", features = ["no-entrypoint"] }
+
+# 🔐 Production ZK Range Proofs
+# Note: These are OPTIONAL dependencies, only used for off-chain verification
+curve25519-dalek = { version = "3.2.0", default-features = false, features = ["u64_backend"], optional = true }
+bulletproofs = { version = "2.0.0", default-features = false, optional = true }
+merlin = { version = "3.0.0", default-features = false, optional = true }
+
+[features]
+# Enable full Bulletproofs verification (OFF-CHAIN ONLY - not for BPF)
+range-proofs = ["curve25519-dalek", "bulletproofs", "merlin"]
+cpi = []
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+mainnet = []
+default = []
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-spl/idl-build"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

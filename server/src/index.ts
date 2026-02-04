@@ -270,6 +270,18 @@ app.use((req, res, next) => {
   await priceTrackingService.resumeTrackingForActivePools();
   log("Price tracking service initialized and resumed for active pools");
 
+  // ============================================
+  // 🤖 INITIALIZE AGENT LAYER (Colosseum Hackathon)
+  // ============================================
+  try {
+    const { initializeMissoutAgent } = await import("./agents/index.js");
+    await initializeMissoutAgent();
+    log("🤖 Missout Agent Layer initialized successfully");
+  } catch (err: any) {
+    log(`⚠️ Agent Layer initialization failed: ${err.message}`, "WARN");
+    log("Application will continue without agent layer", "WARN");
+  }
+
   app.get("/health", async (_req, res) => {
     try {
       await dbPool.query("SELECT 1");
@@ -319,6 +331,19 @@ app.use((req, res, next) => {
           running: monitorStatus.running,
           processingCount: monitorStatus.processingCount,
         },
+        agent: await (async () => {
+          try {
+            const { getMissoutAgent } = await import("./agents/index.js");
+            const agent = getMissoutAgent();
+            const status = agent.getStatus();
+            return {
+              running: status.running,
+              metrics: status.metrics,
+            };
+          } catch {
+            return { running: false, status: "not_initialized" };
+          }
+        })(),
         memory: {
           heapUsed: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
           heapTotal: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
@@ -458,6 +483,16 @@ app.use((req, res, next) => {
 
       await poolMonitor.stop();
       logger.info("✅ Pool Monitor stopped");
+
+      // Stop agent layer
+      try {
+        const { getMissoutAgent } = await import("./agents/index.js");
+        const agent = getMissoutAgent();
+        await agent.stop();
+        logger.info("✅ Agent Layer stopped");
+      } catch (err: any) {
+        logger.warn("Agent Layer stop skipped:", err.message);
+      }
 
       // Stop price tracking service
       if (priceTrackingService) {

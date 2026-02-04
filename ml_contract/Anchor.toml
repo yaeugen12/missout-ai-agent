@@ -1,0 +1,25 @@
+[toolchain]
+anchor_version = "0.31.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+ml = "4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm"
+
+[programs.devnet]
+ml = "4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm"
+
+[programs.mainnet]
+ml = "4wgBJUHydWXXJKXYsmdGoGw1ufC3dxz8q2mukFYaAhSm"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "mainnet"
+wallet = "./keys-mainnet/deployer.json"
+
+[scripts]
+test = "node --loader ts-node/esm ./node_modules/mocha/bin/mocha.js -t 1000000 \"tests/**/*.ts\""

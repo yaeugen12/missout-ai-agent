@@ -3,7 +3,7 @@ import { useWallet } from "@/hooks/use-wallet";
 import { useWalletBalances } from "@/hooks/use-wallet-balances";
 import { useMyProfile } from "@/hooks/use-profile";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, LogOut, Copy, Check, UserCircle, History } from "lucide-react";
+import { Wallet, Plus, Trophy, Atom, Terminal, ChevronDown, Loader2, LogOut, Copy, Check, UserCircle, History, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalMenu } from "@/components/GlobalMenu";
 import { ProfileEditModal } from "@/components/ProfileEditModal";
@@ -34,7 +34,7 @@ export function Navbar() {
   const navItems = [
     { href: "/initialize", label: "Initialize", icon: Plus },
     { href: "/terminal", label: "Pool Terminal", icon: Atom },
-    { href: "/discovery", label: "Discovery (V2-soon)", icon: Terminal },
+    { href: "/agent", label: "AI Agent", icon: Brain },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ];
 

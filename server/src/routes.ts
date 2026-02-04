@@ -2396,19 +2396,56 @@ export async function registerRoutes(
 
       console.log("[Jupiter Proxy] Fetching quote:", jupiterUrl);
 
-      const response = await fetch(jupiterUrl);
-      const data = await response.json();
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      if (!response.ok) {
-        console.error("[Jupiter Proxy] Quote error:", response.status, data);
-        return res.status(response.status).json(data);
+      try {
+        const headers: Record<string, string> = {
+          'Accept': 'application/json',
+          'User-Agent': 'Missout/1.0',
+        };
+        
+        // Add API key if available
+        if (process.env.JUPITER_API_KEY) {
+          headers['x-api-key'] = process.env.JUPITER_API_KEY;
+        }
+        
+        const response = await fetch(jupiterUrl, {
+          signal: controller.signal,
+          headers,
+        });
+        clearTimeout(timeoutId);
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("[Jupiter Proxy] Quote error:", response.status, data);
+          return res.status(response.status).json(data);
+        }
+
+        console.log("[Jupiter Proxy] Quote successful");
+        res.json(data);
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchErr.name === 'AbortError') {
+          console.error("[Jupiter Proxy] Request timeout after 10s");
+          return res.status(504).json({ 
+            error: "Jupiter API timeout", 
+            details: "The request took too long. Jupiter API may be experiencing issues." 
+          });
+        }
+        
+        throw fetchErr; // Re-throw other errors
       }
-
-      console.log("[Jupiter Proxy] Quote successful");
-      res.json(data);
     } catch (err: any) {
       console.error("[Jupiter Proxy] Quote fetch error:", err);
-      res.status(500).json({ error: "Failed to fetch quote from Jupiter", details: err.message });
+      res.status(500).json({ 
+        error: "Failed to fetch quote from Jupiter", 
+        details: err.message || "Network error",
+        suggestion: "Jupiter API may be temporarily unavailable. Please try again in a moment."
+      });
     }
   });
 
@@ -2418,26 +2455,72 @@ export async function registerRoutes(
 
       console.log("[Jupiter Proxy] Forwarding swap request");
 
-      const response = await fetch(jupiterUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req.body),
-      });
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for swap
 
-      const data = await response.json();
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": "Missout/1.0",
+        };
+        
+        // Add API key if available
+        if (process.env.JUPITER_API_KEY) {
+          headers['x-api-key'] = process.env.JUPITER_API_KEY;
+        }
+        
+        const response = await fetch(jupiterUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(req.body),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        console.error("[Jupiter Proxy] Swap error:", response.status, data);
-        return res.status(response.status).json(data);
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error("[Jupiter Proxy] Swap error:", response.status, data);
+          return res.status(response.status).json(data);
+        }
+
+        console.log("[Jupiter Proxy] Swap successful");
+        res.json(data);
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchErr.name === 'AbortError') {
+          console.error("[Jupiter Proxy] Swap timeout after 15s");
+          return res.status(504).json({ 
+            error: "Jupiter API timeout", 
+            details: "The swap request took too long. Jupiter API may be experiencing issues." 
+          });
+        }
+        
+        throw fetchErr; // Re-throw other errors
       }
-
-      console.log("[Jupiter Proxy] Swap successful");
-      res.json(data);
     } catch (err: any) {
       console.error("[Jupiter Proxy] Swap fetch error:", err);
-      res.status(500).json({ error: "Failed to execute swap with Jupiter", details: err.message });
+      res.status(500).json({ 
+        error: "Failed to execute swap with Jupiter", 
+        details: err.message || "Network error",
+        suggestion: "Jupiter API may be temporarily unavailable. Please try again in a moment."
+      });
     }
   });
+
+  // ============================================
+  // 🤖 AGENT LAYER ROUTES (Colosseum Hackathon)
+  // ============================================
+  try {
+    const { default: agentRoutes } = await import("./agents/routes.js");
+    app.use("/api/agent", agentRoutes);
+    console.log("[Agent Layer] ✅ Agent routes registered at /api/agent/*");
+  } catch (error: any) {
+    console.log("[Agent Layer] ⚠️ Agent layer not available:", error.message);
+  }
 
   return httpServer;
 }

@@ -28,6 +28,7 @@ import Donate from "@/pages/Donate";
 import HowItWorks from "@/pages/HowItWorks";
 import Claims from "@/pages/Claims";
 import ExternalRedirect from "@/pages/ExternalRedirect";
+import AgentDashboard from "@/pages/AgentDashboard";
 
 function Router() {
   return (
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/donate" component={Donate} />
       <Route path="/how-it-works" component={HowItWorks} />
       <Route path="/claims" component={Claims} />
+      <Route path="/agent" component={AgentDashboard} />
       <Route path="/blog">
         {() => (
           <ExternalRedirect

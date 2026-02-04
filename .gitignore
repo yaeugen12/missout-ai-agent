@@ -13,6 +13,7 @@ temp/
 .env
 .env.*
 !env.example
+colosseum_credentials.md
 
 # =========================
 # Logs
@@ -92,6 +93,13 @@ tsconfig.tsbuildinfo
 # =========================
 coverage/
 *.lcov
+
+# =========================
+# Rust / Cargo
+# =========================
+rust-analyzer/target/
+rust-analyzer/Cargo.lock
+**/*.rs.bk
 
 # =========================
 # Misc

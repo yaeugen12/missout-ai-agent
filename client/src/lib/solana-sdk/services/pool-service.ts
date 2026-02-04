@@ -483,6 +483,21 @@ export async function claimRefund(poolId: string): Promise<{ tx: string }> {
   // Build instructions array
   const instructions: TransactionInstruction[] = [];
 
+  // Check if user token account exists, if not create it
+  const userTokenInfo = await conn.getAccountInfo(userToken);
+  if (!userTokenInfo) {
+    console.log("[claimRefund] Creating user token account...");
+    const createUserAtaIx = createAssociatedTokenAccountInstruction(
+      userPk,
+      userToken,
+      userPk,
+      poolState.mint,
+      tokenProgramId,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+    instructions.push(createUserAtaIx);
+  }
+
   // Check if treasury token account exists, if not create it
   const treasuryTokenInfo = await conn.getAccountInfo(treasuryToken);
   if (!treasuryTokenInfo) {

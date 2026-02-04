@@ -1,7 +1,8 @@
 import { Connection, VersionedTransaction, PublicKey } from "@solana/web3.js";
 
-// Use server proxy to work around DNS issues on Windows
-const JUPITER_QUOTE_API = "/api/jupiter";
+// Direct Jupiter API with client-side API key
+const JUPITER_QUOTE_API = "https://quote-api.jup.ag/v6";
+const JUPITER_API_KEY = import.meta.env.VITE_JUPITER_API_KEY || "a0606ac5-20d2-4cf3-bf18-bdeb2d26e118";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 export interface JupiterQuote {
@@ -36,7 +37,12 @@ export async function getJupiterQuote(
     
     console.log("[Jupiter] Fetching quote from:", url);
     
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'x-api-key': JUPITER_API_KEY,
+        'Accept': 'application/json',
+      },
+    });
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -68,7 +74,11 @@ export async function executeJupiterSwap(
 ): Promise<SwapResult> {
   const swapResponse = await fetch(`${JUPITER_QUOTE_API}/swap`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "x-api-key": JUPITER_API_KEY,
+      "Accept": "application/json",
+    },
     body: JSON.stringify({
       quoteResponse: quote,
       userPublicKey,

@@ -70,6 +70,11 @@ export default function CreatePool() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [showSlippageSettings, setShowSlippageSettings] = useState(false);
 
+  // AI Safety Analysis
+  const [aiAnalysis, setAiAnalysis] = useState<any | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { isConnected, address, connect } = useWallet();
@@ -100,6 +105,46 @@ export default function CreatePool() {
       toast({ variant: "destructive", title: "Fetch Failed", description: e.message });
     } finally {
       setIsFetching(false);
+    }
+  };
+
+  const handleAnalyzeToken = async () => {
+    if (!mintAddress) return;
+
+    setIsAnalyzing(true);
+    setShowAnalysis(true);
+    
+    try {
+      const response = await fetch('/api/agent/analyze-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mintAddress }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        setAiAnalysis(result.data);
+        toast({
+          title: "AI Analysis Complete",
+          description: `Token scored ${result.data.safeScore.toFixed(1)}/100 (${result.data.riskLevel})`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Analysis Failed",
+          description: result.error || "Could not analyze token",
+        });
+      }
+    } catch (error: any) {
+      console.error('AI Analysis error:', error);
+      toast({
+        variant: "destructive",
+        title: "Analysis Error",
+        description: error.message || "Failed to connect to AI agent",
+      });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -473,6 +518,169 @@ export default function CreatePool() {
                   </div>
                 )}
 
+                {/* AI Safety Analysis */}
+                {!showAnalysis ? (
+                  <Button
+                    onClick={handleAnalyzeToken}
+                    disabled={isAnalyzing}
+                    className="w-full h-12 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/30 text-black font-bold"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Analyzing with AI Agent...
+                      </>
+                    ) : (
+                      <>
+                        <FlaskConical className="w-4 h-4 mr-2" />
+                        Analyze Token Safety with AI
+                      </>
+                    )}
+                  </Button>
+                ) : aiAnalysis ? (
+                  <div className={cn(
+                    "p-4 rounded-lg border-2 space-y-4",
+                    aiAnalysis.riskLevel === 'critical' && "bg-red-500/10 border-red-500/50",
+                    aiAnalysis.riskLevel === 'high' && "bg-orange-500/10 border-orange-500/50",
+                    aiAnalysis.riskLevel === 'medium' && "bg-yellow-500/10 border-yellow-500/50",
+                    aiAnalysis.riskLevel === 'low' && "bg-green-500/10 border-green-500/50"
+                  )}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FlaskConical className={cn(
+                          "w-5 h-5",
+                          aiAnalysis.riskLevel === 'critical' && "text-red-400",
+                          aiAnalysis.riskLevel === 'high' && "text-orange-400",
+                          aiAnalysis.riskLevel === 'medium' && "text-yellow-400",
+                          aiAnalysis.riskLevel === 'low' && "text-green-400"
+                        )} />
+                        <span className="text-sm font-bold uppercase tracking-wide">AI Safety Analysis</span>
+                      </div>
+                      <Badge className={cn(
+                        "text-xs font-mono",
+                        aiAnalysis.riskLevel === 'critical' && "bg-red-500/20 text-red-400 border-red-500/50",
+                        aiAnalysis.riskLevel === 'high' && "bg-orange-500/20 text-orange-400 border-orange-500/50",
+                        aiAnalysis.riskLevel === 'medium' && "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
+                        aiAnalysis.riskLevel === 'low' && "bg-green-500/20 text-green-400 border-green-500/50"
+                      )}>
+                        {aiAnalysis.riskLevel?.toUpperCase() || 'UNKNOWN'}
+                      </Badge>
+                    </div>
+
+                    {/* Safe Score */}
+                    <div className="flex items-center justify-between p-3 bg-black/30 rounded-lg">
+                      <span className="text-sm font-medium">Safety Score</span>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-32 bg-black/50 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all",
+                              aiAnalysis.safeScore >= 70 && "bg-green-500",
+                              aiAnalysis.safeScore >= 50 && aiAnalysis.safeScore < 70 && "bg-yellow-500",
+                              aiAnalysis.safeScore >= 30 && aiAnalysis.safeScore < 50 && "bg-orange-500",
+                              aiAnalysis.safeScore < 30 && "bg-red-500"
+                            )}
+                            style={{ width: `${Math.min(100, Math.max(0, aiAnalysis.safeScore || 0))}%` }}
+                          />
+                        </div>
+                        <span className={cn(
+                          "text-lg font-mono font-bold",
+                          aiAnalysis.safeScore >= 70 && "text-green-400",
+                          aiAnalysis.safeScore >= 50 && aiAnalysis.safeScore < 70 && "text-yellow-400",
+                          aiAnalysis.safeScore >= 30 && aiAnalysis.safeScore < 50 && "text-orange-400",
+                          aiAnalysis.safeScore < 30 && "text-red-400"
+                        )}>
+                          {aiAnalysis.safeScore?.toFixed(1) || '0.0'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Recommendation */}
+                    <div className="p-3 bg-black/30 rounded-lg">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Pattern Detection Verdict</div>
+                      <p className="text-sm leading-relaxed">{aiAnalysis.recommendation}</p>
+                    </div>
+
+                    {/* Claude AI Recommendation (if available) */}
+                    {aiAnalysis.aiRecommendation && (
+                      <div className="p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
+                              <span className="text-xs font-bold text-purple-400">AI</span>
+                            </div>
+                            <span className="text-xs font-medium text-purple-300">Claude's Analysis</span>
+                          </div>
+                          {aiAnalysis.aiConfidence && (
+                            <Badge className="text-xs bg-purple-500/20 text-purple-300 border-purple-500/50">
+                              {aiAnalysis.aiConfidence}% confident
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm leading-relaxed text-purple-100">{aiAnalysis.aiRecommendation}</p>
+                      </div>
+                    )}
+
+                    {/* Key Reasons */}
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-muted-foreground">Detected Issues</div>
+                      {aiAnalysis.reasons.slice(0, 5).map((reason: string, idx: number) => (
+                        <div key={idx} className="flex items-start gap-2 text-xs p-2 bg-black/20 rounded">
+                          {reason.startsWith('❌') ? (
+                            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                          ) : reason.startsWith('⚠️') ? (
+                            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                          )}
+                          <span className="leading-relaxed">{reason.replace(/^[❌⚠️✓]\s*/, '')}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Metrics Summary */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
+                      <div className="p-2 bg-black/20 rounded text-xs">
+                        <div className="text-muted-foreground mb-1">Whale Concentration</div>
+                        <div className="font-mono font-bold">{aiAnalysis.metrics.whaleConcentration?.toFixed(1) || '0.0'}%</div>
+                      </div>
+                      <div className="p-2 bg-black/20 rounded text-xs">
+                        <div className="text-muted-foreground mb-1">Holders</div>
+                        <div className="font-mono font-bold">{aiAnalysis.metrics.holderCount || 0}</div>
+                      </div>
+                      <div className="p-2 bg-black/20 rounded text-xs">
+                        <div className="text-muted-foreground mb-1">Token Age</div>
+                        <div className="font-mono font-bold">{aiAnalysis.metrics.tokenAgeHours?.toFixed(1) || '0.0'}h</div>
+                      </div>
+                      <div className="p-2 bg-black/20 rounded text-xs">
+                        <div className="text-muted-foreground mb-1">Transactions</div>
+                        <div className="font-mono font-bold">{aiAnalysis.metrics.transactionCount || 0}</div>
+                      </div>
+                    </div>
+
+                    {/* Re-analyze button */}
+                    <Button
+                      onClick={handleAnalyzeToken}
+                      disabled={isAnalyzing}
+                      variant="ghost"
+                      className="w-full h-8 text-xs"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                          Re-analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3 h-3 mr-2" />
+                          Re-analyze Token
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                ) : null}
+
                 {!tokenInfo.metadataFound && (
                   <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                     <p className="text-[10px] text-yellow-400 font-tech uppercase tracking-tighter flex items-center gap-1">
@@ -481,132 +689,8 @@ export default function CreatePool() {
                   </div>
                 )}
 
-                <div className="p-4 bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-purple-400" />
-                      <span className="text-sm font-tech font-bold text-white uppercase tracking-wide">Buy {tokenInfo.symbol} with SOL</span>
-                    </div>
-                    <button 
-                      onClick={() => setShowSlippageSettings(!showSlippageSettings)}
-                      className="p-1.5 hover:bg-white/10 rounded-md transition-colors"
-                    >
-                      <Settings2 className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </div>
-
-                  {showSlippageSettings && (
-                    <div className="p-3 bg-black/30 rounded-lg space-y-2">
-                      <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">
-                        Slippage Tolerance
-                      </Label>
-                      <div className="flex gap-2">
-                        {[50, 100, 200, 500].map((bps) => (
-                          <Button
-                            key={bps}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSlippageBps(bps)}
-                            className={cn(
-                              "flex-1 h-8 text-[10px] font-mono border-white/5",
-                              slippageBps === bps && "bg-purple-500/20 border-purple-500 text-purple-400"
-                            )}
-                          >
-                            {(bps / 100).toFixed(1)}%
-                          </Button>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2 pt-1">
-                        <Input
-                          type="number"
-                          placeholder="Custom %"
-                          value={slippageBps / 100}
-                          onChange={(e) => setSlippageBps(Math.round(parseFloat(e.target.value || "0") * 100))}
-                          className="bg-black/50 border-white/10 h-8 text-xs font-mono w-24"
-                        />
-                        <span className="text-xs text-muted-foreground">%</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">
-                      You Pay (SOL)
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        placeholder="0.00"
-                        value={solAmount}
-                        onChange={(e) => setSolAmount(e.target.value)}
-                        className="bg-black/50 border-white/10 h-12 text-xl font-mono focus:border-purple-500/50 pr-16"
-                      />
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        {isQuoting && <Loader2 className="w-4 h-4 animate-spin text-purple-400" />}
-                        <span className="text-sm font-mono text-muted-foreground">SOL</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {jupiterQuote && (
-                    <div className="p-3 bg-black/40 rounded-lg space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-tech uppercase tracking-widest text-muted-foreground">You Receive</span>
-                        <button onClick={handleGetQuote} className="p-1 hover:bg-white/10 rounded transition-colors" data-testid="button-refresh-quote">
-                          <RefreshCw className={cn("w-3 h-3 text-muted-foreground", isQuoting && "animate-spin")} />
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xl font-mono font-bold text-white">
-                          {formatTokenAmount(jupiterQuote.outAmount, tokenInfo.decimals)}
-                        </span>
-                        <span className="text-sm font-mono text-purple-400">{tokenInfo.symbol}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                        <span>Price Impact</span>
-                        <span className={parseFloat(jupiterQuote.priceImpactPct) > 1 ? "text-yellow-400" : "text-green-400"}>
-                          {parseFloat(jupiterQuote.priceImpactPct).toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {!jupiterQuote && solAmount && parseFloat(solAmount) > 0 && !isQuoting && (
-                    <Button
-                      onClick={handleGetQuote}
-                      className="w-full h-10 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/50 font-bold"
-                      data-testid="button-get-quote"
-                    >
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                      Get Swap Quote
-                    </Button>
-                  )}
-
-                  <Button
-                    onClick={handleSwap}
-                    disabled={!jupiterQuote || isSwapping || !isConnected}
-                    className="w-full h-10 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white font-bold"
-                    data-testid="button-swap-jupiter"
-                  >
-                    {isSwapping ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Swapping...
-                      </>
-                    ) : !isConnected ? (
-                      "Connect Wallet to Swap"
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Swap via Jupiter
-                      </>
-                    )}
-                  </Button>
-
-                  <p className="text-[9px] text-muted-foreground text-center">
-                    Powered by Jupiter. 0.5% fee goes to platform.
-                  </p>
-                </div>
+                {/* Jupiter Swap disabled due to DNS resolution issues */}
+                {/* Users can purchase tokens directly from Jupiter.ag or other DEXs */}
 
                 <div className="flex gap-3">
                   <Button 
