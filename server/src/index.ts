@@ -367,12 +367,23 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
     console.log("[VITE] ✅ Vite dev server setup complete");
   } else {
-    // Production static serving - fallback for index.html
+    // Production: Frontend is deployed separately on Vercel
+    // Backend is API-only on Render
+    logger.info('[Production] Backend is API-only - frontend served by Vercel');
+    
+    // Optional: Serve static files if client/dist exists (monolithic deploy)
     const publicPath = resolve(process.cwd(), "client", "dist");
-    app.use(express.static(publicPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(resolve(publicPath, "index.html"));
-    });
+    const { existsSync } = await import('fs');
+    
+    if (existsSync(publicPath)) {
+      app.use(express.static(publicPath));
+      app.get("*", (_req, res) => {
+        res.sendFile(resolve(publicPath, "index.html"));
+      });
+      logger.info('[Production] Serving frontend from client/dist');
+    } else {
+      logger.info('[Production] No client/dist found - API-only mode (expected on Render)');
+    }
   }
 
   // Sentry error handler (must be after all routes)
