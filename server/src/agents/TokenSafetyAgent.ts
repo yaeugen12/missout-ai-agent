@@ -52,6 +52,8 @@ export class TokenSafetyAgent extends EventEmitter {
   private agent: MissoutAgent;
   private isRunning: boolean = false;
   private analyzerPath: string;
+  private rustAvailable: boolean = false;
+  private claudeEnabled: boolean = false;
   private analysisCache: Map<string, { result: TokenSafetyAnalysis; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 300000; // 5 minutes
 
@@ -61,6 +63,9 @@ export class TokenSafetyAgent extends EventEmitter {
     
     // Path to Rust binary
     this.analyzerPath = path.join(process.cwd(), '..', 'rust-analyzer', 'target', 'release', 'analyze-token');
+    
+    // Check if Claude AI is available
+    this.claudeEnabled = !!process.env.ANTHROPIC_API_KEY;
   }
 
   async start(): Promise<void> {
@@ -72,10 +77,16 @@ export class TokenSafetyAgent extends EventEmitter {
     // Try to ensure Rust binary is built (optional in production)
     try {
       await this.ensureBinaryBuilt();
+      this.rustAvailable = true;
       logger.info('[TokenSafetyAgent] ✅ Rust analyzer available');
     } catch (error: any) {
+      this.rustAvailable = false;
       logger.warn('[TokenSafetyAgent] ⚠️ Rust analyzer not available:', error.message);
-      logger.warn('[TokenSafetyAgent] Will use Claude AI only for token analysis');
+      if (this.claudeEnabled) {
+        logger.warn('[TokenSafetyAgent] Will use Claude AI only for token analysis');
+      } else {
+        logger.error('[TokenSafetyAgent] No fallback available - token analysis will fail!');
+      }
     }
 
     logger.info('[TokenSafetyAgent] ✅ Token Safety Agent started');
@@ -197,7 +208,17 @@ export class TokenSafetyAgent extends EventEmitter {
 
       return analysis;
     } catch (error: any) {
-      logger.error('[TokenSafetyAgent] Analysis error:', error.message);
+      logger.error('[TokenSafetyAgent] Rust analysis error:', error.message);
+      
+      // Fallback to Claude AI if available
+      if (this.claudeEnabled) {
+        logger.info('[TokenSafetyAgent] Falling back to Claude AI analysis...');
+        try {
+          return await this.analyzeTokenWithClaude(mintAddress);
+        } catch (claudeError: any) {
+          logger.error('[TokenSafetyAgent] Claude fallback also failed:', claudeError.message);
+        }
+      }
       
       // Return safe defaults on error (fail-safe)
       return {
@@ -350,6 +371,125 @@ Respond in JSON format:
   }
 
   /**
+   * Analyze token using Claude AI only (fallback when Rust unavailable)
+   */
+  private async analyzeTokenWithClaude(mintAddress: string): Promise<TokenSafetyAnalysis> {
+    logger.info('[TokenSafetyAgent] Analyzing with Claude AI:', mintAddress.slice(0, 8) + '...');
+
+    // Fetch basic on-chain data via Helius
+    const heliusApiKey = process.env.HELIUS_API_KEY;
+    if (!heliusApiKey) {
+      throw new Error('HELIUS_API_KEY not configured for Claude fallback');
+    }
+
+    // Get token metadata
+    const metadataResponse = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'token-analysis',
+        method: 'getAsset',
+        params: { id: mintAddress },
+      }),
+    });
+
+    const metadataData = await metadataResponse.json();
+    const tokenData = metadataData.result || {};
+
+    // Build prompt for Claude
+    const prompt = `You are a Solana token safety analyst. Analyze this token for rug pull risk.
+
+TOKEN: ${mintAddress}
+METADATA: ${JSON.stringify(tokenData, null, 2)}
+
+Analyze for:
+1. Whale concentration risk (large holders)
+2. Liquidity and market cap
+3. Token age and history
+4. Holder distribution
+5. Suspicious patterns
+
+Respond ONLY with valid JSON (no markdown, no extra text):
+{
+  "safeScore": 0-100,
+  "riskLevel": "low" | "medium" | "high" | "critical",
+  "recommendation": "Brief recommendation",
+  "reasons": ["reason1", "reason2"],
+  "confidence": 0-100
+}`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: prompt,
+        }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Claude API error: ${response.status} - ${error}`);
+    }
+
+    const data = await response.json();
+    const content = data.content[0].text;
+
+    // Parse JSON response (handle markdown code blocks)
+    let jsonStr = content.trim();
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+
+    const claudeResult = JSON.parse(jsonStr);
+
+    const analysis: TokenSafetyAnalysis = {
+      mintAddress,
+      safeScore: claudeResult.safeScore,
+      riskLevel: claudeResult.riskLevel,
+      recommendation: claudeResult.recommendation,
+      reasons: claudeResult.reasons,
+      aiRecommendation: claudeResult.recommendation,
+      aiConfidence: claudeResult.confidence,
+      metrics: {
+        whaleConcentration: 0,
+        holderCount: tokenData.ownership?.owner ? 1 : 0,
+        transactionCount: 0,
+        topHolderPercent: 0,
+        tokenAgeHours: 0,
+        bondingCurveProgress: 0,
+        botActivityDetected: false,
+        coordinatedPump: false,
+        distributionTop10: 0,
+      },
+    };
+
+    // Cache result
+    this.analysisCache.set(mintAddress, {
+      result: analysis,
+      timestamp: Date.now(),
+    });
+
+    logger.info('[TokenSafetyAgent] Claude analysis complete:', {
+      mint: mintAddress.slice(0, 8) + '...',
+      score: analysis.safeScore,
+      risk: analysis.riskLevel,
+    });
+
+    return analysis;
+  }
+
+  /**
    * Get status
    */
   getStatus() {
@@ -357,7 +497,7 @@ Respond in JSON format:
       running: this.isRunning,
       cacheSize: this.analysisCache.size,
       analyzerPath: this.analyzerPath,
-      claudeEnabled: !!process.env.ANTHROPIC_API_KEY,
+      claudeEnabled: this.claudeEnabled,
     };
   }
 
