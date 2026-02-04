@@ -11,7 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "chmod +x scripts/migrate-database.sh && ./scripts/migrate-database.sh",
+    "db:migrate": "tsx server/src/scripts/migrate-database.ts",
     "db:test": "psql $DATABASE_URL -c 'SELECT NOW();'",
     "db:backup": "pg_dump $DIRECT_DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql",
     "health": "curl -s http://localhost:5000/health | jq",
