@@ -277,11 +277,7 @@ app.use((req, res, next) => {
     const { initializeMissoutAgent } = await import("./agents/index.js");
     await initializeMissoutAgent();
     log("🤖 Missout Agent Layer initialized successfully");
-    
-    // Register agent API routes
-    const agentRoutes = (await import("./agents/routes.js")).default;
-    app.use("/api/agent", agentRoutes);
-    log("🤖 Agent API routes registered at /api/agent");
+    // Note: Agent routes are registered in routes.ts
   } catch (err: any) {
     log(`⚠️ Agent Layer initialization failed: ${err.message}`, "WARN");
     log("Application will continue without agent layer", "WARN");
