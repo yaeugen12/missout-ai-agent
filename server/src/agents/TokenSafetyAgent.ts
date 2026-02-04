@@ -69,8 +69,14 @@ export class TokenSafetyAgent extends EventEmitter {
     logger.info('[TokenSafetyAgent] 🛡️ Starting Token Safety Agent...');
     this.isRunning = true;
 
-    // Ensure Rust binary is built
-    await this.ensureBinaryBuilt();
+    // Try to ensure Rust binary is built (optional in production)
+    try {
+      await this.ensureBinaryBuilt();
+      logger.info('[TokenSafetyAgent] ✅ Rust analyzer available');
+    } catch (error: any) {
+      logger.warn('[TokenSafetyAgent] ⚠️ Rust analyzer not available:', error.message);
+      logger.warn('[TokenSafetyAgent] Will use Claude AI only for token analysis');
+    }
 
     logger.info('[TokenSafetyAgent] ✅ Token Safety Agent started');
   }
@@ -86,10 +92,17 @@ export class TokenSafetyAgent extends EventEmitter {
   }
 
   /**
-   * Ensure Rust binary is compiled
+   * Ensure Rust binary is compiled (optional - throws if not available)
    */
   private async ensureBinaryBuilt(): Promise<void> {
     const rustDir = path.join(process.cwd(), '..', 'rust-analyzer');
+    
+    // Check if Rust is available first
+    try {
+      await execAsync('which cargo');
+    } catch {
+      throw new Error('Cargo not found - Rust analyzer unavailable in this environment');
+    }
     
     try {
       const { stdout, stderr } = await execAsync('cargo build --release', {
@@ -98,6 +111,7 @@ export class TokenSafetyAgent extends EventEmitter {
           ...process.env,
           PATH: `${process.env.HOME}/.cargo/bin:${process.env.PATH}`,
         },
+        timeout: 60000, // 1 minute timeout
       });
       
       if (stderr && !stderr.includes('Finished')) {
@@ -106,8 +120,7 @@ export class TokenSafetyAgent extends EventEmitter {
       
       logger.info('[TokenSafetyAgent] ✅ Rust analyzer binary built successfully');
     } catch (error: any) {
-      logger.error('[TokenSafetyAgent] Failed to build Rust binary:', error.message);
-      throw new Error('Rust analyzer binary build failed');
+      throw new Error(`Rust analyzer binary build failed: ${error.message}`);
     }
   }
 
