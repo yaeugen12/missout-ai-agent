@@ -15,6 +15,7 @@
 import { EventEmitter } from 'events';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { existsSync } from 'fs';
 import { logger } from '../logger';
 import type { MissoutAgent } from './MissoutAgent';
 import path from 'path';
@@ -61,12 +62,41 @@ export class TokenSafetyAgent extends EventEmitter {
     super();
     this.agent = agent;
     
-    // Path to Rust binary (works for both dev and production)
-    // In production on Render, cwd is project root
-    this.analyzerPath = path.join(process.cwd(), 'rust-analyzer', 'target', 'release', 'analyze-token');
+    // Find rust-analyzer directory (handles different working directories)
+    const rustDir = this.findRustAnalyzerDir();
+    this.analyzerPath = path.join(rustDir, 'target', 'release', 'analyze-token');
     
     // Check if Claude AI is available
     this.claudeEnabled = !!process.env.ANTHROPIC_API_KEY;
+  }
+
+  /**
+   * Find rust-analyzer directory (works in different environments)
+   */
+  private findRustAnalyzerDir(): string {
+    const cwd = process.cwd();
+    
+    // Try current directory first (dev mode)
+    const localPath = path.join(cwd, 'rust-analyzer');
+    if (existsSync(localPath)) {
+      return localPath;
+    }
+    
+    // Try parent directory (Render production: cwd is /opt/render/project/src)
+    const parentPath = path.join(cwd, '..', 'rust-analyzer');
+    if (existsSync(parentPath)) {
+      return parentPath;
+    }
+    
+    // Try two levels up (edge case)
+    const grandparentPath = path.join(cwd, '..', '..', 'rust-analyzer');
+    if (existsSync(grandparentPath)) {
+      return grandparentPath;
+    }
+    
+    // Default to local (will fail later if not found)
+    logger.warn('[TokenSafetyAgent] rust-analyzer directory not found, using default path');
+    return localPath;
   }
 
   async start(): Promise<void> {
@@ -107,7 +137,7 @@ export class TokenSafetyAgent extends EventEmitter {
    * Ensure Rust binary is compiled (optional - throws if not available)
    */
   private async ensureBinaryBuilt(): Promise<void> {
-    const rustDir = path.join(process.cwd(), 'rust-analyzer');
+    const rustDir = this.findRustAnalyzerDir();
     
     // Check if Rust is available first
     try {
